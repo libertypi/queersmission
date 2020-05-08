@@ -26,8 +26,8 @@ if [[ -n ${TR_TORRENT_DIR} && -n ${TR_TORRENT_NAME} ]]; then
 
 	if [[ ${TR_TORRENT_DIR} == "${seed_dir}" ]]; then
 
-		file_list="$(find "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" -not -path "*/[@#.]*" -size +50M)"
-		[[ -z ${file_list} ]] && file_list="$(find "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" -not -path "*/[@#.]*")"
+		[[ -z ${file_list:="$(find "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" -not -name "[@#.]*" -size +50M)"} ]] &&
+			file_list="$(find "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" -not -name "[@#.]*")"
 		file_list="$(cut -c "$((${#TR_TORRENT_DIR} + 1))-" <<<"${file_list,,}")"
 
 		if grep -Eqf <(printf '%s\n' "${av_regex}") <<<"${file_list}"; then
@@ -71,7 +71,7 @@ exec {lock_fd}<"${BASH_SOURCE[0]}" && flock -n "${lock_fd}" || exit
 
 tr_info="$(tr_binary -t all -i)" && [[ -n ${tr_info} ]] || exit 1
 
-grep -zvxFf <(sed -En 's/^[[:space:]]+Name: (.+)/\1/p' <<<"$tr_info") <(find "${seed_dir}" -maxdepth 1 -not -name "[.@#]*" -printf "%P\0") |
+grep -zvxFf <(sed -En 's/^[[:space:]]+Name: (.+)/\1/p' <<<"$tr_info") <(find "${seed_dir}" -mindepth 1 -maxdepth 1 -not -name "[.@#]*" -printf "%P\0") |
 	while IFS= read -r -d '' name; do
 		[[ -z $name ]] && continue
 		printf '%-20(%D %T)T %-10s %-35s %s\n' "-1" "Cleanup" "${seed_dir:0:32}" "${name}" >>"$log_file"
