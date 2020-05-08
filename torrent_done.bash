@@ -18,9 +18,14 @@ if [[ ! -s $log_file ]]; then
 	printf '%-20s %-10s %-35s %s\n' "Date" "Status" "Destination" "Name" >"$log_file"
 fi
 
+write_log() {
+	printf -v text '%-20(%D %T)T %-10s %-35s %s' '-1' "$1" "${2:0:32}" "$3"
+	sed -i "1a ${text}" "$log_file"
+}
+
 if [[ -n ${TR_TORRENT_DIR} && -n ${TR_TORRENT_NAME} ]]; then
 	if [[ ! -e "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" ]]; then
-		printf '%-20(%D %T)T %-10s %-35s %s\n' "-1" "Missing" "${TR_TORRENT_DIR:0:32}" "${TR_TORRENT_NAME}" >>"$log_file"
+		write_log "Missing" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
 		exit
 	fi
 
@@ -50,18 +55,18 @@ if [[ -n ${TR_TORRENT_DIR} && -n ${TR_TORRENT_NAME} ]]; then
 		[[ -d ${DESTINATION} ]] || mkdir -p "${DESTINATION}"
 
 		if cp -rf "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" "${DESTINATION}/"; then
-			printf '%-20(%D %T)T %-10s %-35s %s\n' "-1" "Finish" "${DESTINATION:0:32}" "${TR_TORRENT_NAME}" >>"$log_file"
+			write_log "Finish" "${DESTINATION}" "${TR_TORRENT_NAME}"
 		else
-			printf '%-20(%D %T)T %-10s %-35s %s\n' "-1" "Error" "${DESTINATION:0:32}" "${TR_TORRENT_NAME}" >>"$log_file"
+			write_log "Error" "${DESTINATION}" "${TR_TORRENT_NAME}"
 		fi
 
 	else
 
 		if cp -rf "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" "${seed_dir}/"; then
-			printf '%-20(%D %T)T %-10s %-35s %s\n' "-1" "Finish" "${TR_TORRENT_DIR:0:32}" "${TR_TORRENT_NAME}" >>"$log_file"
+			write_log "Finish" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
 			tr_binary -t "$TR_TORRENT_ID" --find "${seed_dir}/"
 		else
-			printf '%-20(%D %T)T %-10s %-35s %s\n' "-1" "Error" "${TR_TORRENT_DIR:0:32}" "${TR_TORRENT_NAME}" >>"$log_file"
+			write_log "Error" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
 		fi
 
 	fi
@@ -74,7 +79,7 @@ tr_info="$(tr_binary -t all -i)" && [[ -n ${tr_info} ]] || exit 1
 grep -zvxFf <(sed -En 's/^[[:space:]]+Name: (.+)/\1/p' <<<"$tr_info") <(find "${seed_dir}" -mindepth 1 -maxdepth 1 -not -name "[.@#]*" -printf "%P\0") |
 	while IFS= read -r -d '' name; do
 		[[ -z $name ]] && continue
-		printf '%-20(%D %T)T %-10s %-35s %s\n' "-1" "Cleanup" "${seed_dir:0:32}" "${name}" >>"$log_file"
+		write_log "Cleanup" "${seed_dir}" "${name}"
 		rm -rf "${seed_dir:?}/${name}"
 	done
 
@@ -91,7 +96,7 @@ short_of_space() {
 if short_of_space; then
 	while IFS= read -r -d '' line; do
 		[[ -z $line ]] && continue
-		printf '%-20(%D %T)T %-10s %-35s %s\n' "-1" "Remove" "${seed_dir:0:32}" "${line#*/}" >>"$log_file"
+		write_log "Remove" "${seed_dir}" "${line#*/}"
 		tr_binary -t "${line%%/*}" --remove-and-delete
 		short_of_space || break
 	done < <(
