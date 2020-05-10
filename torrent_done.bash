@@ -38,7 +38,7 @@ if [[ -n ${TR_TORRENT_DIR} && -n ${TR_TORRENT_NAME} ]]; then
 		if grep -Eqf <(printf '%s\n' "${av_regex}") <<<"${file_list}"; then
 			DESTINATION="/volume1/driver/Temp"
 
-		elif grep -Eq '[^[:alnum:]]([se][0-9]{1,2}|s[0-9]{1,2}e[0-9]{1,2}|ep[[:space:]_-]?[0-9]{1,3})[^[:alnum:]]' <<<"${file_list}"; then
+		elif [[ ${file_list} =~ '[^[:alnum:]]([se][0-9]{1,2}|s[0-9]{1,2}e[0-9]{1,2}|ep[[:space:]_-]?[0-9]{1,3})[^[:alnum:]]' ]]; then
 			DESTINATION="/volume1/video/TV Series"
 
 		elif [[ ${TR_TORRENT_NAME,,} =~ (^|[^[:alnum:]])(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)([^[:alnum:]]|$) ]]; then
