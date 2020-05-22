@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 
-LC_ALL=C
-LANG=C
-export LC_ALL LANG
+export LC_ALL=C LANG=C
 
 seed_dir='/volume2/@transmission'
 watch_dir='/volume1/video/Torrents'
@@ -38,7 +36,7 @@ if [[ -n ${TR_TORRENT_DIR} && -n ${TR_TORRENT_NAME} ]]; then
     if grep -Eqf <(printf '%s\n' "${av_regex}") <<<"${file_list}"; then
       DESTINATION='/volume1/driver/Temp'
 
-    elif [[ ${file_list} =~ [^[:alnum:]]([se][0-9]{1,2}|s[0-9]{1,2}e[0-9]{1,2}|ep[[:space:]_-]?[0-9]{1,3})[^[:alnum:]] ]]; then
+    elif grep -Eqf '[^[:alnum:]]([se][0-9]{1,2}|s[0-9]{1,2}e[0-9]{1,2}|ep[[:space:]_-]?[0-9]{1,3})[^[:alnum:]]' <<<"${file_list}"; then
       DESTINATION='/volume1/video/TV Series'
 
     elif [[ ${TR_TORRENT_NAME,,} =~ (^|[^[:alnum:]])(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)([^[:alnum:]]|$) ]]; then
@@ -100,8 +98,9 @@ if short_of_space; then
     tr_binary -t "${line%%/*}" --remove-and-delete
     short_of_space || break
   done < <(
-    awk -F": " '
+    awk '
     BEGIN {
+      FS = ": "
       seed_threshold = (systime() - 86400)
       split("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec", months, " ")
       for (i = 1; i <= 12; i++) {
@@ -109,32 +108,30 @@ if short_of_space; then
       }
     }
 
-    /^[[:space:]]+Id:[[:space:]]/ {
+    $0 == "NAME" {
+      id = name = ""
+      next
+    }
+
+    /^[[:space:]]+Id: / {
       id = $2
       name = ""
-      percent = ""
       next
     }
 
-    id && ! name && /^[[:space:]]+Name:[[:space:]]/ {
-      name = $0
-      sub(/^[[:space:]]+Name:[[:space:]]/, "", name)
+    id != "" && match($0, /^[[:space:]]+Name: (.+)$/, n) {
+      name = n[1]
       next
     }
 
-    id && ! percent && /^[[:space:]]+Percent Done:[[:space:]]/ {
-      if ($2 ~ /100%/) {
-        percent = $2
-      } else {
-        id = ""
-      }
+    id != "" && /^[[:space:]]+Percent Done: / {
+      if ($2 != "100%") id = ""
       next
     }
 
-    id && name && percent && /^[[:space:]]+Latest activity:[[:space:]]/ {
-      sub(/^[[:space:]]+/, "", $2)
-      if ($2) {
-        split($2, date, " ")
+    id != "" && name != "" && match($0, /^[[:space:]]+Latest activity:[[:space:]]+(.+)$/, n) {
+      if (n[1] != "") {
+        split(n[1], date, " ")
         m = date[2]
         d = date[3]
         t = date[4]
@@ -146,7 +143,6 @@ if short_of_space; then
         }
       }
       id = ""
-      next
     }
 
     END {
