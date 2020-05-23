@@ -34,28 +34,29 @@ if [[ -n ${TR_TORRENT_DIR} && -n ${TR_TORRENT_NAME} ]]; then
     file_list="$(cut -c "$((${#TR_TORRENT_DIR} + 1))-" <<<"${file_list,,}")"
 
     if grep -Eqf <(printf '%s\n' "${av_regex}") <<<"${file_list}"; then
-      DESTINATION='/volume1/driver/Temp'
+      destination='/volume1/driver/Temp'
 
     elif grep -Eqf '[^[:alnum:]]([se][0-9]{1,2}|s[0-9]{1,2}e[0-9]{1,2}|ep[[:space:]_-]?[0-9]{1,3})[^[:alnum:]]' <<<"${file_list}"; then
-      DESTINATION='/volume1/video/TV Series'
+      destination='/volume1/video/TV Series'
 
     elif [[ ${TR_TORRENT_NAME,,} =~ (^|[^[:alnum:]])(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)([^[:alnum:]]|$) ]]; then
-      DESTINATION='/volume1/homes/admin/Download/Adobe'
+      destination='/volume1/homes/admin/Download/Adobe'
 
     elif [[ ${TR_TORRENT_NAME,,} =~ (^|[^[:alnum:]])(windows|mac(os)?|x(86|64)|(32|64)bit|v[0-9]+\.[0-9]+)([^[:alnum:]]|$)|\.(zip|rar|exe|7z|dmg|pkg)$ ]]; then
-      DESTINATION='/volume1/homes/admin/Download'
+      destination='/volume1/homes/admin/Download'
 
     else
-      DESTINATION='/volume1/video/Films'
+      destination='/volume1/video/Films'
     fi
 
-    [[ -d "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" ]] || DESTINATION="${DESTINATION}/${TR_TORRENT_NAME%.*}"
-    [[ -d ${DESTINATION} ]] || mkdir -p "${DESTINATION}"
+    dest_display="${destination}"
+    [[ -d "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" ]] || destination="${destination}/${TR_TORRENT_NAME%.*}"
+    [[ -d ${destination} ]] || mkdir -p "${destination}"
 
-    if cp -rf "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" "${DESTINATION}/"; then
-      write_log "Finish" "${DESTINATION}" "${TR_TORRENT_NAME}"
+    if cp -rf "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" "${destination}/"; then
+      write_log "Finish" "${dest_display}" "${TR_TORRENT_NAME}"
     else
-      write_log "Error" "${DESTINATION}" "${TR_TORRENT_NAME}"
+      write_log "Error" "${dest_display}" "${TR_TORRENT_NAME}"
     fi
 
   else
