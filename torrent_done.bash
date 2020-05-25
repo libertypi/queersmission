@@ -4,22 +4,27 @@ export LC_ALL=C LANG=C
 
 seed_dir='/volume2/@transmission'
 watch_dir='/volume1/video/Torrents'
-log_file="$(cd "${BASH_SOURCE[0]%/*}" && pwd)/log.log"
+script_dir="$(cd "${BASH_SOURCE[0]%/*}" && pwd -P)"
+log_file="${script_dir}/log.log"
+av_regex="${script_dir}/component/av_regex.txt"
 
 tr_binary() {
   '/var/packages/transmission/target/bin/transmission-remote' "$@"
 }
 
-av_regex='[^[:alnum:]]((n|k|kb)[0-3][0-9]{3}|1000[[:space:]_-]?giri|10mu(sume)?|1pon(do)?|[ch]0930|carib(bean|pr|com)*|fc2(ppv)?|g[[:space:]_-]?queen|girls[[:space:]_-]?delta|h4610|heydouga[0-9]{,4}|heyzo|honnamatv|jukujo[[:space:]_-]?club|kin8tengoku|mesubuta|mura(mura)?|nyoshin|paco(pacomama)?|th101|tokyo[[:space:]_-]?hot|xxx[[:space:]_-]?av|((259)?luxu|abpn?|abs|acme|adn|adz|aed|agav|agmx|akb|akbd|akdl|akid|ald|ama|ambi|ambs|anb|anci|anx|anzd|apaa|apkh|apns?|apod|apsh|aqmb|aqsh|aquarium|ara|arkx|arm|arso|asi|atad|atgo|athb|atid|atkd|atom|aukg|auks|av9898|avsa|axbc|bacn|baem|bahp|bazx|bbacos|bban|bbi|bbss|bcdp|bcpv|bda|bdd|bdsr|bf|bgn|bgsd|bid|bijn|bkd|blk|blkw|blor|bmst|bmw|bndv|bngd|bnjc|bokd|bouga|bstc|bur|cadv|cawd|cead|cesd|cetd|cho|chrv|cjob|cjod|clot|club|cmc|cmi|cmn|cmv|cnd|con|core|cmd|cosq|coterieav|cpde|crd|crs|crynm|csct|cvdx|cw3d2d(bd)?|cwdv|cwhdbd|cwp(bd)?|cz(bd)?|dac|dandy|daru|dasd|davk|dbam|dbe|dber|dbud|dcv|dcx|ddhh|ddhz|ddkm|ddob|dems|der|dfe|dic|dipo|djam|djsk|dksb|dlis|dmat|dmg|dmow|dnjr|dnw|docp|doj|doki|doks|dpmi|dpmx|drc(bd)?|drg(bd)?|dsam(bd)?|dss|dtsg|dtt|dv(aj)?|dvdms|dvh|eb(od)?|ecb|ecr|ekdv|ekw|eldx|embz|emh|emot|emp|emrd|endx|erika|esk|etqr|evis|evo|ewdx|eyan|eys|fadss|fcdc|fch|fffs|fgan|fh|fiv|flav|fneo|fone|fsdss|fset|fst|fuga|gachi[a-z]*|gana|gar|gaso?|gate|gavhj|gbsa|gdga|gdhh|gedo|geki|genm?|gens|gent|gerk|gexp|ggen|ggfh|ggtb|gigl|gma|gmem|gmmd|gnab|gnax|godr|gods?|goju|gomk|gptm|grch|gret|gryd|gs(ad)?|gtj|gun|gvg|gvh|gvsa|gxxd|gyan|gyd|gzap|havd|hawa|hbad|hdka|hey|hez|hgot|hhkl|hikr|hisn|hitma|hjmo|hkd|hmdn|hmgl|hnd|hndb|hnds|hnm|hodv|hoks|homa|honb|hone|hrv|hsam|hthd|hunta?|hunvr|husr|hyk|hypn|hzgd|ianf|ibw|idbd|idol|ids|iene|ienf|iesp|ikep|inct|inu|ipsd|iptd|ipx|ipz|iqqq|itsr|iwan|jac|jav|jbd|jbjb|jiro|jjaa|jjbk|jjda|jksr|jmty|josi|jotk|jpgc|jrw|jrzd|juc|jufd|jufe|jukd|jukf|jul|juny|jup|jura|jux|juy|ka(gp)?|kag|kapd|katu|kav|kawd|kbi|kbkd|kcda|keed|kfne|kg|kibd|kimu|kir|kird|kisd|kjn|kkj|kmhrs|knam|knb|knmd|kosatsu|kp|krhk|kri|kru|krvs|ks(bj)?|ksko|ktb|ktds|ktkc|ktkl|ktkz|ktra|kud|kuf|lady|laf(bd)?|ld|lhtd|licn|lmpi|lol|loli|loo|luke|lulu|lzdq|lzpl|maan|macb|mada|madm|man|mane|mas|mbm|mbrba|mcb3d(bd)?|mcbd|mcsr|mct|mdb|mdbk|mded|mds|mdtm|mdyd|meko|mers|meyd|mg(jh)?|mgdn|mgmq|mgt|miaa|miad|miae|mias|mibd|midd|mide|mifd|migd|miha|miid|mild|milk|mimk|mint|mird|mism|mist|mium|mizd|mk3d2d(bd)?|mkbd[[:space:]_-]?s|mkd[[:space:]_-]?s|mkmp|mkon|mlsm|mmb|mmgh|mmkz|mmnd|mmo|mmus|mmym|mntj|moed|moko|mond|mone|mopg|mubd|mrm|mrss|msbd|msfh|mtm|mtn|mucd|much|mud|mudr|mukd|mvsd|mw|mx(bd)?|mxgs?|mxsps|mxx|myab|myba|mywife|nacr|nacx|nash|natr|ncyf|ndra|ndwq|nem|neo|ngks|ngod|nhdtb|nikm|nine|nip|nitr|nkk?d|nnpj|nps|nslg|nsm|nsps|nss|nsstl|ntk|ntsu|nttr|nubi|nukimax|nxg|nzk|oae|oba|odv|odvhj|ofcd|ofje|ofku|oigs|okax|okb|okk|okp|oksn?|okx|okyh|omt|oned|onez|ons|onsd|onsg|opc|opd|open|opkt|oppw|opud|orebms|orec|otim|ovg|oyc|pako|panza|papa|parathd|pbd?|pcas|pgd|pih?|piyo|pjd|pkpd|pla|pokp|pokq|post|ppbd?|pppd?|ppsd|ppt|pred|psst|ptks|ptnoz|pts?|pym|r?nhdta?|ray|rbd?|rbs|rctd?|rcts|rd|real|rebd|red|reid|rfks|rhj|rix|rjmd|rki|rmdbb|rmds|rmld|room|rpin|rse|ruko|rvg|s-?cute|s2m(bd)?|s2mcr|s3dbd|saba|sace|sad|salo|sama|scd|scg|scop|scp|scpx|scr|sdab|sdam|sdcm|sdde|sddm|sdfk|sdjs|sdmf|sdmm|sdmt|sdmu|sdnm|sdnt|sdtop|semc|send|senn|sero|sga?|sgsr|shiroutozanmai|shisaku|shkd|shm|shn|shyn|silk|sim|simm|siro|sis|sivr|skmj|sksk|sky(hd)?|sky237|sm3d2d(bd)?|smb?d|smdv|smr|snis|snkh|sntj|soan|soav|soe|soju|sora|sprd|sps?|spye|spz|sqis|sqte|srcn|srmc|srs?|srxv|ss(kj)?|ssni|sspd|stars?|stfx|stko|stp|suke|supa|supd|svdvd|svnd|svoks|sw|sy(bi)?|sykh|tbb|tbl|tbw|tcd|tcm|tdln|tdp?|tek|tggp|thnd|thp|thz|tikb|tikc|tikf|tikp|tkbn|tki|tmd|tms|toen|tomn|tor|totugeki|tre|trg|trp|tsdl|tsgs|tsnd|tsp|tswn?|ttre|tue|tus|tushy|tyod|tzz|uljm|umd|umso|upsm|ure|urfd|urkk|urlh|urpw|usag|usba|vagu|vdd|vec|vema|venu|veq|vgd|vnds|voss|vov|vrtm|vspdr|vspds|wanz|wdi|wei|wfr|wkd|wpc|wzen|x1x|xmom|xrw|xv(sr)?|yako|yap|ylwn|ymdd|ymsr|yrh|yrz|ysad|ysn|yst|ytr|yuu|yzd|zeaa|zex|zmar|zmen|zuko|zzr)[[:space:]_-]?[0-9]{2,6})[^[:alnum:]]|[a-z]{2,}0[0-9]{4,}hhb|creampie'
-
-if [[ ! -s $log_file ]]; then
-  printf '%-20s %-10s %-35s %s\n' 'Date' 'Status' 'Destination' 'Name' >"$log_file"
-fi
-
 write_log() {
-  printf -v text '%-20(%D %T)T %-10s %-35s %s' '-1' "$1" "${2:0:32}" "$3"
-  sed -i "1a ${text}" "$log_file"
+  local bak
+  [[ -s ${log_file} ]] && bak="$(tail -n +3 "${log_file}")"
+  {
+    printf '%-20s%-10s%-35s%s\n%s\n%-20(%D %T)T%-10s%-35s%s\n' \
+      'Date' 'Status' 'Destination' 'Name' \
+      '-------------------------------------------------------------------------------' \
+      '-1' "${1}" "${2:0:33}" "$3"
+    [[ -n ${bak} ]] && printf '%s\n' "${bak}"
+  } >"${log_file}"
 }
+
+exec {lock_fd}<"${BASH_SOURCE[0]}" && flock -x "${lock_fd}"
 
 if [[ -n ${TR_TORRENT_DIR} && -n ${TR_TORRENT_NAME} ]]; then
   if [[ ! -e "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" ]]; then
@@ -29,20 +34,26 @@ if [[ -n ${TR_TORRENT_DIR} && -n ${TR_TORRENT_NAME} ]]; then
 
   if [[ ${TR_TORRENT_DIR} == "${seed_dir}" ]]; then
 
-    [[ -z ${file_list:="$(find "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" -not -name '[@#.]*' -size +50M)"} ]] &&
-      file_list="$(find "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" -not -name '[@#.]*')"
-    file_list="$(cut -c "$((${#TR_TORRENT_DIR} + 1))-" <<<"${file_list,,}")"
+    if [[ -d "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" ]]; then
+      file_list="$(cd "${TR_TORRENT_DIR}" && find "${TR_TORRENT_NAME}" -not -name '[@#.]*' -size +50M)"
+      [[ -z ${file_list} ]] && file_list="$(cd "${TR_TORRENT_DIR}" && find "${TR_TORRENT_NAME}" -not -name '[@#.]*')"
+      file_list="${file_list,,}"
+      is_directory=1
+    else
+      file_list="${TR_TORRENT_NAME,,}"
+      is_directory=0
+    fi
 
-    if grep -Eqf <(printf '%s\n' "${av_regex}") <<<"${file_list}"; then
+    if grep -Eqf "${av_regex}" <<<"${file_list}"; then
       destination='/volume1/driver/Temp'
 
-    elif grep -Eqf '[^[:alnum:]]([se][0-9]{1,2}|s[0-9]{1,2}e[0-9]{1,2}|ep[[:space:]_-]?[0-9]{1,3})[^[:alnum:]]' <<<"${file_list}"; then
+    elif [[ ${file_list} =~ [^a-z0-9]([se][0-9]{1,2}|s[0-9]{1,2}e[0-9]{1,2}|ep[[:space:]_-]?[0-9]{1,3})[^a-z0-9] ]]; then
       destination='/volume1/video/TV Series'
 
-    elif [[ ${TR_TORRENT_NAME,,} =~ (^|[^[:alnum:]])(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)([^[:alnum:]]|$) ]]; then
+    elif [[ ${TR_TORRENT_NAME,,} =~ (^|[^a-z0-9])(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)([^a-z0-9]|$) ]]; then
       destination='/volume1/homes/admin/Download/Adobe'
 
-    elif [[ ${TR_TORRENT_NAME,,} =~ (^|[^[:alnum:]])(windows|mac(os)?|x(86|64)|(32|64)bit|v[0-9]+\.[0-9]+)([^[:alnum:]]|$)|\.(zip|rar|exe|7z|dmg|pkg)$ ]]; then
+    elif [[ ${TR_TORRENT_NAME,,} =~ (^|[^a-z0-9])(windows|mac(os)?|x(86|64)|(32|64)bit|v[0-9]+\.[0-9]+)([^a-z0-9]|$)|\.(zip|rar|exe|7z|dmg|pkg)$ ]]; then
       destination='/volume1/homes/admin/Download'
 
     else
@@ -50,7 +61,7 @@ if [[ -n ${TR_TORRENT_DIR} && -n ${TR_TORRENT_NAME} ]]; then
     fi
 
     dest_display="${destination}"
-    [[ -d "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" ]] || destination="${destination}/${TR_TORRENT_NAME%.*}"
+    ((is_directory)) || destination="${destination}/${TR_TORRENT_NAME%.*}"
     [[ -d ${destination} ]] || mkdir -p "${destination}"
 
     if cp -rf "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" "${destination}/"; then
@@ -71,16 +82,32 @@ if [[ -n ${TR_TORRENT_DIR} && -n ${TR_TORRENT_NAME} ]]; then
   fi
 fi
 
-exec {lock_fd}<"${BASH_SOURCE[0]}" && flock -n "${lock_fd}" || exit
-
 tr_info="$(tr_binary -t all -i)" && [[ -n ${tr_info} ]] || exit 1
 
-grep -zvxFf <(sed -En 's/^[[:space:]]+Name: (.+)/\1/p' <<<"$tr_info") <(find "${seed_dir}" -mindepth 1 -maxdepth 1 -not -name '[.@#]*' -printf '%P\0') |
-  while IFS= read -r -d '' name; do
-    [[ -z $name ]] && continue
-    write_log "Cleanup" "${seed_dir}" "${name}"
-    rm -rf -- "${seed_dir:?}/${name}"
+(
+  shopt -s nullglob && cd "${seed_dir}" || exit
+  declare -A dict
+
+  while IFS= read -r name; do
+    [[ -n ${name} ]] && dict["${name}"]=1
+  done < <(sed -En 's/^[[:space:]]+Name: (.+)/\1/p' <<<"$tr_info")
+
+  for name in [^.\#@]*; do
+    [[ ${dict["${name}"]} ]] || {
+      write_log 'Cleanup' "${seed_dir}" "${name}"
+      deprecated+=("${seed_dir}/${name}")
+    }
   done
+
+  shopt -s dotglob globstar
+  for file in "${watch_dir}/"**/*; do
+    [[ ! -s ${file} ]] && deprecated+=("${file}")
+  done
+
+  if ((${#deprecated[@]} > 0)); then
+    rm -rf -- "${deprecated[@]}"
+  fi
+)
 
 ((space_threshold = 80 * 1024 * 1024))
 short_of_space() {
@@ -109,18 +136,13 @@ if short_of_space; then
       }
     }
 
-    $0 == "NAME" {
-      id = name = ""
-      next
-    }
-
-    /^[[:space:]]+Id: / {
+    /^[[:space:]]+Id: / && $2 ~ /^[0-9]+$/ {
       id = $2
       name = ""
       next
     }
 
-    id != "" && match($0, /^[[:space:]]+Name: (.+)$/, n) {
+    id != "" && name == "" && match($0, /^[[:space:]]+Name: (.+)$/, n) {
       name = n[1]
       next
     }
@@ -132,18 +154,15 @@ if short_of_space; then
 
     id != "" && name != "" && match($0, /^[[:space:]]+Latest activity:[[:space:]]+(.+)$/, n) {
       if (n[1] != "") {
+        # Mon May 25 20:04:31 2020
         split(n[1], date, " ")
-        m = date[2]
-        d = date[3]
-        t = date[4]
-        y = date[5]
-        gsub(":", " ", t)
-        last_activate = mktime(y " " mon[m] " " d " " t)
-        if (last_activate && last_activate < seed_threshold) {
+        gsub(":", " ", date[4])
+        last_activate = mktime(date[5] " " mon[date[2]] " " date[3] " " date[4])
+        if (last_activate > 0 && last_activate < seed_threshold) {
           array[last_activate "." NR] = (id "/" name)
         }
       }
-      id = ""
+      id = name = ""
     }
 
     END {
@@ -156,5 +175,4 @@ if short_of_space; then
   )
 fi
 
-find "$watch_dir" -type f -empty -delete
 tr_binary -t all -s
