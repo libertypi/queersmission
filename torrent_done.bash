@@ -24,7 +24,8 @@ write_log() {
   } >"${log_file}"
 }
 
-exec {lock_fd}<"${BASH_SOURCE[0]}" && flock -x "${lock_fd}"
+exec {lock_fd}<"${BASH_SOURCE[0]}"
+flock -x "${lock_fd}"
 
 if [[ -n ${TR_TORRENT_DIR} && -n ${TR_TORRENT_NAME} ]]; then
   if [[ ! -e "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" ]]; then
@@ -114,7 +115,10 @@ tr_info="$(tr_binary -t all -i)" && [[ -n ${tr_info} ]] || exit 1
 
 ((space_threshold = 80 * 1024 * 1024))
 short_of_space() {
-  space="$(df --output=avail "${seed_dir}" | sed -n '2s/[[:space:]]//g;2p')"
+  local space
+  for i in _ space; do
+    read -r "$i"
+  done < <(df --output=avail "${seed_dir}")
   if [[ -n $space && $space -lt $space_threshold ]]; then
     return 0
   else
@@ -123,10 +127,10 @@ short_of_space() {
 }
 
 if short_of_space; then
-  while IFS= read -r -d '' line; do
-    [[ -z $line ]] && continue
-    write_log "Remove" "${seed_dir}" "${line#*/}"
-    tr_binary -t "${line%%/*}" --remove-and-delete
+  while IFS='/' read -r -d '' id name; do
+    [[ -z $id ]] && continue
+    write_log "Remove" "${seed_dir}" "${name}"
+    tr_binary -t "${id}" --remove-and-delete
     short_of_space || break
   done < <(
     awk '
