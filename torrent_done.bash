@@ -35,8 +35,8 @@ if [[ -n ${TR_TORRENT_DIR} && -n ${TR_TORRENT_NAME} ]]; then
   if [[ ${TR_TORRENT_DIR} == "${seed_dir}" ]]; then
 
     if [[ -d "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" ]]; then
-      file_list="$(cd "${TR_TORRENT_DIR}" && find "${TR_TORRENT_NAME}" -not -name '[@#.]*' -size +50M)"
-      [[ -z ${file_list} ]] && file_list="$(cd "${TR_TORRENT_DIR}" && find "${TR_TORRENT_NAME}" -not -name '[@#.]*')"
+      file_list="$(cd "${TR_TORRENT_DIR}" && find "${TR_TORRENT_NAME}" -not -path '*/[@#.]*' -size +50M)"
+      [[ -z ${file_list} ]] && file_list="$(cd "${TR_TORRENT_DIR}" && find "${TR_TORRENT_NAME}" -not -path '*/[@#.]*')"
       file_list="${file_list,,}"
       is_directory=1
     else
@@ -85,27 +85,30 @@ fi
 tr_info="$(tr_binary -t all -i)" && [[ -n ${tr_info} ]] || exit 1
 
 (
-  shopt -s nullglob && cd "${seed_dir}" || exit
-  declare -A dict
+  shopt -s nullglob dotglob globstar
 
-  while IFS= read -r name; do
-    [[ -n ${name} ]] && dict["${name}"]=1
-  done < <(sed -En 's/^[[:space:]]+Name: (.+)/\1/p' <<<"$tr_info")
+  if cd "${seed_dir}"; then
+    declare -A dict
+    while IFS= read -r name; do
+      [[ -n ${name} ]] && dict["${name}"]=1
+    done < <(sed -En 's/^[[:space:]]+Name: (.+)/\1/p' <<<"${tr_info}")
 
-  for name in [^.\#@]*; do
-    [[ ${dict["${name}"]} ]] || {
-      write_log 'Cleanup' "${seed_dir}" "${name}"
-      deprecated+=("${seed_dir}/${name}")
-    }
-  done
+    for file in [^.\#@]*; do
+      [[ ${dict["${file}"]} ]] || {
+        write_log 'Cleanup' "${seed_dir}" "${file}"
+        obsolete+=("${seed_dir}/${file}")
+      }
+    done
+  fi
 
-  shopt -s dotglob globstar
-  for file in "${watch_dir}/"**/*; do
-    [[ ! -s ${file} ]] && deprecated+=("${file}")
-  done
+  if cd "${watch_dir}"; then
+    for file in **; do
+      [[ -s ${file} ]] || obsolete+=("${watch_dir}/${file}")
+    done
+  fi
 
-  if ((${#deprecated[@]} > 0)); then
-    rm -rf -- "${deprecated[@]}"
+  if ((${#obsolete[@]} > 0)); then
+    rm -rf -- "${obsolete[@]}"
   fi
 )
 

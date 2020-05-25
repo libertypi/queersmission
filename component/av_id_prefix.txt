@@ -926,9 +926,7 @@ TMRD
 TOEN
 TOMN
 TOR
-tosugeki
 totsugeki
-TOTUGEKI
 TPPN
 TPVR
 TR
