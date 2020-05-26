@@ -12,7 +12,7 @@ fc2(ppv)?
 g[[:space:]_-]?queen
 girls[[:space:]_-]?delta
 h4610
-heydouga
+heydouga[0-9]*
 heyzo
 honnamatv
 jukujo
