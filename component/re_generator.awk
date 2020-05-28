@@ -1,6 +1,12 @@
 #!/usr/bin/awk -f
 
 BEGIN {
+
+  if (ENVIRON["PWD"] !~ /\/component$/) {
+    print "Please cd component directory first."
+    exit 1
+  }
+
   re_template = "(^|[^a-z0-9])(_%AV_KEYWORD%_|(_%AV_ID_PREFIX%_)[[:space:]_-]?[0-9]{2,6})([^a-z0-9]|$)"
 
   result_file = "./av_regex.txt"
