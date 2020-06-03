@@ -113,7 +113,7 @@ tr_info="$(tr_binary -t all -i)" && [[ -n ${tr_info} ]] || exit 1
   fi
 )
 
-((space_threshold = 80 * 1024 * 1024))
+((space_threshold = 50 * 1024 * 1024))
 short_of_space() {
   local space
   for i in _ space; do
