@@ -128,7 +128,7 @@ short_of_space() {
 
 if short_of_space; then
   while IFS='/' read -r -d '' id name; do
-    [[ -z $id ]] && continue
+    [[ -z ${id} ]] && continue
     write_log "Remove" "${seed_dir}" "${name}"
     tr_binary -t "${id}" --remove-and-delete
     short_of_space || break
@@ -166,16 +166,16 @@ if short_of_space; then
         gsub(":", " ", date[4])
         last_activate = mktime(date[5] " " mon[date[2]] " " date[3] " " date[4])
         if (last_activate > 0 && last_activate < seed_threshold) {
-          array[last_activate "." NR] = (id "/" name)
+          array[id "/" name] = last_activate
         }
       }
       id = name = ""
     }
 
     END {
-      PROCINFO["sorted_in"] = "@ind_num_asc"
+      PROCINFO["sorted_in"] = "@val_num_asc"
       for (i in array) {
-        printf "%s\000", array[i]
+        printf "%s\000", i
       }
     }
     ' <<<"$tr_info"
