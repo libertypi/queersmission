@@ -246,7 +246,7 @@ else
             }
             tmp[key] = value
           }
-          if (output != "name" && tmp["activityDate"] > 0 && tmp["percentDone"] <= 1) {
+          if (output != "name" && tmp["activityDate"] > 0 && tmp["percentDone"] == 1) {
             result[tmp["id"] "/" tmp["sizeWhenDone"] "/" tmp["name"]] = tmp["activityDate"]
           }
         }
