@@ -10,8 +10,8 @@ av_regex="${script_dir}/component/av_regex.txt"
 tr_api='http://localhost:9091/transmission/rpc'
 
 prepare() {
-  exec {lock_fd}<"${BASH_SOURCE[0]}"
-  flock -x "${lock_fd}"
+  exec {i}<"${BASH_SOURCE[0]}"
+  flock -x "${i}"
   trap 'write_log' EXIT
 }
 
@@ -30,7 +30,7 @@ write_log() {
       for ((i = ${#logs[@]} - 1; i >= 0; i--)); do
         printf '%s\n' "${logs[i]}"
       done
-      [[ -n ${log_bak} ]] && printf '%s\n' "${bak}"
+      [[ -n ${log_bak} ]] && printf '%s\n' "${log_bak}"
     } >"${log_file}"
   fi
 }
@@ -54,7 +54,7 @@ query_tr_api() {
 }
 
 get_tr_info() {
-  tr_info="$(
+  hash jq && tr_info="$(
     query_tr_api '{
       "arguments": {
           "fields": [ "activityDate", "percentDone", "id", "sizeWhenDone", "name" ]
