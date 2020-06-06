@@ -105,7 +105,7 @@ if [[ -n ${TR_TORRENT_DIR} && -n ${TR_TORRENT_NAME} ]]; then
   fi
 fi
 
-tr_result="$(
+tr_info="$(
   query_tr_api '
     {
       "arguments": {
@@ -123,12 +123,12 @@ tr_result="$(
     declare -A dict
     while IFS= read -r name; do
       [[ -n ${name} ]] && dict["${name}"]=1
-    done < <(jq -r '.arguments.torrents|.[]|.name' <<<"${tr_result}")
+    done < <(jq -r '.arguments.torrents|.[]|.name' <<<"${tr_info}")
 
-    for file in [^.\#@]*; do
-      [[ ${dict["${file}"]} ]] || {
-        append_log 'Cleanup' "${seed_dir}" "${file}"
-        obsolete+=("${seed_dir}/${file}")
+    for name in [^.\#@]*; do
+      [[ -n ${dict["${name}"]} ]] || {
+        append_log 'Cleanup' "${seed_dir}" "${name}"
+        obsolete+=("${seed_dir}/${name}")
       }
     done
   fi
@@ -151,6 +151,7 @@ done < <(df --output=avail "${seed_dir}")
 # Size unit from df: 1024 bytes
 ((space_threshold = 50 * (1024 ** 3)))
 if [[ -n ${free_space} ]] && (((total_size = space_threshold - free_space * 1024) > 0)); then
+
   while IFS='/' read -r id size name; do
     [[ -z ${id} ]] && continue
     ids+=("${id}")
@@ -181,8 +182,9 @@ if [[ -n ${free_space} ]] && (((total_size = space_threshold - free_space * 1024
       select(.percentDone == 1 and .activityDate > 0) |
       [.id, .sizeWhenDone, .name] |
       "\(.[0])/\(.[1])/\(.[2])"
-    ' <<<"${tr_result}"
+    ' <<<"${tr_info}"
   )
+
 fi
 
 query_tr_api '{"method": "torrent-start"}'
