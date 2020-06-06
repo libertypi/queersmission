@@ -7,29 +7,42 @@ watch_dir='/volume1/video/Torrents'
 script_dir="$(cd "${BASH_SOURCE[0]%/*}" && pwd -P)"
 log_file="${script_dir}/log.log"
 av_regex="${script_dir}/component/av_regex.txt"
+tr_api='http://localhost:9091/transmission/rpc'
 
-tr_binary() {
-  '/var/packages/transmission/target/bin/transmission-remote' "$@"
+append_log() {
+  printf -v "log_date[${#log_date[@]}]" '%(%D %T)T' '-1'
+  log_status+=("$1")
+  log_dest+=("$2")
+  log_name+=("$3")
 }
 
 write_log() {
-  local bak
-  [[ -s ${log_file} ]] && bak="$(tail -n +3 "${log_file}")"
-  {
-    printf '%-20s%-10s%-35s%s\n%s\n%-20(%D %T)T%-10s%-35s%s\n' \
-      'Date' 'Status' 'Destination' 'Name' \
-      '-------------------------------------------------------------------------------' \
-      '-1' "${1}" "${2:0:33}" "$3"
-    [[ -n ${bak} ]] && printf '%s\n' "${bak}"
-  } >"${log_file}"
+  if ((${#log_date[@]} > 0)); then
+    [[ -s ${log_file} ]] && bak="$(tail -n +3 "${log_file}")"
+    {
+      printf '%-20s%-10s%-35s%s\n%s\n' \
+        'Date' 'Status' 'Destination' 'Name' \
+        '-------------------------------------------------------------------------------'
+      for ((i = ${#log_date[@]} - 1; i >= 0; i--)); do
+        printf '%-20s%-10s%-35s%s\n' "${log_date[i]}" "${log_status[i]}" "${log_dest[i]:0:33}" "${log_name[i]}"
+      done
+      [[ -n ${bak} ]] && printf '%s\n' "${bak}"
+    } >"${log_file}"
+  fi
+}
+
+query_tr_api() {
+  curl -s --header "${tr_session_header}" "${tr_api}" -d "$@"
 }
 
 exec {lock_fd}<"${BASH_SOURCE[0]}"
 flock -x "${lock_fd}"
+trap 'write_log' EXIT
+tr_session_header="$(curl -sI "${tr_api}" | grep -Eo -m1 'X-Transmission-Session-Id: [A-Za-z0-9]+')"
 
 if [[ -n ${TR_TORRENT_DIR} && -n ${TR_TORRENT_NAME} ]]; then
   if [[ ! -e "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" ]]; then
-    write_log "Missing" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
+    append_log "Missing" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
     exit
   fi
 
@@ -66,24 +79,42 @@ if [[ -n ${TR_TORRENT_DIR} && -n ${TR_TORRENT_NAME} ]]; then
     [[ -d ${destination} ]] || mkdir -p "${destination}"
 
     if cp -rf "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" "${destination}/"; then
-      write_log "Finish" "${dest_display}" "${TR_TORRENT_NAME}"
+      append_log "Finish" "${dest_display}" "${TR_TORRENT_NAME}"
     else
-      write_log "Error" "${dest_display}" "${TR_TORRENT_NAME}"
+      append_log "Error" "${dest_display}" "${TR_TORRENT_NAME}"
     fi
 
   else
 
     if cp -rf "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" "${seed_dir}/"; then
-      write_log "Finish" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
-      tr_binary -t "$TR_TORRENT_ID" --find "${seed_dir}/"
+      append_log "Finish" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
+      query_tr_api "
+        {
+          \"arguments\": {
+              \"ids\": [ ${TR_TORRENT_ID} ],
+              \"location\": \"${seed_dir}/\",
+              \"move\": \"false\"
+          },
+          \"method\": \"torrent-set-location\"
+        }
+      "
     else
-      write_log "Error" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
+      append_log "Error" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
     fi
 
   fi
 fi
 
-tr_info="$(tr_binary -t all -i)" && [[ -n ${tr_info} ]] || exit 1
+tr_result="$(
+  query_tr_api '
+    {
+      "arguments": {
+          "fields": [ "activityDate", "percentDone", "id", "sizeWhenDone", "name" ]
+      },
+      "method": "torrent-get"
+    }
+  '
+)" && hash jq || exit
 
 (
   shopt -s nullglob dotglob globstar
@@ -92,11 +123,11 @@ tr_info="$(tr_binary -t all -i)" && [[ -n ${tr_info} ]] || exit 1
     declare -A dict
     while IFS= read -r name; do
       [[ -n ${name} ]] && dict["${name}"]=1
-    done < <(sed -En 's/^[[:space:]]+Name: (.+)/\1/p' <<<"${tr_info}")
+    done < <(jq -r '.arguments.torrents|.[]|.name' <<<"${tr_result}")
 
     for file in [^.\#@]*; do
       [[ ${dict["${file}"]} ]] || {
-        write_log 'Cleanup' "${seed_dir}" "${file}"
+        append_log 'Cleanup' "${seed_dir}" "${file}"
         obsolete+=("${seed_dir}/${file}")
       }
     done
@@ -113,73 +144,45 @@ tr_info="$(tr_binary -t all -i)" && [[ -n ${tr_info} ]] || exit 1
   fi
 )
 
-((space_threshold = 50 * 1024 * 1024))
-short_of_space() {
-  local space
-  for i in _ space; do
-    read -r "$i"
-  done < <(df --output=avail "${seed_dir}")
-  if [[ -n $space && $space -lt $space_threshold ]]; then
-    return 0
-  else
-    return 1
-  fi
-}
+for i in _ free_space; do
+  read -r "$i"
+done < <(df --output=avail "${seed_dir}")
 
-if short_of_space; then
-  while IFS='/' read -r -d '' id name; do
+# Size unit from df: 1024 bytes
+((space_threshold = 50 * (1024 ** 3)))
+if [[ -n ${free_space} ]] && (((total_size = space_threshold - free_space * 1024) > 0)); then
+  while IFS='/' read -r id size name; do
     [[ -z ${id} ]] && continue
-    write_log "Remove" "${seed_dir}" "${name}"
-    tr_binary -t "${id}" --remove-and-delete
-    short_of_space || break
-  done < <(
-    awk '
-    BEGIN {
-      FS = ": "
-      seed_threshold = (systime() - 86400)
-      split("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec", months, " ")
-      for (i = 1; i <= 12; i++) {
-        mon[months[i]] = i
-      }
-    }
+    ids+=("${id}")
+    names+=("${name}")
 
-    /^[[:space:]]+Id: / && $2 ~ /^[0-9]+$/ {
-      id = $2
-      name = ""
-      next
-    }
-
-    id != "" && name == "" && match($0, /^[[:space:]]+Name: (.+)$/, n) {
-      name = n[1]
-      next
-    }
-
-    id != "" && /^[[:space:]]+Percent Done: / {
-      if ($2 != "100%") id = ""
-      next
-    }
-
-    id != "" && name != "" && match($0, /^[[:space:]]+Latest activity:[[:space:]]+(.+)$/, n) {
-      if (n[1] != "") {
-        # Mon May 25 20:04:31 2020
-        split(n[1], date, " ")
-        gsub(":", " ", date[4])
-        last_activate = mktime(date[5] " " mon[date[2]] " " date[3] " " date[4])
-        if (last_activate > 0 && last_activate < seed_threshold) {
-          array[id "/" name] = last_activate
+    if (((total_size -= size) < 0)); then
+      printf -v ids '%s,' "${ids[@]}"
+      query_tr_api "
+        {
+          \"arguments\": {
+              \"ids\": [ ${ids%,} ],
+              \"delete-local-data\": \"true\"
+          },
+          \"method\": \"torrent-remove\"
         }
-      }
-      id = name = ""
-    }
+      " &&
+        for name in "${names[@]}"; do
+          append_log "Remove" "${seed_dir}" "${name}"
+        done
+      break
+    fi
 
-    END {
-      PROCINFO["sorted_in"] = "@val_num_asc"
-      for (i in array) {
-        printf "%s\000", i
-      }
-    }
-    ' <<<"$tr_info"
+  done < <(
+    jq -r '
+      .arguments.torrents |
+      sort_by(.activityDate) |
+      .[] |
+      select(.percentDone == 1 and .activityDate > 0) |
+      [.id, .sizeWhenDone, .name] |
+      "\(.[0])/\(.[1])/\(.[2])"
+    ' <<<"${tr_result}"
   )
 fi
 
-tr_binary -t all -s
+query_tr_api '{"method": "torrent-start"}'
