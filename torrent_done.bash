@@ -9,6 +9,12 @@ log_file="${script_dir}/log.log"
 av_regex="${script_dir}/component/av_regex.txt"
 tr_api='http://localhost:9091/transmission/rpc'
 
+prepare() {
+  exec {lock_fd}<"${BASH_SOURCE[0]}"
+  flock -x "${lock_fd}"
+  trap 'write_log' EXIT
+}
+
 append_log() {
   printf -v "logs[${#logs[@]}]" '%-20(%D %T)T%-10s%-35s%s' '-1' "$1" "${2:0:33}" "${3}"
 }
@@ -30,33 +36,39 @@ write_log() {
 }
 
 get_tr_api_header() {
-  for i in {1..3}; do
-    if [[ "$(curl -sI "${tr_api}")" =~ 'X-Transmission-Session-Id:'[[:space:]]+[A-Za-z0-9]+ ]]; then
-      tr_session_header="${BASH_REMATCH[0]}"
-      break
+  if [[ "$(curl -sI "${tr_api}")" =~ 'X-Transmission-Session-Id:'[[:space:]]+[A-Za-z0-9]+ ]]; then
+    tr_session_header="${BASH_REMATCH[0]}"
+  fi
+}
+
+query_tr_api() {
+  for i in {1..4}; do
+    if curl -sf --header "${tr_session_header}" "${tr_api}" -d "$@"; then
+      return 0
+    elif ((i < 4)); then
+      get_tr_api_header
+    else
+      return 1
     fi
   done
 }
 
-query_tr_api() {
-  curl -s --header "${tr_session_header}" "${tr_api}" -d "$@"
-}
-
 get_tr_info() {
   tr_info="$(
-    query_tr_api '
-    {
+    query_tr_api '{
       "arguments": {
           "fields": [ "activityDate", "percentDone", "id", "sizeWhenDone", "name" ]
       },
       "method": "torrent-get"
-    }
-  '
-  )"
+    }'
+  )" && [[ ${tr_info} == *'"result":"success"'* ]] || {
+    printf '%s\n' "Query API failed. Exit."
+    exit 1
+  }
 }
 
 resume_tr_torrent() {
-  query_tr_api '{"method": "torrent-start"}'
+  query_tr_api '{"method": "torrent-start"}' >/dev/null
 }
 
 handle_torrent_done() {
@@ -160,59 +172,53 @@ clean_local_disk() {
 }
 
 clean_inactive_feed() {
-  local ids names space_to_free space_threshold free_space
+  local ids names space_to_free free_space
 
   # Size unit from df: 1024 bytes
   for i in _ free_space; do
     read -r "$i"
   done < <(df --output=avail "${seed_dir}")
 
-  ((space_threshold = 50 * (1024 ** 3)))
+  [[ -n ${free_space} ]] && (((space_to_free = 50 * (1024 ** 3) - free_space * 1024) > 0)) || return
 
-  if [[ -n ${free_space} ]] && (((space_to_free = space_threshold - free_space * 1024) > 0)); then
-    while IFS='/' read -r -d '' id size name; do
-      [[ -z ${name} ]] && continue
-      ids+=("${id}")
-      names+=("${name}")
+  while IFS='/' read -r -d '' id size name; do
+    [[ -z ${name} ]] && continue
+    ids+=("${id}")
+    names+=("${name}")
 
-      if (((space_to_free -= size) < 0)); then
-        printf -v ids '%s,' "${ids[@]}"
-        query_tr_api "
-          {
-            \"arguments\": {
-                \"ids\": [ ${ids%,} ],
-                \"delete-local-data\": \"true\"
-            },
-            \"method\": \"torrent-remove\"
-          }
-        " &&
-          for name in "${names[@]}"; do
-            append_log "Remove" "${seed_dir}" "${name}"
-          done
-        break
-      fi
-    done < <(
-      jq -j '
-        .arguments.torrents |
-        sort_by(.activityDate)[] |
-        select(.percentDone == 1 and .activityDate > 0) |
-        "\(.id)/\(.sizeWhenDone)/\(.name)\u0000"
-      ' <<<"${tr_info}"
-    )
-  fi
+    if (((space_to_free -= size) < 0)); then
+      printf -v ids '%s,' "${ids[@]}"
+      query_tr_api "
+        {
+          \"arguments\": {
+              \"ids\": [ ${ids%,} ],
+              \"delete-local-data\": \"true\"
+          },
+          \"method\": \"torrent-remove\"
+        }
+      " &&
+        for name in "${names[@]}"; do
+          append_log "Remove" "${seed_dir}" "${name}"
+        done
+      break
+    fi
+  done < <(
+    jq -j '
+      .arguments.torrents |
+      sort_by(.activityDate)[] |
+      select(.percentDone == 1 and .activityDate > 0) |
+      "\(.id)/\(.sizeWhenDone)/\(.name)\u0000"
+    ' <<<"${tr_info}"
+  )
 }
 
 # Main
-
-exec {lock_fd}<"${BASH_SOURCE[0]}"
-flock -x "${lock_fd}"
-trap 'write_log' EXIT
-
+prepare
 get_tr_api_header
 
 handle_torrent_done
 
-get_tr_info && hash jq || exit
+get_tr_info
 clean_local_disk
 clean_inactive_feed
 
