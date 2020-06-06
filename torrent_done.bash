@@ -140,26 +140,26 @@ handle_torrent_done() {
 }
 
 clean_local_disk() {
-  local obsolete name pwd_bak="$PWD"
+  local obsolete pwd_bak="$PWD"
   shopt -s nullglob dotglob globstar
 
   if cd "${seed_dir}"; then
     declare -A dict
-    while IFS= read -r -d '' name; do
-      [[ -n ${name} ]] && dict["${name}"]=1
+    while IFS= read -r -d '' i; do
+      [[ -n ${i} ]] && dict["${i}"]=1
     done < <(jq -j '.arguments.torrents[]|"\(.name)\u0000"' <<<"${tr_info}")
 
-    for name in [^.\#@]*; do
-      [[ -n ${dict["${name}"]} ]] || {
-        append_log 'Cleanup' "${seed_dir}" "${name}"
-        obsolete+=("${seed_dir}/${name}")
+    for i in [^.\#@]*; do
+      [[ -n ${dict["${i}"]} ]] || {
+        append_log 'Cleanup' "${seed_dir}" "${i}"
+        obsolete+=("${seed_dir}/${i}")
       }
     done
   fi
 
   if cd "${watch_dir}"; then
-    for name in **; do
-      [[ -s ${name} ]] || obsolete+=("${watch_dir}/${name}")
+    for i in **; do
+      [[ -s ${i} ]] || obsolete+=("${watch_dir}/${i}")
     done
   fi
 
