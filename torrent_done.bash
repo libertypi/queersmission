@@ -54,7 +54,7 @@ query_tr_api() {
 }
 
 get_tr_info() {
-  hash jq && tr_info="$(
+  tr_info="$(
     query_tr_api '{
       "arguments": {
           "fields": [ "activityDate", "percentDone", "id", "sizeWhenDone", "name" ]
@@ -147,7 +147,7 @@ clean_local_disk() {
     declare -A dict
     while IFS= read -r -d '' i; do
       [[ -n ${i} ]] && dict["${i}"]=1
-    done < <(jq -j '.arguments.torrents[]|"\(.name)\u0000"' <<<"${tr_info}")
+    done < <(read_tr_info 'name' <<<"${tr_info}")
 
     for i in [^.\#@]*; do
       [[ -n ${dict["${i}"]} ]] || {
@@ -202,15 +202,64 @@ clean_inactive_feed() {
         done
       break
     fi
-  done < <(
-    jq -j '
-      .arguments.torrents |
-      sort_by(.activityDate)[] |
-      select(.percentDone == 1 and .activityDate > 0) |
-      "\(.id)/\(.sizeWhenDone)/\(.name)\u0000"
-    ' <<<"${tr_info}"
-  )
+  done < <(read_tr_info <<<"${tr_info}")
 }
+
+# read_tr_info <output:(*|name)>
+if hash jq 1>/dev/null 2>&1; then
+  read_tr_info() {
+    case "$1" in
+      'name')
+        jq -j '.arguments.torrents[]|"\(.name)\u0000"'
+        ;;
+      *)
+        jq -j '
+          .arguments.torrents |
+          sort_by(.activityDate)[] |
+          select(.percentDone == 1 and .activityDate > 0) |
+          "\(.id)/\(.sizeWhenDone)/\(.name)\u0000"
+        '
+        ;;
+    esac
+  }
+else
+  read_tr_info() {
+    awk -v output="$1" '
+      BEGIN { RS = "^$" }
+
+      {
+        patsplit($0, dicts, /\{[^{}]*"id"[^{}]+"name"[^{}]+\}/)
+        for (dict in dicts) {
+          delete tmp
+          patsplit(dicts[dict], items, /"[A-Za-z]+":\s?([0-9]+|"[^"]+")/)
+          for (i in items) {
+            sep = index(items[i], ":")
+            key = substr(items[i], 2, sep - 3)
+            value = substr(items[i], sep + 1)
+            gsub(/^\s?"|"$/, "", value)
+            if (output == "name") {
+              if (key == "name") {
+                printf "%s\000", value
+                break
+              }
+              continue
+            }
+            tmp[key] = value
+          }
+          if (output != "name" && tmp["activityDate"] > 0 && tmp["percentDone"] <= 1) {
+            result[tmp["id"] "/" tmp["sizeWhenDone"] "/" tmp["name"]] = tmp["activityDate"]
+          }
+        }
+      }
+
+      END {
+        if (output == "name") exit
+        PROCINFO["sorted_in"] = "@val_num_asc"
+        for (i in result) printf "%s\000", i
+      }
+    '
+  }
+fi
 
 # Main
 prepare
