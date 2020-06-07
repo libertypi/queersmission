@@ -9,9 +9,17 @@ log_file="${script_dir}/log.log"
 av_regex="${script_dir}/component/av_regex.txt"
 tr_api='http://localhost:9091/transmission/rpc'
 
+case "$1" in
+  'debug' | '-d' | '-debug') debug=1 ;;
+  *) debug=0 ;;
+esac
+readonly debug
+
 prepare() {
+  printf '[DEBUG] %s' "Acquiring lock..." 1>&2
   exec {i}<"${BASH_SOURCE[0]}"
   flock -x "${i}"
+  printf '%s\n' 'Done.' 1>&2
   trap 'write_log' EXIT
 }
 
@@ -21,54 +29,59 @@ append_log() {
 
 write_log() {
   if ((${#logs[@]} > 0)); then
-    local log_bak
-    [[ -s ${log_file} ]] && log_bak="$(tail -n +3 "${log_file}")"
-    {
-      printf '%-20s%-10s%-35s%s\n%s\n' \
-        'Date' 'Status' 'Destination' 'Name' \
-        '-------------------------------------------------------------------------------'
-      for ((i = ${#logs[@]} - 1; i >= 0; i--)); do
-        printf '%s\n' "${logs[i]}"
-      done
-      [[ -n ${log_bak} ]] && printf '%s\n' "${log_bak}"
-    } >"${log_file}"
+    printf '[DEBUG] Logs: (%s entries)\n' "${#logs[@]}" 1>&2
+    printf '%s\n' "${logs[@]}" 1>&2
+    if ((debug == 0)); then
+      local log_bak
+      [[ -s ${log_file} ]] && log_bak="$(tail -n +3 "${log_file}")"
+      {
+        printf '%-20s%-10s%-35s%s\n%s\n' \
+          'Date' 'Status' 'Destination' 'Name' \
+          '-------------------------------------------------------------------------------'
+        for ((i = ${#logs[@]} - 1; i >= 0; i--)); do
+          printf '%s\n' "${logs[i]}"
+        done
+        [[ -n ${log_bak} ]] && printf '%s\n' "${log_bak}"
+      } >"${log_file}"
+    fi
   fi
 }
 
 get_tr_api_header() {
   if [[ "$(curl -sI "${tr_api}")" =~ 'X-Transmission-Session-Id:'[[:space:]]+[A-Za-z0-9]+ ]]; then
     tr_session_header="${BASH_REMATCH[0]}"
+    printf '[DEBUG] API Header: "%s"\n' "${tr_session_header}" 1>&2
   fi
 }
 
 query_tr_api() {
   for i in {1..4}; do
     if curl -sf --header "${tr_session_header}" "${tr_api}" -d "$@"; then
+      printf '[DEBUG] Query API success. Query: "%s"\n' "$*" 1>&2
       return 0
     elif ((i < 4)); then
+      printf '[DEBUG] Query API failed. Retries: %s\n' "${i}" 1>&2
       get_tr_api_header
     else
+      printf '[DEBUG] Query API failed. Query: "%s"\n' "$*" 1>&2
       return 1
     fi
   done
 }
 
 get_tr_info() {
-  tr_info="$(
-    query_tr_api '{
-      "arguments": {
-          "fields": [ "activityDate", "percentDone", "id", "sizeWhenDone", "name" ]
-      },
-      "method": "torrent-get"
-    }'
-  )" && [[ ${tr_info} == *'"result":"success"'* ]] || {
-    printf '%s\n' "Query API failed. Exit."
+  if tr_info="$(
+    query_tr_api '{"arguments":{"fields":["activityDate","percentDone","id","sizeWhenDone","name"]},"method":"torrent-get"}'
+  )" && [[ ${tr_info} == *'"result":"success"'* ]]; then
+    printf '[DEBUG] %s\n' "Query torrents info success." 1>&2
+  else
+    printf '[DEBUG] %s\n' "Query torrents info failed. Exit." 1>&2
     exit 1
-  }
+  fi
 }
 
 resume_tr_torrent() {
-  query_tr_api '{"method": "torrent-start"}' >/dev/null
+  query_tr_api '{"method":"torrent-start"}' >/dev/null
 }
 
 handle_torrent_done() {
@@ -122,16 +135,7 @@ handle_torrent_done() {
 
     if cp -rf "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" "${seed_dir}/"; then
       append_log "Finish" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
-      query_tr_api "
-        {
-          \"arguments\": {
-              \"ids\": [ ${TR_TORRENT_ID} ],
-              \"location\": \"${seed_dir}/\",
-              \"move\": \"false\"
-          },
-          \"method\": \"torrent-set-location\"
-        }
-      "
+      query_tr_api "{\"arguments\":{\"ids\":[${TR_TORRENT_ID}],\"location\":\"${seed_dir}/\"},\"method\":\"torrent-set-location\"}"
     else
       append_log "Error" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
     fi
@@ -149,6 +153,8 @@ clean_local_disk() {
       [[ -n ${i} ]] && dict["${i}"]=1
     done < <(read_tr_info 'name' <<<"${tr_info}")
 
+    printf '[DEBUG] Torrent dict entries: %s\n' "${#dict[@]}" 1>&2
+
     for i in [^.\#@]*; do
       [[ -n ${dict["${i}"]} ]] || {
         append_log 'Cleanup' "${seed_dir}" "${i}"
@@ -164,7 +170,8 @@ clean_local_disk() {
   fi
 
   if ((${#obsolete[@]} > 0)); then
-    rm -rf -- "${obsolete[@]}"
+    printf '[DEBUG] %s\n' 'Cleanup local disk:' "${obsolete[@]}" 1>&2
+    ((debug == 0)) && rm -rf -- "${obsolete[@]}"
   fi
 
   shopt -u nullglob dotglob globstar
@@ -179,7 +186,15 @@ clean_inactive_feed() {
     read -r "$i"
   done < <(df --output=avail "${seed_dir}")
 
-  [[ -n ${free_space} ]] && (((space_to_free = 50 * (1024 ** 3) - free_space * 1024) > 0)) || return
+  if [[ -z ${free_space} ]]; then
+    printf '[DEBUG] %s\n' 'Read disk stats failed.' 1>&2
+    return
+  elif (((space_to_free = 50 * (1024 ** 3) - (free_space *= 1024)) > 0)); then
+    printf '[DEBUG] Cleanup inactive feeds. Space to free: %s. Disk free space: %s\n' "${space_to_free}" "${free_space}" 1>&2
+  else
+    printf '[DEBUG] Space enough, skip action. Space to free: %s. Disk free space: %s\n' "${space_to_free}" "${free_space}" 1>&2
+    return
+  fi
 
   while IFS='/' read -r -d '' id size name; do
     [[ -z ${name} ]] && continue
@@ -187,19 +202,17 @@ clean_inactive_feed() {
     names+=("${name}")
 
     if (((space_to_free -= size) < 0)); then
-      printf -v ids '%s,' "${ids[@]}"
-      query_tr_api "
-        {
-          \"arguments\": {
-              \"ids\": [ ${ids%,} ],
-              \"delete-local-data\": \"true\"
-          },
-          \"method\": \"torrent-remove\"
-        }
-      " &&
+      printf '[DEBUG] %s\n' 'Remove torrents:' "${names[@]}" 1>&2
+      if ((debug == 0)); then
+        printf -v ids '%s,' "${ids[@]}"
+        query_tr_api "{\"arguments\":{\"ids\":[${ids%,}],\"delete-local-data\":\"true\"},\"method\":\"torrent-remove\"}"
+      else
+        true
+      fi && {
         for name in "${names[@]}"; do
           append_log "Remove" "${seed_dir}" "${name}"
         done
+      }
       break
     fi
   done < <(read_tr_info <<<"${tr_info}")
@@ -207,6 +220,7 @@ clean_inactive_feed() {
 
 # read_tr_info <output:(*|name)>
 if hash jq 1>/dev/null 2>&1; then
+  printf '[DEBUG] %s\n' 'Using jq to parse json.' 1>&2
   read_tr_info() {
     case "$1" in
       'name')
@@ -216,13 +230,14 @@ if hash jq 1>/dev/null 2>&1; then
         jq -j '
           .arguments.torrents |
           sort_by(.activityDate)[] |
-          select(.percentDone == 1 and .activityDate > 0) |
+          select(.percentDone == 1) |
           "\(.id)/\(.sizeWhenDone)/\(.name)\u0000"
         '
         ;;
     esac
   }
 else
+  printf '[DEBUG] %s\n' 'Using awk to parse json.' 1>&2
   read_tr_info() {
     awk -v output="$1" '
       BEGIN { RS = "^$" }
@@ -230,7 +245,6 @@ else
       {
         patsplit($0, dicts, /\{[^{}]*"id"[^{}]+"name"[^{}]+\}/)
         for (dict in dicts) {
-          delete tmp
           patsplit(dicts[dict], items, /"[A-Za-z]+":\s?([0-9]+|"[^"]+")/)
           for (i in items) {
             sep = index(items[i], ":")
@@ -242,13 +256,15 @@ else
                 printf "%s\000", value
                 break
               }
-              continue
+            } else {
+              tmp[key] = value
             }
-            tmp[key] = value
           }
-          if (output != "name" && tmp["activityDate"] > 0 && tmp["percentDone"] == 1) {
+          if (output == "name") continue
+          if (tmp["percentDone"] == 1) {
             result[tmp["id"] "/" tmp["sizeWhenDone"] "/" tmp["name"]] = tmp["activityDate"]
           }
+          delete tmp
         }
       }
 
@@ -257,7 +273,7 @@ else
         PROCINFO["sorted_in"] = "@val_num_asc"
         for (i in result) printf "%s\000", i
       }
-    '
+    ' <(LC_ALL=en_US.UTF-8 printf '%b' "$(</dev/stdin)")
   }
 fi
 
