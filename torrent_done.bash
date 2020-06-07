@@ -255,10 +255,13 @@ else
 
           for (i in items) {
             sep = index(items[i], ":")
+            len = length(items[i])
             key = substr(items[i], 2, sep - 3)
-            value = substr(items[i], sep + 1)
-            if (substr(value, 1, 1) == "\"")
-              value = substr(value, 2, length(value) - 2)
+            if (substr(items[i], len) == "\"") {
+              value = substr(items[i], sep + 2, len - sep - 2)
+            } else {
+              value = substr(items[i], sep + 1)
+            }
             if (output == "name") {
               if (key == "name") {
                 printf "%s\000", value
