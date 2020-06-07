@@ -57,31 +57,33 @@ get_tr_api_header() {
 query_tr_api() {
   for i in {1..4}; do
     if curl -sf --header "${tr_session_header}" "${tr_api}" -d "$@"; then
-      printf '[DEBUG] Query API success. Query: "%s"\n' "$*" 1>&2
+      printf '[DEBUG] Querying API success. Query: "%s"\n' "$*" 1>&2
       return 0
     elif ((i < 4)); then
-      printf '[DEBUG] Query API failed. Retries: %s\n' "${i}" 1>&2
+      printf '[DEBUG] Querying API failed. Retries: %s\n' "${i}" 1>&2
       get_tr_api_header
     else
-      printf '[DEBUG] Query API failed. Query: "%s"\n' "$*" 1>&2
+      printf '[DEBUG] Querying API failed. Query: "%s"\n' "$*" 1>&2
       return 1
     fi
   done
 }
 
 get_tr_info() {
-  if tr_info="$(
-    query_tr_api '{"arguments":{"fields":["activityDate","percentDone","id","sizeWhenDone","name"]},"method":"torrent-get"}'
-  )" && [[ ${tr_info} == *'"result":"success"'* ]]; then
-    printf '[DEBUG] %s\n' "Query torrents info success." 1>&2
+  if tr_info="$(query_tr_api '{"arguments":{"fields":["activityDate","percentDone","id","sizeWhenDone","name"]},"method":"torrent-get"}')" &&
+    [[ ${tr_info} == *'"result":"success"'* ]] &&
+    tr_stats="$(query_tr_api '{"method":"session-stats"}')" &&
+    [[ ${tr_stats} =~ '"torrentCount":'([0-9]+) ]] && tr_torrentCount="${BASH_REMATCH[1]}" &&
+    [[ ${tr_stats} =~ '"pausedTorrentCount":'([0-9]+) ]] && tr_pausedTorrentCount="${BASH_REMATCH[1]}"; then
+    printf '[DEBUG] %s\n' "Getting torrents info success." 1>&2
   else
-    printf '[DEBUG] %s\n' "Query torrents info failed. Exit." 1>&2
+    printf '[DEBUG] Getting torrents info failed. Response: "%s"\n"%s"\n' "${tr_info}" "${tr_stats}" 1>&2
     exit 1
   fi
 }
 
 resume_tr_torrent() {
-  query_tr_api '{"method":"torrent-start"}' >/dev/null
+  ((tr_pausedTorrentCount > 0)) && query_tr_api '{"method":"torrent-start"}' >/dev/null
 }
 
 handle_torrent_done() {
@@ -153,7 +155,12 @@ clean_local_disk() {
       [[ -n ${i} ]] && dict["${i}"]=1
     done < <(read_tr_info 'name' <<<"${tr_info}")
 
-    printf '[DEBUG] Torrent dict entries: %s\n' "${#dict[@]}" 1>&2
+    if ((${#dict[@]} == tr_torrentCount)); then
+      printf '[DEBUG] Torrent dict length match with API response: %d\n' "${tr_torrentCount}" 1>&2
+    else
+      printf '[DEBUG] Torrent dict length unmatch. API: %d, Dict: %d\n' "${tr_torrentCount}" "${#dict[@]}" 1>&2
+      exit 1
+    fi
 
     for i in [^.\#@]*; do
       [[ -n ${dict["${i}"]} ]] || {
@@ -243,12 +250,15 @@ else
       {
         patsplit($0, dicts, /\{[^{}]*"id"[^{}]+"name"[^{}]+\}/)
         for (dict in dicts) {
-          patsplit(dicts[dict], items, /"[A-Za-z]+":\s?([0-9]+|"[^"]+")/)
+          # This pattern will not match bool: "xxx":true
+          patsplit(dicts[dict], items, /"[A-Za-z]+":([0-9]+|"[^"]+")/)
+
           for (i in items) {
             sep = index(items[i], ":")
             key = substr(items[i], 2, sep - 3)
             value = substr(items[i], sep + 1)
-            gsub(/^\s?"|"$/, "", value)
+            if (substr(value, 1, 1) == "\"")
+              value = substr(value, 2, length(value) - 2)
             if (output == "name") {
               if (key == "name") {
                 printf "%s\000", value
@@ -258,6 +268,7 @@ else
               tmp[key] = value
             }
           }
+
           if (output == "name") continue
           if (tmp["percentDone"] == 1) {
             result[tmp["id"] "/" tmp["sizeWhenDone"] "/" tmp["name"]] = tmp["activityDate"]
