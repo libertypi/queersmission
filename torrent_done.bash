@@ -190,9 +190,9 @@ clean_inactive_feed() {
     printf '[DEBUG] %s\n' 'Read disk stats failed.' 1>&2
     return
   elif (((space_to_free = 50 * (1024 ** 3) - (free_space *= 1024)) > 0)); then
-    printf '[DEBUG] Cleanup inactive feeds. Space to free: %s. Disk free space: %s\n' "${space_to_free}" "${free_space}" 1>&2
+    printf '[DEBUG] Cleanup inactive feeds. Disk free space: %s. Space to free: %s.\n' "${free_space}" "${space_to_free}" 1>&2
   else
-    printf '[DEBUG] Space enough, skip action. Space to free: %s. Disk free space: %s\n' "${space_to_free}" "${free_space}" 1>&2
+    printf '[DEBUG] Space enough, skip action. Disk free space: %s\n' "${free_space}" 1>&2
     return
   fi
 
@@ -203,12 +203,10 @@ clean_inactive_feed() {
 
     if (((space_to_free -= size) < 0)); then
       printf '[DEBUG] %s\n' 'Remove torrents:' "${names[@]}" 1>&2
-      if ((debug == 0)); then
+      ((debug == 1)) || {
         printf -v ids '%s,' "${ids[@]}"
         query_tr_api "{\"arguments\":{\"ids\":[${ids%,}],\"delete-local-data\":\"true\"},\"method\":\"torrent-remove\"}"
-      else
-        true
-      fi && {
+      } && {
         for name in "${names[@]}"; do
           append_log "Remove" "${seed_dir}" "${name}"
         done
