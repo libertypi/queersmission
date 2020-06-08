@@ -71,10 +71,10 @@ query_tr_api() {
 
 get_tr_info() {
   if tr_info="$(query_tr_api '{"arguments":{"fields":["activityDate","percentDone","id","sizeWhenDone","name"]},"method":"torrent-get"}')" &&
-    [[ ${tr_info} =~ '"result":'[[:space:]]*'"success"' ]] &&
+    [[ ${tr_info} =~ '"result"'[[:space:]]*:[[:space:]]*'"success"' ]] &&
     tr_stats="$(query_tr_api '{"method":"session-stats"}')" &&
-    [[ ${tr_stats} =~ '"torrentCount":'[[:space:]]*([0-9]+) ]] && tr_torrentCount="${BASH_REMATCH[1]}" &&
-    [[ ${tr_stats} =~ '"pausedTorrentCount":'[[:space:]]*([0-9]+) ]] && tr_pausedTorrentCount="${BASH_REMATCH[1]}"; then
+    [[ ${tr_stats} =~ '"torrentCount"'[[:space:]]*:[[:space:]]*([0-9]+) ]] && tr_torrentCount="${BASH_REMATCH[1]}" &&
+    [[ ${tr_stats} =~ '"pausedTorrentCount"'[[:space:]]*:[[:space:]]*([0-9]+) ]] && tr_pausedTorrentCount="${BASH_REMATCH[1]}"; then
     printf '[DEBUG] %s\n' "Getting torrents info success." 1>&2
   else
     printf '[DEBUG] Getting torrents info failed. Response: "%s"\n"%s"\n' "${tr_info}" "${tr_stats}" 1>&2
@@ -251,17 +251,13 @@ else
         patsplit($0, dicts, /\{[^{}]*"id"[^{}]+"name"[^{}]+\}/)
         for (i in dicts) {
           if (output == "name") {
-            if (match(dicts[i], /"name":[[:space:]]*"([^"]+)"/, m)) {
+            if (match(dicts[i], /"name"[[:space:]]*:[[:space:]]*"([^"]+)"/, m)) {
               print m[1]
             }
           } else {
             # This pattern will not match bool: "xxx":true
-            while (match(dicts[i], /"([A-Za-z]+)":[[:space:]]*([0-9]+|"([^"]+)")/, m)) {
-              if (3 in m) {
-                tmp[m[1]] = m[3]
-              } else {
-                tmp[m[1]] = m[2]
-              }
+            while (match(dicts[i], /"([A-Za-z]+)"[[:space:]]*:[[:space:]]*([0-9]+|"([^"]+)")/, m)) {
+              tmp[m[1]] = (3 in m ? m[3] : m[2])
               dicts[i] = substr(dicts[i], RSTART + RLENGTH)
             }
             if (tmp["percentDone"] == 1) {
