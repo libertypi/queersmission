@@ -71,10 +71,10 @@ query_tr_api() {
 
 get_tr_info() {
   if tr_info="$(query_tr_api '{"arguments":{"fields":["activityDate","percentDone","id","sizeWhenDone","name"]},"method":"torrent-get"}')" &&
-    [[ ${tr_info} == *'"result":"success"'* ]] &&
+    [[ ${tr_info} =~ '"result":'[[:space:]]*'"success"' ]] &&
     tr_stats="$(query_tr_api '{"method":"session-stats"}')" &&
-    [[ ${tr_stats} =~ '"torrentCount":'([0-9]+) ]] && tr_torrentCount="${BASH_REMATCH[1]}" &&
-    [[ ${tr_stats} =~ '"pausedTorrentCount":'([0-9]+) ]] && tr_pausedTorrentCount="${BASH_REMATCH[1]}"; then
+    [[ ${tr_stats} =~ '"torrentCount":'[[:space:]]*([0-9]+) ]] && tr_torrentCount="${BASH_REMATCH[1]}" &&
+    [[ ${tr_stats} =~ '"pausedTorrentCount":'[[:space:]]*([0-9]+) ]] && tr_pausedTorrentCount="${BASH_REMATCH[1]}"; then
     printf '[DEBUG] %s\n' "Getting torrents info success." 1>&2
   else
     printf '[DEBUG] Getting torrents info failed. Response: "%s"\n"%s"\n' "${tr_info}" "${tr_stats}" 1>&2
@@ -245,45 +245,37 @@ else
   printf '[DEBUG] %s\n' 'Using awk to parse json.' 1>&2
   read_tr_info() {
     awk -v output="$1" '
-      BEGIN { RS = "^$" }
+      BEGIN { RS = "^$"; ORS = "\000" }
 
       {
         patsplit($0, dicts, /\{[^{}]*"id"[^{}]+"name"[^{}]+\}/)
-        for (dict in dicts) {
-          # This pattern will not match bool: "xxx":true
-          patsplit(dicts[dict], items, /"[A-Za-z]+":([0-9]+|"[^"]+")/)
-
-          for (i in items) {
-            sep = index(items[i], ":")
-            len = length(items[i])
-            key = substr(items[i], 2, sep - 3)
-            if (substr(items[i], len) == "\"") {
-              value = substr(items[i], sep + 2, len - sep - 2)
-            } else {
-              value = substr(items[i], sep + 1)
+        for (i in dicts) {
+          if (output == "name") {
+            if (match(dicts[i], /"name":[[:space:]]*"([^"]+)"/, m)) {
+              print m[1]
             }
-            if (output == "name") {
-              if (key == "name") {
-                printf "%s\000", value
-                break
+          } else {
+            # This pattern will not match bool: "xxx":true
+            while (match(dicts[i], /"([A-Za-z]+)":[[:space:]]*([0-9]+|"([^"]+)")/, m)) {
+              if (3 in m) {
+                tmp[m[1]] = m[3]
+              } else {
+                tmp[m[1]] = m[2]
               }
-            } else {
-              tmp[key] = value
+              dicts[i] = substr(dicts[i], RSTART + RLENGTH)
             }
+            if (tmp["percentDone"] == 1) {
+              result[tmp["id"] "/" tmp["sizeWhenDone"] "/" tmp["name"]] = tmp["activityDate"]
+            }
+            delete tmp
           }
-
-          if (output == "name") continue
-          if (tmp["percentDone"] == 1) {
-            result[tmp["id"] "/" tmp["sizeWhenDone"] "/" tmp["name"]] = tmp["activityDate"]
-          }
-          delete tmp
         }
       }
 
       END {
         if (output == "name") exit
         PROCINFO["sorted_in"] = "@val_num_asc"
-        for (i in result) printf "%s\000", i
+        for (i in result) print i
       }
     ' <(LC_ALL=en_US.UTF-8 printf '%b' "$(</dev/stdin)")
   }
