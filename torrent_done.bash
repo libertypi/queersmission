@@ -48,7 +48,7 @@ write_log() {
 }
 
 get_tr_api_header() {
-  if [[ "$(curl -sI "${tr_api}")" =~ 'X-Transmission-Session-Id:'[[:space:]]+[A-Za-z0-9]+ ]]; then
+  if [[ "$(curl -sI "${tr_api}")" =~ 'X-Transmission-Session-Id:'[[:space:]]*[A-Za-z0-9]+ ]]; then
     tr_session_header="${BASH_REMATCH[0]}"
     printf '[DEBUG] API Header: "%s"\n' "${tr_session_header}" 1>&2
   fi
@@ -93,7 +93,7 @@ handle_torrent_done() {
     return
   }
 
-  local file_list is_directory destination dest_display
+  local file_list is_directory destination dest_display lower_torrent_name="${TR_TORRENT_NAME,,}"
 
   if [[ ${TR_TORRENT_DIR} == "${seed_dir}" ]]; then
 
@@ -103,7 +103,7 @@ handle_torrent_done() {
       file_list="${file_list,,}"
       is_directory=1
     else
-      file_list="${TR_TORRENT_NAME,,}"
+      file_list="${lower_torrent_name}"
       is_directory=0
     fi
 
@@ -113,10 +113,10 @@ handle_torrent_done() {
     elif [[ ${file_list} =~ [^a-z0-9]([se][0-9]{1,2}|s[0-9]{1,2}e[0-9]{1,2}|ep[[:space:]_-]?[0-9]{1,3})[^a-z0-9] ]]; then
       destination='/volume1/video/TV Series'
 
-    elif [[ ${TR_TORRENT_NAME,,} =~ (^|[^a-z0-9])(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)([^a-z0-9]|$) ]]; then
+    elif [[ ${lower_torrent_name} =~ (^|[^a-z0-9])(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)([^a-z0-9]|$) ]]; then
       destination='/volume1/homes/admin/Download/Adobe'
 
-    elif [[ ${TR_TORRENT_NAME,,} =~ (^|[^a-z0-9])(windows|mac(os)?|x(86|64)|(32|64)bit|v[0-9]+\.[0-9]+)([^a-z0-9]|$)|\.(zip|rar|exe|7z|dmg|pkg)$ ]]; then
+    elif [[ ${lower_torrent_name} =~ (^|[^a-z0-9])(windows|mac(os)?|x(86|64)|(32|64)bit|v[0-9]+\.[0-9]+)([^a-z0-9]|$)|\.(zip|rar|exe|7z|dmg|pkg)$ ]]; then
       destination='/volume1/homes/admin/Download'
 
     else
