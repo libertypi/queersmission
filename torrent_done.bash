@@ -69,23 +69,6 @@ query_tr_api() {
   done
 }
 
-get_tr_info() {
-  if tr_info="$(query_tr_api '{"arguments":{"fields":["activityDate","percentDone","id","sizeWhenDone","name"]},"method":"torrent-get"}')" &&
-    [[ ${tr_info} =~ '"result"'[[:space:]]*:[[:space:]]*'"success"' ]] &&
-    tr_stats="$(query_tr_api '{"method":"session-stats"}')" &&
-    [[ ${tr_stats} =~ '"torrentCount"'[[:space:]]*:[[:space:]]*([0-9]+) ]] && tr_torrentCount="${BASH_REMATCH[1]}" &&
-    [[ ${tr_stats} =~ '"pausedTorrentCount"'[[:space:]]*:[[:space:]]*([0-9]+) ]] && tr_pausedTorrentCount="${BASH_REMATCH[1]}"; then
-    printf '[DEBUG] %s\n' "Getting torrents info success." 1>&2
-  else
-    printf '[DEBUG] Getting torrents info failed. Response: "%s"\n"%s"\n' "${tr_info}" "${tr_stats}" 1>&2
-    exit 1
-  fi
-}
-
-resume_tr_torrent() {
-  ((tr_pausedTorrentCount > 0)) && query_tr_api '{"method":"torrent-start"}' >/dev/null
-}
-
 handle_torrent_done() {
   [[ -n ${TR_TORRENT_DIR} && -n ${TR_TORRENT_NAME} ]] || return
   [[ -e "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" ]] || {
@@ -145,6 +128,19 @@ handle_torrent_done() {
   fi
 }
 
+get_tr_info() {
+  if ! hash jq 1>/dev/null 2>&1; then
+    printf '[DEBUG] %s\n' "Jq not found, will not precede." 1>&2
+    exit 1
+  elif tr_info="$(query_tr_api '{"arguments":{"fields":["activityDate","status","sizeWhenDone","leftUntilDone","id","name"]},"method":"torrent-get"}')" &&
+    [[ "$(jq -r '.result' <<<"${tr_info}")" == 'success' ]]; then
+    printf '[DEBUG] %s\n' "Getting torrents info success." 1>&2
+  else
+    printf '[DEBUG] Getting torrents info failed. Response: "%s"\n"%s"\n' "${tr_info}" "${tr_stats}" 1>&2
+    exit 1
+  fi
+}
+
 clean_local_disk() {
   local obsolete pwd_bak="$PWD"
   shopt -s nullglob dotglob globstar
@@ -153,14 +149,7 @@ clean_local_disk() {
     declare -A dict
     while IFS= read -r -d '' i; do
       [[ -n ${i} ]] && dict["${i}"]=1
-    done < <(read_tr_info 'name' <<<"${tr_info}")
-
-    if ((${#dict[@]} == tr_torrentCount)); then
-      printf '[DEBUG] Torrent dict length match with API response: %d\n' "${tr_torrentCount}" 1>&2
-    else
-      printf '[DEBUG] Torrent dict length unmatch. API: %d, Dict: %d\n' "${tr_torrentCount}" "${#dict[@]}" 1>&2
-      exit 1
-    fi
+    done < <(jq -j '.arguments.torrents[]|"\(.name)\u0000"' <<<"${tr_info}")
 
     for i in [^.\#@]*; do
       [[ -n ${dict["${i}"]} ]] || {
@@ -196,7 +185,7 @@ clean_inactive_feed() {
   if [[ -z ${free_space} ]]; then
     printf '[DEBUG] %s\n' 'Read disk stats failed.' 1>&2
     return
-  elif (((space_to_free = 50 * (1024 ** 3) - (free_space *= 1024)) > 0)); then
+  elif (((space_to_free = 50 * (1024 ** 3) + "$(jq -r '[.arguments.torrents[]|.leftUntilDone]|add' <<<"${tr_info}")" - (free_space *= 1024)) > 0)); then
     printf '[DEBUG] Cleanup inactive feeds. Disk free space: %s. Space to free: %s.\n' "${free_space}" "${space_to_free}" 1>&2
   else
     printf '[DEBUG] Space enough, skip action. Disk free space: %s\n' "${free_space}" 1>&2
@@ -208,11 +197,11 @@ clean_inactive_feed() {
     ids+=("${id}")
     names+=("${name}")
 
-    if (((space_to_free -= size) < 0)); then
+    if (((space_to_free -= size) <= 0)); then
       printf '[DEBUG] %s\n' 'Remove torrents:' "${names[@]}" 1>&2
       ((debug == 1)) || {
         printf -v ids '%s,' "${ids[@]}"
-        query_tr_api "{\"arguments\":{\"ids\":[${ids%,}],\"delete-local-data\":\"true\"},\"method\":\"torrent-remove\"}"
+        query_tr_api "{\"arguments\":{\"ids\":[${ids%,}],\"delete-local-data\":\"true\"},\"method\":\"torrent-remove\"}" >/dev/null
       } && {
         for name in "${names[@]}"; do
           append_log "Remove" "${seed_dir}" "${name}"
@@ -220,62 +209,12 @@ clean_inactive_feed() {
       }
       break
     fi
-  done < <(read_tr_info <<<"${tr_info}")
+  done < <(jq -j '.arguments.torrents|sort_by(.activityDate)[]|select(.leftUntilDone==0)|"\(.id)/\(.sizeWhenDone)/\(.name)\u0000"' <<<"${tr_info}")
 }
 
-# read_tr_info <output:(*|name)>
-if hash jq 1>/dev/null 2>&1; then
-  printf '[DEBUG] %s\n' 'Using jq to parse json.' 1>&2
-  read_tr_info() {
-    case "$1" in
-      'name')
-        jq -j '.arguments.torrents[]|"\(.name)\u0000"'
-        ;;
-      *)
-        jq -j '
-          .arguments.torrents |
-          sort_by(.activityDate)[] |
-          select(.percentDone == 1) |
-          "\(.id)/\(.sizeWhenDone)/\(.name)\u0000"
-        '
-        ;;
-    esac
-  }
-else
-  printf '[DEBUG] %s\n' 'Using awk to parse json.' 1>&2
-  read_tr_info() {
-    awk -v output="$1" '
-      BEGIN { RS = "^$"; ORS = "\000" }
-
-      {
-        patsplit($0, dicts, /\{[^{}]*"id"[^{}]+"name"[^{}]+\}/)
-        for (i in dicts) {
-          if (output == "name") {
-            if (match(dicts[i], /"name"[[:space:]]*:[[:space:]]*"([^"]+)"/, m)) {
-              print m[1]
-            }
-          } else {
-            # This pattern will not match bool: "xxx":true
-            while (match(dicts[i], /"([A-Za-z]+)"[[:space:]]*:[[:space:]]*([0-9]+|"([^"]+)")/, m)) {
-              tmp[m[1]] = (3 in m ? m[3] : m[2])
-              dicts[i] = substr(dicts[i], RSTART + RLENGTH)
-            }
-            if (tmp["percentDone"] == 1) {
-              result[tmp["id"] "/" tmp["sizeWhenDone"] "/" tmp["name"]] = tmp["activityDate"]
-            }
-            delete tmp
-          }
-        }
-      }
-
-      END {
-        if (output == "name") exit
-        PROCINFO["sorted_in"] = "@val_num_asc"
-        for (i in result) print i
-      }
-    ' <(LC_ALL=en_US.UTF-8 printf '%b' "$(</dev/stdin)")
-  }
-fi
+resume_tr_torrent() {
+  (("$(jq -r '[.arguments.torrents[]|select(.status==0)]|length' <<<"${tr_info}")" > 0)) && query_tr_api '{"method":"torrent-start"}' >/dev/null
+}
 
 # Main
 prepare
