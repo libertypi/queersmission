@@ -179,13 +179,13 @@ clean_inactive_feed() {
 
   for i in {1..2}; do
     read -r disk_size free_space
-  done < <(df --block-size=1 --output=size,avail "${seed_dir}") || {
+  done < <(df --block-size=1 --output=size,avail "${seed_dir}") && [[ ${disk_size} =~ ^[0-9]+$ && ${free_space} =~ ^[0-9]+$ ]] || {
     printf '[DEBUG] %s\n' 'Read disk stats failed.' 1>&2
     return
   }
 
   total_torrent_size="$(jq -r '[.arguments.torrents[].sizeWhenDone]|add' <<<"${tr_info}")"
-  if ((space_threshold = 50 * (1024 ** 3), m = space_threshold - disk_size + total_torrent_size, n = space_threshold - free_space, space_to_free = (m > n ? m : n), space_to_free > 0)); then
+  if ((space_threshold = 50 * (1024 ** 3), m = space_threshold - disk_size + total_torrent_size, n = space_threshold - free_space, (space_to_free = m > n ? m : n) > 0)); then
     printf '[DEBUG] Cleanup inactive feeds. Disk free space: %s. Space to free: %s.\n' "${free_space}" "${space_to_free}" 1>&2
   else
     printf '[DEBUG] Space enough, skip action. Disk free space: %s\n' "${free_space}" 1>&2
@@ -194,13 +194,12 @@ clean_inactive_feed() {
 
   while IFS='/' read -r -d '' id size name; do
     [[ -z ${name} ]] && continue
-    ids+=("${id}")
+    ids+="${id},"
     names+=("${name}")
 
     if (((space_to_free -= size) <= 0)); then
       printf '[DEBUG] %s\n' 'Remove torrents:' "${names[@]}" 1>&2
       ((debug == 1)) || {
-        printf -v ids '%s,' "${ids[@]}"
         query_tr_api "{\"arguments\":{\"ids\":[${ids%,}],\"delete-local-data\":\"true\"},\"method\":\"torrent-remove\"}" >/dev/null
       } && {
         for name in "${names[@]}"; do
