@@ -132,7 +132,7 @@ get_tr_info() {
   if ! hash jq 1>/dev/null 2>&1; then
     printf '[DEBUG] %s\n' "Jq not found, will not precede." 1>&2
     exit 1
-  elif tr_info="$(query_tr_api '{"arguments":{"fields":["activityDate","status","sizeWhenDone","leftUntilDone","id","name"]},"method":"torrent-get"}')" &&
+  elif tr_info="$(query_tr_api '{"arguments":{"fields":["activityDate","status","sizeWhenDone","percentDone","id","name"]},"method":"torrent-get"}')" &&
     [[ "$(jq -r '.result' <<<"${tr_info}")" == 'success' ]]; then
     printf '[DEBUG] %s\n' "Getting torrents info success." 1>&2
   else
@@ -175,17 +175,17 @@ clean_local_disk() {
 }
 
 clean_inactive_feed() {
-  local ids names space_to_free free_space
+  local ids names disk_size free_space space_threshold space_to_free
 
-  # Size unit from df: 1024 bytes
-  for i in _ free_space; do
-    read -r "$i"
-  done < <(df --output=avail "${seed_dir}")
-
-  if [[ -z ${free_space} ]]; then
+  for i in {1..2}; do
+    read -r disk_size free_space
+  done < <(df --block-size=1 --output=size,avail "${seed_dir}") || {
     printf '[DEBUG] %s\n' 'Read disk stats failed.' 1>&2
     return
-  elif (((space_to_free = 50 * (1024 ** 3) + "$(jq -r '[.arguments.torrents[]|.leftUntilDone]|add' <<<"${tr_info}")" - (free_space *= 1024)) > 0)); then
+  }
+
+  total_torrent_size="$(jq -r '[.arguments.torrents[].sizeWhenDone]|add' <<<"${tr_info}")"
+  if ((space_threshold = 50 * (1024 ** 3), (space_to_free = space_threshold - disk_size + total_torrent_size) > 0 || (space_to_free = space_threshold - free_space) > 0)); then
     printf '[DEBUG] Cleanup inactive feeds. Disk free space: %s. Space to free: %s.\n' "${free_space}" "${space_to_free}" 1>&2
   else
     printf '[DEBUG] Space enough, skip action. Disk free space: %s\n' "${free_space}" 1>&2
@@ -209,7 +209,7 @@ clean_inactive_feed() {
       }
       break
     fi
-  done < <(jq -j '.arguments.torrents|sort_by(.activityDate)[]|select(.leftUntilDone==0)|"\(.id)/\(.sizeWhenDone)/\(.name)\u0000"' <<<"${tr_info}")
+  done < <(jq -j '.arguments.torrents|sort_by(.activityDate)[]|select(.percentDone==1)|"\(.id)/\(.sizeWhenDone)/\(.name)\u0000"' <<<"${tr_info}")
 }
 
 resume_tr_torrent() {
