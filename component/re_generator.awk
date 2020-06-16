@@ -31,8 +31,8 @@ function read_keyword_file(file, string, arr, i)
     }
     for (i in arr) {
         print(arr[i]) > file
-        string = (string == "" ? "" : string "|") i
+        string = string "|" i
     }
     close(file)
-    return string
+    return substr(string, 2)
 }
