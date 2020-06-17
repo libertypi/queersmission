@@ -136,7 +136,7 @@ get_tr_info() {
     [[ "$(jq -r '.result' <<<"${tr_info}")" == 'success' ]]; then
     printf '[DEBUG] %s\n' "Getting torrents info success." 1>&2
   else
-    printf '[DEBUG] Getting torrents info failed. Response: "%s"\n"%s"\n' "${tr_info}" "${tr_stats}" 1>&2
+    printf '[DEBUG] Getting torrents info failed. Response: "%s"\n"' "${tr_info}" 1>&2
     exit 1
   fi
 }
@@ -177,7 +177,7 @@ clean_local_disk() {
 clean_inactive_feed() {
   local ids names disk_size free_space total_torrent_size space_threshold space_to_free m n
 
-  for i in {1..2}; do
+  for i in 1 2; do
     read -r disk_size free_space
   done < <(df --block-size=1 --output=size,avail "${seed_dir}") && [[ ${disk_size} =~ ^[0-9]+$ && ${free_space} =~ ^[0-9]+$ ]] || {
     printf '[DEBUG] %s\n' 'Read disk stats failed.' 1>&2
