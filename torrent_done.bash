@@ -5,7 +5,7 @@ export LC_ALL=C LANG=C
 seed_dir='/volume2/@transmission'
 watch_dir='/volume1/video/Torrents'
 script_dir="$(cd "${BASH_SOURCE[0]%/*}" && pwd -P)"
-log_file="${script_dir}/log.log"
+log_file="${script_dir}/transmission.log"
 av_regex="${script_dir}/component/av_regex.txt"
 tr_api='http://localhost:9091/transmission/rpc'
 
