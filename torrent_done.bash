@@ -29,8 +29,6 @@ append_log() {
 
 write_log() {
   if ((${#logs[@]} > 0)); then
-    printf '[DEBUG] Logs: (%s entries)\n' "${#logs[@]}" 1>&2
-    printf '%s\n' "${logs[@]}" 1>&2
     if ((debug == 0)); then
       local log_bak
       [[ -s ${log_file} ]] && log_bak="$(tail -n +3 "${log_file}")"
@@ -43,6 +41,9 @@ write_log() {
         done
         [[ -n ${log_bak} ]] && printf '%s\n' "${log_bak}"
       } >"${log_file}"
+    else
+      printf '[DEBUG] Logs: (%s entries)\n' "${#logs[@]}" 1>&2
+      printf '%s\n' "${logs[@]}" 1>&2
     fi
   fi
 }
@@ -226,3 +227,4 @@ clean_local_disk
 clean_inactive_feed
 
 resume_tr_torrent
+exit 0
