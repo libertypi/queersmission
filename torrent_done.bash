@@ -7,6 +7,7 @@ watch_dir='/volume1/video/Torrents'
 script_dir="$(cd "${BASH_SOURCE[0]%/*}" && pwd -P)"
 log_file="${script_dir}/transmission.log"
 av_regex="${script_dir}/component/av_regex.txt"
+categorize="${script_dir}/component/categorize.awk"
 tr_api='http://localhost:9091/transmission/rpc'
 
 case "$1" in
@@ -77,41 +78,24 @@ handle_torrent_done() {
     return
   }
 
-  local file_list is_directory destination dest_display lower_torrent_name="${TR_TORRENT_NAME,,}"
-
   if [[ ${TR_TORRENT_DIR} == "${seed_dir}" ]]; then
 
-    if [[ -d "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" ]]; then
-      file_list="$(cd "${TR_TORRENT_DIR}" && find "${TR_TORRENT_NAME}" -not -path '*/[@#.]*' -size +50M)"
-      [[ -z ${file_list} ]] && file_list="$(cd "${TR_TORRENT_DIR}" && find "${TR_TORRENT_NAME}" -not -path '*/[@#.]*')"
-      file_list="${file_list,,}"
-      is_directory=1
-    else
-      file_list="${lower_torrent_name}"
-      is_directory=0
-    fi
+    local i dest dest_display
 
-    if grep -Eqf "${av_regex}" <<<"${file_list}"; then
-      destination='/volume1/driver/Temp'
+    for i in dest dest_display; do
+      IFS= read -r -d '' "$i"
+    done < <(
+      awk -v av_regex="${av_regex}" torrentDir="${TR_TORRENT_DIR}" torrentName="${TR_TORRENT_NAME}" -f "${categorize}"
+    ) && [[ -n "${dest}" ]] || {
+      dest="/volume1/video/Films"
+      dest_display="${dest}"
+      [[ -d "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" ]] || dest="${dest}/${TR_TORRENT_NAME%.*}"
+      append_log "AwkError" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
+    }
 
-    elif [[ ${file_list} =~ [^a-z0-9]([se][0-9]{1,2}|s[0-9]{1,2}e[0-9]{1,2}|ep[[:space:]_-]?[0-9]{1,3})[^a-z0-9] ]]; then
-      destination='/volume1/video/TV Series'
+    [[ -d ${dest} ]] || mkdir -p "${dest}"
 
-    elif [[ ${lower_torrent_name} =~ (^|[^a-z0-9])(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)([^a-z0-9]|$) ]]; then
-      destination='/volume1/homes/admin/Download/Adobe'
-
-    elif [[ ${lower_torrent_name} =~ (^|[^a-z0-9])(windows|mac(os)?|x(86|64)|(32|64)bit|v[0-9]+\.[0-9]+)([^a-z0-9]|$)|\.(zip|rar|exe|7z|dmg|pkg)$ ]]; then
-      destination='/volume1/homes/admin/Download'
-
-    else
-      destination='/volume1/video/Films'
-    fi
-
-    dest_display="${destination}"
-    ((is_directory)) || destination="${destination}/${TR_TORRENT_NAME%.*}"
-    [[ -d ${destination} ]] || mkdir -p "${destination}"
-
-    if cp -rf "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" "${destination}/"; then
+    if cp -rf "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" "${dest}/"; then
       append_log "Finish" "${dest_display}" "${TR_TORRENT_NAME}"
     else
       append_log "Error" "${dest_display}" "${TR_TORRENT_NAME}"
