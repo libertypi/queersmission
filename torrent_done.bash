@@ -24,7 +24,7 @@ prepare() {
 }
 
 append_log() {
-  printf -v "logs[${#logs[@]}]" '%-20(%D %T)T%-10s%-35s%s' '-1' "$1" "${2:0:33}" "${3}"
+  printf -v "logs[${#logs[@]}]" '%-20(%D %T)T%-10s%-35s%s' '-1' "$1" "${2:0:33}" "$3"
 }
 
 write_log() {
@@ -187,9 +187,9 @@ clean_inactive_feed() {
 
   total_torrent_size="$(jq -r '[.arguments.torrents[].sizeWhenDone]|add' <<<"${tr_info}")"
   if ((space_threshold = 50 * (1024 ** 3), m = space_threshold - disk_size + total_torrent_size, n = space_threshold - free_space, (space_to_free = m > n ? m : n) > 0)); then
-    printf '[DEBUG] Cleanup inactive feeds. Disk free space: %s. Space to free: %s.\n' "${free_space}" "${space_to_free}" 1>&2
+    printf '[DEBUG] Cleanup inactive feeds. Disk free space: %d GiB, Space to free: %d GiB.\n' "$((free_space / 1024 ** 3))" "$((space_to_free / 1024 ** 3))" 1>&2
   else
-    printf '[DEBUG] Space enough, skip action. Disk free space: %s\n' "${free_space}" 1>&2
+    printf '[DEBUG] Space enough, skip action. Disk free space: %d GiB.\n' "$((free_space / 1024 ** 3))" 1>&2
     return
   fi
 
@@ -213,7 +213,9 @@ clean_inactive_feed() {
 }
 
 resume_tr_torrent() {
-  (("$(jq -r '[.arguments.torrents[]|select(.status==0)]|length' <<<"${tr_info}")" > 0)) && query_tr_api '{"method":"torrent-start"}' >/dev/null
+  if [[ -n "$(jq -r '.arguments.torrents[]|select(.status < 4)' <<<"${tr_info}")" ]]; then
+    query_tr_api '{"method":"torrent-start"}' >/dev/null
+  fi
 }
 
 # Main
