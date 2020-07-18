@@ -6,17 +6,17 @@ script_dir="$(cd "${BASH_SOURCE[0]%/*}" && pwd -P)"
 av_regex="${script_dir}/av_regex.txt"
 categorize="${script_dir}/categorize.awk"
 
-# TR_TORRENT_DIR='/volume2/@transmission'
-# cd "${TR_TORRENT_DIR}"
-# testf=(*)
+TR_TORRENT_DIR='/volume2/@transmission'
+cd "${TR_TORRENT_DIR}"
+testf=(*)
 
 # TR_TORRENT_DIR='/volume1/video/Films'
 # cd "${TR_TORRENT_DIR}"
 # testf=(*)
 
-TR_TORRENT_DIR='/volume1/video/TV Series'
-cd "${TR_TORRENT_DIR}"
-testf=(*)
+# TR_TORRENT_DIR='/volume1/video/TV Series'
+# cd "${TR_TORRENT_DIR}"
+# testf=(*)
 
 for TR_TORRENT_NAME in "${testf[@]}"; do
   echo "${TR_TORRENT_NAME}"

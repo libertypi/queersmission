@@ -27,7 +27,7 @@ BEGIN {
 }
 
 
-function classify_files(files, videos, f, n, i, j, c, words, nums, pats)
+function classify_files(files, videos, f, n, i, j, words, nums, pats, connected)
 {
 	for (f in files) {
 		matchRegex(f)
@@ -43,27 +43,21 @@ function classify_files(files, videos, f, n, i, j, c, words, nums, pats)
 				if (match(n, /\/[^/]+$/)) {
 					n = substr(n, RSTART + 1)
 				}
-				pats[n][int(nums[j])]
+				pats[n][int(nums[j])] = f
 			}
 		}
 		for (i in pats) {
-			n = asorti(pats[i], pats[i], "@ind_num_asc")
-			if (n >= 3) {
-				c = f = 1
-				for (j = 1; j < n; j++) {
-					if (pats[i][j] + 1 == pats[i][j + 1]) {
-						c += 1
-						if (c > f) {
-							f = c
-						}
-					} else {
-						c = 1
-					}
-				}
-				if (f / n >= 0.75) {
-					output_exit("tv")
+			n = asorti(pats[i], nums, "@ind_num_asc")
+			for (j = 2; j < n; j++) {
+				if (nums[j - 1] == nums[j] - 1 && nums[j + 1] == nums[j] + 1) {
+					connected[pats[i][nums[j]]]
+					connected[pats[i][nums[j-1]]]
+					connected[pats[i][nums[j+1]]]
 				}
 			}
+		}
+		if (length(connected) / length(videos) > 0.8) {
+			output_exit("tv")
 		}
 	}
 }
