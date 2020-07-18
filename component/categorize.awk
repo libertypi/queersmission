@@ -1,4 +1,5 @@
 #!/usr/bin/awk -f
+# Usage:
 # awk -v av_regex="${av_regex}" -v torrentDir="${TR_TORRENT_DIR}" -v torrentName="${TR_TORRENT_NAME}" -f "${categorize}"
 
 @load "readdir"
@@ -9,15 +10,12 @@ BEGIN {
 		print("[DEBUG] Awk: Invalid parameter.") > "/dev/stderr"
 		exit 1
 	}
-
 	FS = "/"
 	read_av_regex(av_regex, avRegex)
-
 	rootPath = (torrentDir "/" torrentName)
 	stat(rootPath, fstat)
 	is_dir = (fstat["type"] == "directory" ? 1 : 0)
 	matchRegex(tolower(torrentName))
-
 	if (is_dir) {
 		prefix = (length(rootPath) + 2)
 		walkdir(rootPath, files)
@@ -97,11 +95,12 @@ function matchRegex(string, i)
 			output_exit("av")
 		}
 	}
-	if (string ~ /[^a-z0-9]([se][0-9]{1,2}|s[0-9]{1,2}e[0-9]{1,2}|ep[[:space:]_-]?[0-9]{1,3})[^a-z0-9]/) {
+	switch (string) {
+	case /[^a-z0-9]([se][0-9]{1,2}|s[0-9]{1,2}e[0-9]{1,2}|ep[[:space:]_-]?[0-9]{1,3})[^a-z0-9]/:
 		output_exit("tv")
-	} else if (string ~ /(^|[^a-z0-9])(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)([^a-z0-9]|$)/) {
+	case /(^|[^a-z0-9])(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)([^a-z0-9]|$)/:
 		output_exit("adobe")
-	} else if (string ~ /(^|[^a-z0-9])(windows|mac(os)?|x(86|64)|(32|64)bit|v[0-9]+\.[0-9]+)([^a-z0-9]|$)|\.(7z|dmg|exe|gz|pkg|rar|tar|zip)$/) {
+	case /(^|[^a-z0-9])(windows|mac(os)?|x(86|64)|(32|64)bit|v[0-9]+\.[0-9]+)([^a-z0-9]|$)|\.(7z|dmg|exe|gz|pkg|rar|tar|zip)$/:
 		output_exit("software")
 	}
 }
@@ -162,11 +161,11 @@ function walkdir(dir, files, fpath, fstat)
 	while ((getline < dir) > 0) {
 		if ($2 !~ /^[.#@]/) {
 			fpath = (dir "/" $2)
-			if ($3 == "d") {
-				walkdir(fpath, files)
-			} else {
+			if ($3 == "f") {
 				stat(fpath, fstat)
 				files[tolower(substr(fpath, prefix))] = fstat["size"]
+			} else if ($3 == "d") {
+				walkdir(fpath, files)
 			}
 		}
 	}
