@@ -1,4 +1,5 @@
 #!/usr/bin/awk -f
+# awk -v av_regex="${av_regex}" -v torrentDir="${TR_TORRENT_DIR}" -v torrentName="${TR_TORRENT_NAME}" -f "${categorize}"
 
 @load "readdir"
 @load "filefuncs"
