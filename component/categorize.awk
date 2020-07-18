@@ -29,10 +29,10 @@ BEGIN {
 function classify_files(files, videos, f, n, i, j, words, nums, groups, connected)
 {
 	# To identify TV Series:
-	# Files will be stored as such:
+	# Files will be stored as:
 	#   videos[1] = parent/string_03.mp4
 	#   videos[2] = parent/string_04.mp4
-	# After split, grouped as such:
+	# After split, grouped as:
 	#   groups["string"][3] = 1
 	#   groups["string"][4] = 2
 	#   where 3, 4 are the matched numbers as integers,
@@ -42,9 +42,7 @@ function classify_files(files, videos, f, n, i, j, words, nums, groups, connecte
 	#   connected[1]
 	#   connected[2]
 	#   where 1, 2 are the indices of array videos.
-	# Then the length of "connected" will be the number of connected 
-	# vertices. Because we only want to count isolated vertices,
-	# there is no need to record actuarial connections.
+	# The length of "connected" will be the number of connected vertices.
 	i = 0
 	for (f in files) {
 		match_file(f)

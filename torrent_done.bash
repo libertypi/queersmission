@@ -115,7 +115,7 @@ handle_torrent_done() {
 
 get_tr_info() {
   if ! hash jq 1>/dev/null 2>&1; then
-    printf '[DEBUG] %s\n' "Jq not found, will not precede." 1>&2
+    printf '[DEBUG] %s\n' "Jq not found, will not proceed." 1>&2
     exit 1
   elif tr_info="$(query_tr_api '{"arguments":{"fields":["activityDate","status","sizeWhenDone","percentDone","id","name"]},"method":"torrent-get"}')" &&
     [[ "$(jq -r '.result' <<<"${tr_info}")" == 'success' ]]; then
