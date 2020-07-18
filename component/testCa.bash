@@ -18,6 +18,8 @@ case $1 in
     ;;
 esac
 
+# mkdir -p "${script_dir}/profile"
+
 cd "${TR_TORRENT_DIR}"
 for TR_TORRENT_NAME in [^@\#.]*; do
 
@@ -27,6 +29,7 @@ for TR_TORRENT_NAME in [^@\#.]*; do
     IFS= read -r -d '' "$i"
   done < <(
     awk -v av_regex="${av_regex}" -v torrentDir="${TR_TORRENT_DIR}" -v torrentName="${TR_TORRENT_NAME}" -f "${categorize}"
+    # awk -v av_regex="${av_regex}" -v torrentDir="${TR_TORRENT_DIR}" -v torrentName="${TR_TORRENT_NAME}" --profile="${script_dir}/profile/${TR_TORRENT_NAME}.awk" -f "${categorize}"
   )
 
   if [[ ${TR_TORRENT_DIR} != '/volume2/@transmission' && ${dest_display} != "${TR_TORRENT_DIR}" ]]; then
