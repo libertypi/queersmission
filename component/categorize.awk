@@ -29,35 +29,62 @@ BEGIN {
 
 function classify_files(files, videos, f, n, i, j, words, nums, pats, connected)
 {
+	# Files will be stored as such:
+	#   videos[1] = parent/string_03.mp4
+	#   videos[2] = parent/string_04.mp4
+	# After split, grouped as such:
+	#   pats["string"][3] = 1
+	#   pats["string"][4] = 2
+	#   where 3, 4 are the matched numbers as integers,
+	#   and 1, 2 are the indices of array videos.
+	# After comparison:
+	#   connected[1]
+	#   connected[2]
+	#   where 1, 2 are the indices of array videos.
+	# Then we can know how many videos are connected.
+	i = 1
 	for (f in files) {
 		matchRegex(f)
-		if (f ~ /\.(avi|m2v|m4p|m4v|mkv|mov|mp2|mp4|mpeg|mpg|mpv|rm|rmvb|wmv|iso)$/) {
-			videos[f]
+		if (f ~ /\.(avi|iso|m2v|m4p|m4v|mkv|mov|mp2|mp4|mpeg|mpg|mpv|rm|rmvb|wmv)$/) {
+			videos[i++] = f
 		}
 	}
 	if (length(videos) >= 3) {
-		for (f in videos) {
-			i = split(f, words, /[0-9]+/, nums)
-			for (j = 1; j < i; j++) {
-				n = words[j]
-				if (match(n, /\/[^/]+$/)) {
-					n = substr(n, RSTART + 1)
+		for (i in videos) {
+			n = split(videos[i], words, /[0-9]+/, nums)
+			for (j = 1; j < n; j++) {
+				f = words[j]
+				if (match(f, /\/[^/]+$/)) {
+					f = substr(f, RSTART + 1)
 				}
-				pats[n][int(nums[j])] = f
+				pats[f][int(nums[j])] = i
 			}
 		}
-		for (i in pats) {
-			n = asorti(pats[i], nums, "@ind_num_asc")
-			for (j = 2; j < n; j++) {
-				if (nums[j - 1] == nums[j] - 1 && nums[j + 1] == nums[j] + 1) {
-					connected[pats[i][nums[j]]]
-					connected[pats[i][nums[j-1]]]
-					connected[pats[i][nums[j+1]]]
+		for (f in pats) {
+			n = asorti(pats[f], nums, "@ind_num_asc")
+			i = 1
+			for (j = 2; j <= n; j++) {
+				if (nums[j - 1] == nums[j] - 1) {
+					i++
+					if (i >= 3) {
+						if (i == 3) {
+							connected[pats[f][nums[j - 2]]]
+							connected[pats[f][nums[j - 1]]]
+						}
+						connected[pats[f][nums[j]]]
+					}
+				} else {
+					i = 1
 				}
 			}
 		}
-		if (length(connected) / length(videos) > 0.8) {
+		i = length(connected)
+		j = length(videos)
+		if (i / j >= 0.75) {
+			printf("[DEBUG] Consecutive videos: %d / %d, categorized as TV Series.\n", i, j) > "/dev/stderr"
 			output_exit("tv")
+		} else {
+			printf("[DEBUG] Consecutive videos: %d / %d, categorized as Films.\n", i, j) > "/dev/stderr"
 		}
 	}
 }
@@ -73,7 +100,7 @@ function matchRegex(string, i)
 		output_exit("tv")
 	} else if (string ~ /(^|[^a-z0-9])(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)([^a-z0-9]|$)/) {
 		output_exit("adobe")
-	} else if (string ~ /(^|[^a-z0-9])(windows|mac(os)?|x(86|64)|(32|64)bit|v[0-9]+\.[0-9]+)([^a-z0-9]|$)|\.(zip|rar|exe|7z|dmg|pkg)$/) {
+	} else if (string ~ /(^|[^a-z0-9])(windows|mac(os)?|x(86|64)|(32|64)bit|v[0-9]+\.[0-9]+)([^a-z0-9]|$)|\.(7z|dmg|exe|gz|pkg|rar|tar|zip)$/) {
 		output_exit("software")
 	}
 }
