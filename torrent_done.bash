@@ -85,7 +85,7 @@ handle_torrent_done() {
     for i in dest dest_display; do
       IFS= read -r -d '' "$i"
     done < <(
-      awk -v av_regex="${av_regex}" torrentDir="${TR_TORRENT_DIR}" torrentName="${TR_TORRENT_NAME}" -f "${categorize}"
+      awk -v av_regex="${av_regex}" -v torrentDir="${TR_TORRENT_DIR}" -v torrentName="${TR_TORRENT_NAME}" -f "${categorize}"
     ) && [[ -n "${dest}" ]] || {
       dest="/volume1/video/Films"
       dest_display="${dest}"
