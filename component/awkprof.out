@@ -1,13 +1,12 @@
-#!/usr/bin/awk -f
-# Usage:
-# awk -v av_regex="${av_regex}" -v torrentDir="${TR_TORRENT_DIR}" -v torrentName="${TR_TORRENT_NAME}" -f "${categorize}"
-
 @load "readdir"
 @load "filefuncs"
 
+#!/usr/bin/awk -f
+# Usage:
+# awk -v av_regex="${av_regex}" -v torrentDir="${TR_TORRENT_DIR}" -v torrentName="${TR_TORRENT_NAME}" -f "${categorize}"
 BEGIN {
 	if (av_regex == "" || torrentDir == "" || torrentName == "") {
-		print("[DEBUG] Awk: Invalid parameter.") > "/dev/stderr"
+		print(("[DEBUG] Awk: Invalid parameter.")) > "/dev/stderr"
 		exit 1
 	}
 	FS = "/"
@@ -15,7 +14,7 @@ BEGIN {
 	rootPath = (torrentDir "/" torrentName)
 	stat(rootPath, fstat)
 	is_dir = (fstat["type"] == "directory" ? 1 : 0)
-	match_name(tolower(torrentName))
+	match_name(torrentName)
 	if (is_dir) {
 		prefix = (length(rootPath) + 2)
 		walkdir(rootPath, files)
@@ -111,7 +110,7 @@ function match_file(string, i)
 
 function match_name(torrent_name)
 {
-	# String: lower case.
+	torrent_name = tolower(torrent_name)
 	match_file(torrent_name)
 	switch (torrent_name) {
 	case /(^|[^a-z0-9])(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)([^a-z0-9]|$)/:

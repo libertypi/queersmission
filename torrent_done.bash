@@ -80,7 +80,7 @@ handle_torrent_done() {
 
   if [[ ${TR_TORRENT_DIR} == "${seed_dir}" ]]; then
 
-    local i dest dest_display
+    local dest dest_display
 
     for i in dest dest_display; do
       IFS= read -r -d '' "$i"
