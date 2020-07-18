@@ -26,17 +26,18 @@ BEGIN {
 }
 
 
-function classify_files(files, videos, f, n, i, j, words, nums, pats, connected)
+function classify_files(files, videos, f, n, i, j, words, nums, groups, connected)
 {
 	# Files will be stored as such:
 	#   videos[1] = parent/string_03.mp4
 	#   videos[2] = parent/string_04.mp4
 	# After split, grouped as such:
-	#   pats["string"][3] = 1
-	#   pats["string"][4] = 2
+	#   groups["string"][3] = 1
+	#   groups["string"][4] = 2
 	#   where 3, 4 are the matched numbers as integers,
 	#   and 1, 2 are the indices of array videos.
-	# After comparison:
+	# After comparison, videos with connection with
+	# at least 2 others will be saved as:
 	#   connected[1]
 	#   connected[2]
 	#   where 1, 2 are the indices of array videos.
@@ -56,21 +57,22 @@ function classify_files(files, videos, f, n, i, j, words, nums, pats, connected)
 				if (match(f, /\/[^/]+$/)) {
 					f = substr(f, RSTART + 1)
 				}
-				pats[f][int(nums[j])] = i
+				groups[f][int(nums[j])] = i
 			}
 		}
-		for (f in pats) {
-			n = asorti(pats[f], nums, "@ind_num_asc")
+		for (f in groups) {
+			if (length(groups[f]) < 3) continue
+			n = asorti(groups[f], nums, "@ind_num_asc")
 			i = 1
 			for (j = 2; j <= n; j++) {
 				if (nums[j - 1] == nums[j] - 1) {
 					i++
 					if (i >= 3) {
 						if (i == 3) {
-							connected[pats[f][nums[j - 2]]]
-							connected[pats[f][nums[j - 1]]]
+							connected[groups[f][nums[j - 2]]]
+							connected[groups[f][nums[j - 1]]]
 						}
-						connected[pats[f][nums[j]]]
+						connected[groups[f][nums[j]]]
 					}
 				} else {
 					i = 1
