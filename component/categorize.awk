@@ -96,11 +96,11 @@ function classify_files(files, videos, f, n, i, j, words, nums, groups, connecte
 	}
 }
 
-function match_file(string, i)
+function match_file(string, a)
 {
 	# String: lower case.
-	for (i in avRegex) {
-		if (string ~ avRegex[i]) {
+	for (a in avRegex) {
+		if (string ~ avRegex[a]) {
 			output_exit("av")
 		}
 	}
