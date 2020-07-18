@@ -28,6 +28,7 @@ BEGIN {
 
 function classify_files(files, videos, f, n, i, j, words, nums, groups, connected)
 {
+	# To identify TV Series:
 	# Files will be stored as such:
 	#   videos[1] = parent/string_03.mp4
 	#   videos[2] = parent/string_04.mp4
@@ -36,14 +37,14 @@ function classify_files(files, videos, f, n, i, j, words, nums, groups, connecte
 	#   groups["string"][4] = 2
 	#   where 3, 4 are the matched numbers as integers,
 	#   and 1, 2 are the indices of array videos.
-	# After comparison, videos with connection with
-	# at least 2 others will be saved as:
+	# After comparison, videos connected with
+	# at least 2 of others will be saved as:
 	#   connected[1]
 	#   connected[2]
 	#   where 1, 2 are the indices of array videos.
 	# Then the length of "connected" will be the number of connected 
-	# vertices. Because we only want to know if a vertex is connected
-	# or isolated, there is no need to record actuarial connections.
+	# vertices. Because we only want to count isolated vertices,
+	# there is no need to record actuarial connections.
 	i = 1
 	for (f in files) {
 		matchRegex(f)
@@ -51,44 +52,47 @@ function classify_files(files, videos, f, n, i, j, words, nums, groups, connecte
 			videos[i++] = f
 		}
 	}
-	if (length(videos) >= 3) {
-		for (i in videos) {
-			n = split(videos[i], words, /[0-9]+/, nums)
-			for (j = 1; j < n; j++) {
-				f = words[j]
-				if (match(f, /\/[^/]+$/)) {
-					f = substr(f, RSTART + 1)
-				}
-				groups[f][int(nums[j])] = i
+	if (i < 3) {
+		return
+	}
+	for (i in videos) {
+		n = split(videos[i], words, /[0-9]+/, nums)
+		for (j = 1; j < n; j++) {
+			f = words[j]
+			if (match(f, /\/[^/]+$/)) {
+				f = substr(f, RSTART + 1)
 			}
+			groups[f][int(nums[j])] = i
 		}
-		for (f in groups) {
-			if (length(groups[f]) < 3) continue
-			n = asorti(groups[f], nums, "@ind_num_asc")
-			i = 1
-			for (j = 2; j <= n; j++) {
-				if (nums[j - 1] == nums[j] - 1) {
-					i++
-					if (i >= 3) {
-						if (i == 3) {
-							connected[groups[f][nums[j - 2]]]
-							connected[groups[f][nums[j - 1]]]
-						}
-						connected[groups[f][nums[j]]]
+	}
+	for (f in groups) {
+		if (length(groups[f]) < 3) {
+			continue
+		}
+		n = asorti(groups[f], nums, "@ind_num_asc")
+		i = 1
+		for (j = 2; j <= n; j++) {
+			if (nums[j - 1] == nums[j] - 1) {
+				i++
+				if (i >= 3) {
+					if (i == 3) {
+						connected[groups[f][nums[j - 2]]]
+						connected[groups[f][nums[j - 1]]]
 					}
-				} else {
-					i = 1
+					connected[groups[f][nums[j]]]
 				}
+			} else {
+				i = 1
 			}
 		}
-		i = length(connected)
-		j = length(videos)
-		if (i / j >= 0.75) {
-			printf("[DEBUG] Consecutive videos: %d / %d, categorized as TV Series.\n", i, j) > "/dev/stderr"
-			output_exit("tv")
-		} else {
-			printf("[DEBUG] Consecutive videos: %d / %d, categorized as Films.\n", i, j) > "/dev/stderr"
-		}
+	}
+	i = length(connected)
+	j = length(videos)
+	if (i / j >= 0.75) {
+		printf("[DEBUG] Consecutive videos: %d / %d, categorized as TV Series.\n", i, j) > "/dev/stderr"
+		output_exit("tv")
+	} else {
+		printf("[DEBUG] Consecutive videos: %d / %d, categorized as Films.\n", i, j) > "/dev/stderr"
 	}
 }
 
