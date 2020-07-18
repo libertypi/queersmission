@@ -41,7 +41,9 @@ function classify_files(files, videos, f, n, i, j, words, nums, groups, connecte
 	#   connected[1]
 	#   connected[2]
 	#   where 1, 2 are the indices of array videos.
-	# Then we can know how many videos are connected.
+	# Then the length of "connected" will be the number of connected 
+	# vertices. Because we only want to know if a vertex is connected
+	# or isolated, there is no need to record actuarial connections.
 	i = 1
 	for (f in files) {
 		matchRegex(f)
