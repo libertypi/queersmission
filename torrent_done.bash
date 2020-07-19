@@ -4,10 +4,9 @@ export LC_ALL=C LANG=C
 
 seed_dir='/volume2/@transmission'
 watch_dir='/volume1/video/Torrents'
-script_dir="$(cd "${BASH_SOURCE[0]%/*}" && pwd -P)"
-log_file="${script_dir}/transmission.log"
-av_regex="${script_dir}/component/av_regex.txt"
-categorize="${script_dir}/component/categorize.awk"
+log_file="transmission.log"
+categorize="component/categorize.awk"
+av_regex="component/av_regex.txt"
 tr_api='http://localhost:9091/transmission/rpc'
 
 case "$1" in
@@ -15,10 +14,11 @@ case "$1" in
   *) debug=0 ;;
 esac
 readonly debug
+cd "${BASH_SOURCE[0]%/*}"
 
 prepare() {
   printf '[DEBUG] %s' "Acquiring lock..." 1>&2
-  exec {i}<"${BASH_SOURCE[0]}"
+  exec {i}<"${BASH_SOURCE[0]##*/}"
   flock -x "${i}"
   printf '%s\n' 'Done.' 1>&2
   trap 'write_log' EXIT
@@ -127,10 +127,10 @@ get_tr_info() {
 }
 
 clean_local_disk() {
-  local obsolete pwd_bak="$PWD"
+  local obsolete
   shopt -s nullglob dotglob globstar
 
-  if cd "${seed_dir}"; then
+  if pushd "${seed_dir}" >/dev/null; then
     declare -A dict
     while IFS= read -r -d '' i; do
       [[ -n ${i} ]] && dict["${i}"]=1
@@ -142,12 +142,18 @@ clean_local_disk() {
         obsolete+=("${seed_dir}/${i}")
       }
     done
+    popd >/dev/null
+  else
+    printf '[DEBUG] Unable to enter: %s\n' "${seed_dir}" 1>&2
   fi
 
-  if cd "${watch_dir}"; then
+  if pushd "${watch_dir}" >/dev/null; then
     for i in **; do
       [[ -s ${i} ]] || obsolete+=("${watch_dir}/${i}")
     done
+    popd >/dev/null
+  else
+    printf '[DEBUG] Unable to enter: %s\n' "${watch_dir}" 1>&2
   fi
 
   if ((${#obsolete[@]} > 0)); then
@@ -156,7 +162,6 @@ clean_local_disk() {
   fi
 
   shopt -u nullglob dotglob globstar
-  cd "${pwd_bak}"
 }
 
 clean_inactive_feed() {

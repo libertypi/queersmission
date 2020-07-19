@@ -147,9 +147,13 @@ function output_exit(type, dest, destDisply)
 
 function read_av_regex(av_regex, avRegex, n)
 {
-	n = 1
-	while ((getline < av_regex) > 0) {
-		avRegex[n++] = $0
+	if ((getline < av_regex) > 0) {
+		n = 1
+		do {
+			avRegex[n++] = $0
+		} while ((getline < av_regex) > 0)
+	} else {
+		printf("[DEBUG] Cannot read regex file: %s", av_regex) > "/dev/stderr"
 	}
 	close(av_regex)
 }
