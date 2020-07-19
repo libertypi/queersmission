@@ -47,17 +47,17 @@ function output_exit(type, dest, destDisply)
 	case "av":
 		dest = "/volume1/driver/Temp"
 		break
-	case "tv":
-		dest = "/volume1/video/TV Series"
-		break
-	case "adobe":
-		dest = "/volume1/homes/admin/Download/Adobe"
-		break
 	case "film":
 		dest = "/volume1/video/Films"
 		break
+	case "tv":
+		dest = "/volume1/video/TV Series"
+		break
 	case "music":
 		dest = "/volume1/music/Download"
+		break
+	case "adobe":
+		dest = "/volume1/homes/admin/Download/Adobe"
 		break
 	default:
 		dest = "/volume1/homes/admin/Download"
@@ -70,7 +70,7 @@ function output_exit(type, dest, destDisply)
 	exit 0
 }
 
-function pattern_match(files, videos, n, i, j)
+function pattern_match(files, videos, f, n, i, j)
 {
 	n = length(files)
 	i = 0
