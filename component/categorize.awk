@@ -7,41 +7,52 @@
 BEGIN {
 	if (av_regex == "" || torrentDir == "" || torrentName == "") {
 		print("[DEBUG] Awk: Invalid parameter.") > "/dev/stderr"
-		output_exit()
+		output()
 	}
+
 	FS = "/"
 	read_av_regex(av_regex, avRegex)
 	rootPath = (torrentDir "/" torrentName)
-	stat(rootPath, fstat)
-	is_dir = (fstat["type"] == "directory" ? 1 : 0)
+	stat(rootPath, rootStat)
+
 	files[1] = tolower(torrentName)
 	pattern_match(files)
-	if (is_dir) {
-		delete files
+
+	if (rootStat["type"] == "directory") {
 		prefix = (length(rootPath) + 2)
 		minSize = (100 * 1024 ^ 2)
 		sizeReached = 0
-		walkdir(rootPath, files)
-		asorti(files, files, "@val_num_desc")
+		walkdir(rootPath, fsize)
+		asorti(fsize, files, "@val_num_desc")
 		pattern_match(files)
+	} else {
+		fsize[files[1]] = rootStat["size"]
 	}
-	ext_match(files[1])
+
+	ext_match(files)
 }
 
 
-function ext_match(string)
+function ext_match(files, i, j, sum)
 {
-	switch (string) {
-	case /\.(3gp|asf|avi|flv|iso|m2ts|m2v|m4p|m4v|mkv|mov|mp2|mp4|mpeg|mpg|mpv|mts|mxf|rm|rmvb|ts|vob|webm|wmv)$/:
-		output_exit("film")
-	case /\.(aac|alac|ape|flac|m4a|mp3|ogg|wav|wma)$/:
-		output_exit("music")
-	default:
-		output_exit()
+	for (i = 1; i <= 3 && i in files; i++) {
+		switch (files[i]) {
+		case /\.(3gp|asf|avi|flv|iso|m2ts|m2v|m4p|m4v|mkv|mov|mp2|mp4|mpeg|mpg|mpv|mts|mxf|rm|rmvb|ts|vob|webm|wmv)$/:
+			j = "film"
+			break
+		case /\.(aac|alac|ape|flac|m4a|mp3|ogg|wav|wma)$/:
+			j = "music"
+			break
+		default:
+			j = "other"
+		}
+		sum[j] += fsize[files[i]]
 	}
+	asorti(sum, sum, "@val_num_desc")
+	output(sum[1])
 }
 
-function output_exit(type, dest, destDisply)
+function output(type, dest, destDisply)
 {
 	switch (type) {
 	case "av":
@@ -63,7 +74,7 @@ function output_exit(type, dest, destDisply)
 		dest = "/volume1/homes/admin/Download"
 	}
 	destDisply = dest
-	if (! is_dir) {
+	if (rootStat["type"] == "file") {
 		dest = (dest "/" (gensub(/\.[^.]*$/, "", "1", torrentName)))
 	}
 	printf "%s\000%s\000", dest, destDisply
@@ -77,12 +88,12 @@ function pattern_match(files, videos, f, n, i, j)
 	for (j = 1; j <= n; j++) {
 		for (f in avRegex) {
 			if (files[j] ~ avRegex[f]) {
-				output_exit("av")
+				output("av")
 			}
 		}
 		switch (files[j]) {
 		case /[^a-z0-9]([se][0-9]{1,2}|s[0-9]{1,2}e[0-9]{1,2}|ep[[:space:]_-]?[0-9]{1,3})[^a-z0-9]/:
-			output_exit("tv")
+			output("tv")
 		case /\.(avi|iso|m2v|m4p|m4v|mkv|mov|mp2|mp4|mpeg|mpg|mpv|rm|rmvb|wmv)$/:
 			videos[++i] = files[j]
 		}
@@ -90,9 +101,9 @@ function pattern_match(files, videos, f, n, i, j)
 	if (n == 1) {
 		switch (files[1]) {
 		case /(^|[^a-z0-9])(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)([^a-z0-9]|$)/:
-			output_exit("adobe")
+			output("adobe")
 		case /(^|[^a-z0-9])(windows|mac(os)?|x(86|64)|(32|64)bit|v[0-9]+\.[0-9]+)([^a-z0-9]|$)/:
-			output_exit()
+			output()
 		}
 	} else if (i >= 3) {
 		series_match(videos)
@@ -164,13 +175,13 @@ function series_match(videos, f, n, i, j, words, nums, groups, connected)
 	j = length(videos)
 	if (i / j >= 0.75) {
 		printf("[DEBUG] Consecutive videos: %d / %d, categorized as TV Series.\n", i, j) > "/dev/stderr"
-		output_exit("tv")
+		output("tv")
 	} else {
 		printf("[DEBUG] Consecutive videos: %d / %d, categorized as Films.\n", i, j) > "/dev/stderr"
 	}
 }
 
-function walkdir(dir, files, fpath, fstat)
+function walkdir(dir, fsize, fpath, fstat)
 {
 	while ((getline < dir) > 0) {
 		if ($2 !~ /^[.#@]/) {
@@ -180,16 +191,16 @@ function walkdir(dir, files, fpath, fstat)
 				stat(fpath, fstat)
 				if (fstat["size"] >= minSize) {
 					if (! sizeReached) {
-						delete files
+						delete fsize
 						sizeReached = 1
 					}
 				} else if (sizeReached) {
 					continue
 				}
-				files[tolower(substr(fpath, prefix))] = fstat["size"]
+				fsize[tolower(substr(fpath, prefix))] = fstat["size"]
 				break
 			case "d":
-				walkdir(fpath, files)
+				walkdir(fpath, fsize)
 			}
 		}
 	}
