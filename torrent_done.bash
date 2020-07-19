@@ -10,11 +10,10 @@ av_regex="component/av_regex.txt"
 tr_api='http://localhost:9091/transmission/rpc'
 
 case "$1" in
-  'debug' | '-d' | '-debug') debug=1 ;;
-  *) debug=0 ;;
+  'debug' | '-d' | '-debug') readonly debug=1 ;;
+  *) readonly debug=0 ;;
 esac
-readonly debug
-cd "${BASH_SOURCE[0]%/*}"
+cd "${BASH_SOURCE[0]%/*}" || exit 1
 
 prepare() {
   printf '[DEBUG] %s' "Acquiring lock..." 1>&2
@@ -86,16 +85,9 @@ handle_torrent_done() {
       IFS= read -r -d '' "$i"
     done < <(
       awk -v av_regex="${av_regex}" -v torrentDir="${TR_TORRENT_DIR}" -v torrentName="${TR_TORRENT_NAME}" -f "${categorize}"
-    ) && [[ -n "${dest}" ]] || {
-      dest="/volume1/video/Films"
-      dest_display="${dest}"
-      [[ -d "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" ]] || dest="${dest}/${TR_TORRENT_NAME%.*}"
-      append_log "AwkError" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
-    }
+    )
 
-    [[ -d ${dest} ]] || mkdir -p "${dest}"
-
-    if cp -rf "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" "${dest}/"; then
+    if [[ -d ${dest} ]] || mkdir -p "${dest}" && cp -rf "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" "${dest}/"; then
       append_log "Finish" "${dest_display}" "${TR_TORRENT_NAME}"
     else
       append_log "Error" "${dest_display}" "${TR_TORRENT_NAME}"

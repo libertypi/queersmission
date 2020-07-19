@@ -1,32 +1,120 @@
-#!/usr/bin/awk -f
-# Usage:
-# awk -v av_regex="${av_regex}" -v torrentDir="${TR_TORRENT_DIR}" -v torrentName="${TR_TORRENT_NAME}" -f "${categorize}"
-
 @load "readdir"
 @load "filefuncs"
+
+# Usage:
+# awk -v av_regex="${av_regex}" -v torrentDir="${TR_TORRENT_DIR}" -v torrentName="${TR_TORRENT_NAME}" -f "${categorize}"
 
 BEGIN {
 	if (av_regex == "" || torrentDir == "" || torrentName == "") {
 		print("[DEBUG] Awk: Invalid parameter.") > "/dev/stderr"
-		exit 1
+		output_exit()
 	}
 	FS = "/"
 	read_av_regex(av_regex, avRegex)
 	rootPath = (torrentDir "/" torrentName)
 	stat(rootPath, fstat)
 	is_dir = (fstat["type"] == "directory" ? 1 : 0)
-	match_name(tolower(torrentName))
+	files[1] = tolower(torrentName)
+	pattern_match(files)
 	if (is_dir) {
+		delete files
 		prefix = (length(rootPath) + 2)
+		minSize = (100 * 1024 ^ 2)
+		sizeReached = 0
 		walkdir(rootPath, files)
-		sanitize_files(files)
-		classify_files(files)
+		asorti(files, files, "@val_num_desc")
+		pattern_match(files)
 	}
-	output_exit()
+	ext_match(files[1])
 }
 
 
-function classify_files(files, videos, f, n, i, j, words, nums, groups, connected)
+function ext_match(string)
+{
+	switch (string) {
+	case /\.(3gp|asf|avi|flv|iso|m2ts|m2v|m4p|m4v|mkv|mov|mp2|mp4|mpeg|mpg|mpv|mts|mxf|rm|rmvb|ts|vob|webm|wmv)$/:
+		output_exit("film")
+	case /\.(aac|alac|ape|flac|m4a|mp3|ogg|wav|wma)$/:
+		output_exit("music")
+	default:
+		output_exit()
+	}
+}
+
+function output_exit(type, dest, destDisply)
+{
+	switch (type) {
+	case "av":
+		dest = "/volume1/driver/Temp"
+		break
+	case "tv":
+		dest = "/volume1/video/TV Series"
+		break
+	case "adobe":
+		dest = "/volume1/homes/admin/Download/Adobe"
+		break
+	case "film":
+		dest = "/volume1/video/Films"
+		break
+	case "music":
+		dest = "/volume1/music/Download"
+		break
+	default:
+		dest = "/volume1/homes/admin/Download"
+	}
+	destDisply = dest
+	if (! is_dir) {
+		dest = (dest "/" (gensub(/\.[^.]*$/, "", "1", torrentName)))
+	}
+	printf "%s\000%s\000", dest, destDisply
+	exit 0
+}
+
+function pattern_match(files, videos, n, i, j)
+{
+	n = length(files)
+	i = 0
+	for (j = 1; j <= n; j++) {
+		for (f in avRegex) {
+			if (files[j] ~ avRegex[f]) {
+				output_exit("av")
+			}
+		}
+		switch (files[j]) {
+		case /[^a-z0-9]([se][0-9]{1,2}|s[0-9]{1,2}e[0-9]{1,2}|ep[[:space:]_-]?[0-9]{1,3})[^a-z0-9]/:
+			output_exit("tv")
+		case /\.(avi|iso|m2v|m4p|m4v|mkv|mov|mp2|mp4|mpeg|mpg|mpv|rm|rmvb|wmv)$/:
+			videos[++i] = files[j]
+		}
+	}
+	if (n == 1) {
+		switch (files[1]) {
+		case /(^|[^a-z0-9])(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)([^a-z0-9]|$)/:
+			output_exit("adobe")
+		case /(^|[^a-z0-9])(windows|mac(os)?|x(86|64)|(32|64)bit|v[0-9]+\.[0-9]+)([^a-z0-9]|$)/:
+			output_exit()
+		}
+	} else if (i >= 3) {
+		series_match(videos)
+	}
+}
+
+function read_av_regex(av_regex, avRegex, n)
+{
+	if ((getline < av_regex) > 0) {
+		n = 1
+		do {
+			if ($0 ~ /\S/) {
+				avRegex[n++] = $0
+			}
+		} while ((getline < av_regex) > 0)
+	} else {
+		printf("[DEBUG] Cannot read regex file: %s", av_regex) > "/dev/stderr"
+	}
+	close(av_regex)
+}
+
+function series_match(videos, f, n, i, j, words, nums, groups, connected)
 {
 	# To identify TV Series:
 	# Files will be stored as:
@@ -43,44 +131,32 @@ function classify_files(files, videos, f, n, i, j, words, nums, groups, connecte
 	#   connected[2]
 	#   where 1, 2 are the indices of array videos.
 	# The length of "connected" will be the number of connected vertices.
-	i = 0
-	for (f in files) {
-		match_file(f)
-		if (f ~ /\.(avi|iso|m2v|m4p|m4v|mkv|mov|mp2|mp4|mpeg|mpg|mpv|rm|rmvb|wmv)$/) {
-			videos[++i] = f
-		}
-	}
-	if (i < 3) {
-		return
-	}
 	for (i in videos) {
 		n = split(videos[i], words, /[0-9]+/, nums)
 		for (j = 1; j < n; j++) {
-			f = words[j]
-			if (match(f, /\/[^/]+$/)) {
-				f = substr(f, RSTART + 1)
+			if (match(words[j], /\/[^/]+$/)) {
+				words[j] = substr(words[j], RSTART + 1)
 			}
-			groups[f][int(nums[j])] = i
+			groups[words[j]][int(nums[j])] = i
 		}
 	}
 	for (f in groups) {
-		if (length(groups[f]) < 3) {
-			continue
-		}
-		n = asorti(groups[f], nums, "@ind_num_asc")
-		i = 1
-		for (j = 2; j <= n; j++) {
-			if (nums[j - 1] == nums[j] - 1) {
-				i++
-				if (i >= 3) {
-					if (i == 3) {
-						connected[groups[f][nums[j - 2]]]
-						connected[groups[f][nums[j - 1]]]
+		if (length(groups[f]) >= 3) {
+			n = asorti(groups[f], nums, "@ind_num_asc")
+			i = 1
+			for (j = 2; j <= n; j++) {
+				if (nums[j - 1] == nums[j] - 1) {
+					i++
+					if (i >= 3) {
+						if (i == 3) {
+							connected[groups[f][nums[j - 2]]]
+							connected[groups[f][nums[j - 1]]]
+						}
+						connected[groups[f][nums[j]]]
 					}
-					connected[groups[f][nums[j]]]
+				} else {
+					i = 1
 				}
-			} else {
-				i = 1
 			}
 		}
 	}
@@ -94,86 +170,7 @@ function classify_files(files, videos, f, n, i, j, words, nums, groups, connecte
 	}
 }
 
-function match_file(string, a)
-{
-	# String: lower case.
-	for (a in avRegex) {
-		if (string ~ avRegex[a]) {
-			output_exit("av")
-		}
-	}
-	if (string ~ /[^a-z0-9]([se][0-9]{1,2}|s[0-9]{1,2}e[0-9]{1,2}|ep[[:space:]_-]?[0-9]{1,3})[^a-z0-9]/) {
-		output_exit("tv")
-	}
-}
-
-function match_name(torrent_name)
-{
-	# String: lower case.
-	match_file(torrent_name)
-	switch (torrent_name) {
-	case /(^|[^a-z0-9])(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)([^a-z0-9]|$)/:
-		output_exit("adobe")
-	case /(^|[^a-z0-9])(windows|mac(os)?|x(86|64)|(32|64)bit|v[0-9]+\.[0-9]+)([^a-z0-9]|$)|\.(7z|dmg|exe|gz|pkg|rar|tar|zip)$/:
-		output_exit("software")
-	}
-}
-
-function output_exit(type, dest, destDisply)
-{
-	switch (type) {
-	case "av":
-		dest = "/volume1/driver/Temp"
-		break
-	case "tv":
-		dest = "/volume1/video/TV Series"
-		break
-	case "adobe":
-		dest = "/volume1/homes/admin/Download/Adobe"
-		break
-	case "software":
-		dest = "/volume1/homes/admin/Download"
-		break
-	default:
-		dest = "/volume1/video/Films"
-	}
-	destDisply = dest
-	if (! is_dir) {
-		dest = (dest "/" (gensub(/\.[^.]*$/, "", "1", torrentName)))
-	}
-	printf "%s\000%s\000", dest, destDisply
-	exit 0
-}
-
-function read_av_regex(av_regex, avRegex, n)
-{
-	if ((getline < av_regex) > 0) {
-		n = 1
-		do {
-			avRegex[n++] = $0
-		} while ((getline < av_regex) > 0)
-	} else {
-		printf("[DEBUG] Cannot read regex file: %s", av_regex) > "/dev/stderr"
-	}
-	close(av_regex)
-}
-
-function sanitize_files(files, f, t)
-{
-	t = (100 * 1024 ^ 2)
-	for (f in files) {
-		if (files[f] >= t) {
-			for (f in files) {
-				if (files[f] < t) {
-					delete files[f]
-				}
-			}
-			return
-		}
-	}
-}
-
-function walkdir(dir, files, fpath, fstat)
+function walkdir(dir, files, fpath, fstat, f)
 {
 	while ((getline < dir) > 0) {
 		if ($2 !~ /^[.#@]/) {
@@ -181,6 +178,18 @@ function walkdir(dir, files, fpath, fstat)
 			switch ($3) {
 			case "f":
 				stat(fpath, fstat)
+				if (fstat["size"] >= minSize) {
+					if (! sizeReached) {
+						for (f in files) {
+							if (files[f] < minSize) {
+								delete files[f]
+							}
+						}
+						sizeReached = 1
+					}
+				} else if (sizeReached) {
+					continue
+				}
 				files[tolower(substr(fpath, prefix))] = fstat["size"]
 				break
 			case "d":
