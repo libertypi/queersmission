@@ -4,9 +4,9 @@ export LC_ALL=C LANG=C
 
 seed_dir='/volume2/@transmission'
 watch_dir='/volume1/video/Torrents'
-log_file="transmission.log"
-categorize="component/categorize.awk"
-av_regex="component/av_regex.txt"
+log_file='transmission.log'
+categorize='component/categorize.awk'
+av_regex='component/av_regex.txt'
 tr_api='http://localhost:9091/transmission/rpc'
 
 case "$1" in

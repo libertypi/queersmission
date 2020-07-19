@@ -21,6 +21,8 @@ pushd "${TR_TORRENT_DIR}" >/dev/null
 files=([^@\#.]*)
 popd >/dev/null
 
+# mkdir "component/profile"
+
 for TR_TORRENT_NAME in "${files[@]}"; do
 
   printf '%s\n' "${TR_TORRENT_NAME}"
@@ -29,6 +31,7 @@ for TR_TORRENT_NAME in "${files[@]}"; do
     IFS= read -r -d '' "$i"
   done < <(
     awk -v av_regex="${av_regex}" -v torrentDir="${TR_TORRENT_DIR}" -v torrentName="${TR_TORRENT_NAME}" -f "${categorize}"
+	# awk -v av_regex="${av_regex}" -v torrentDir="${TR_TORRENT_DIR}" -v torrentName="${TR_TORRENT_NAME}" --profile="component/profile/${TR_TORRENT_NAME}.awk" -f "${categorize}"
   )
 
   if [[ ${TR_TORRENT_DIR} != '/volume2/@transmission' && ${dest_display} != "${TR_TORRENT_DIR}" ]]; then

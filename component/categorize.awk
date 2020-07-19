@@ -170,7 +170,7 @@ function series_match(videos, f, n, i, j, words, nums, groups, connected)
 	}
 }
 
-function walkdir(dir, files, fpath, fstat, f)
+function walkdir(dir, files, fpath, fstat)
 {
 	while ((getline < dir) > 0) {
 		if ($2 !~ /^[.#@]/) {
@@ -180,11 +180,7 @@ function walkdir(dir, files, fpath, fstat, f)
 				stat(fpath, fstat)
 				if (fstat["size"] >= minSize) {
 					if (! sizeReached) {
-						for (f in files) {
-							if (files[f] < minSize) {
-								delete files[f]
-							}
-						}
+						delete files
 						sizeReached = 1
 					}
 				} else if (sizeReached) {
