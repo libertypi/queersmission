@@ -44,7 +44,7 @@ function ext_match(files, i, j, sum)
 			j = "music"
 			break
 		default:
-			j = "other"
+			j = "default"
 		}
 		sum[j] += fsize[files[i]]
 	}
