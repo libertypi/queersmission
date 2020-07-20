@@ -174,7 +174,7 @@ function series_match(videos, f, n, i, j, words, nums, groups, connected)
 	}
 	i = length(connected)
 	j = length(videos)
-	if (i / j >= 0.75) {
+	if (i / j >= 0.5) {
 		printf("[DEBUG] Consecutive videos: %d / %d, categorized as TV Series.\n", i, j) > "/dev/stderr"
 		output("tv")
 	} else {
