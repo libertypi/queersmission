@@ -90,7 +90,7 @@ handle_torrent_done() {
     if [[ -d ${dest} ]] || mkdir -p "${dest}" && cp -rf "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" "${dest}/"; then
       append_log "Finish" "${dest_display}" "${TR_TORRENT_NAME}"
     else
-      append_log "Error" "${dest_display}" "${TR_TORRENT_NAME}"
+      append_log "Error" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
     fi
 
   else

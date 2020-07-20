@@ -11,7 +11,7 @@ BEGIN {
 	}
 
 	FS = "/"
-	read_av_regex(av_regex, avRegex)
+	read_av_regex(av_regex)
 	rootPath = (torrentDir "/" torrentName)
 	stat(rootPath, rootStat)
 
@@ -81,15 +81,13 @@ function output(type, dest, destDisply)
 	exit 0
 }
 
-function pattern_match(files, videos, f, n, i, j)
+function pattern_match(files, videos, n, i, j)
 {
 	n = length(files)
 	i = 0
 	for (j = 1; j <= n; j++) {
-		for (f in avRegex) {
-			if (files[j] ~ avRegex[f]) {
-				output("av")
-			}
+		if (files[j] ~ avRegex) {
+			output("av")
 		}
 		switch (files[j]) {
 		case /[^a-z0-9]([se][0-9]{1,2}|s[0-9]{1,2}e[0-9]{1,2}|ep[[:space:]_-]?[0-9]{1,3})[^a-z0-9]/:
@@ -110,18 +108,17 @@ function pattern_match(files, videos, f, n, i, j)
 	}
 }
 
-function read_av_regex(av_regex, avRegex, i)
+function read_av_regex(av_regex)
 {
-	if ((getline < av_regex) > 0) {
-		do {
-			if ($0 ~ /\S/) {
-				avRegex[++i] = $0
-			}
-		} while ((getline < av_regex) > 0)
-	} else {
-		printf("[DEBUG] Cannot read regex file: %s", av_regex) > "/dev/stderr"
+	while ((getline avRegex < av_regex) > 0) {
+		if (avRegex ~ /\S/) {
+			close(av_regex)
+			return
+		}
 	}
 	close(av_regex)
+	printf("[DEBUG] Cannot read regex from file: %s", av_regex) > "/dev/stderr"
+	avRegex = "^$"
 }
 
 function series_match(videos, f, n, i, j, words, nums, groups, connected)
