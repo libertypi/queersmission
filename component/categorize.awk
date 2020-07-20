@@ -36,11 +36,11 @@ BEGIN {
 function ext_match(files, i, j, sum)
 {
 	for (i = 1; i <= 3 && i in files; i++) {
-		switch (files[i]) {
-		case /\.(3gp|asf|avi|flv|iso|m2ts|m2v|m4p|m4v|mkv|mov|mp2|mp4|mpeg|mpg|mpv|mts|mxf|rm|rmvb|ts|vob|webm|wmv)$/:
+		switch (gensub(/^.*\./, "", 1, files[i])) {
+		case /^(3gp|asf|avi|flv|iso|m2ts|m2v|m4p|m4v|mkv|mov|mp2|mp4|mpeg|mpg|mpv|mts|mxf|rm|rmvb|ts|vob|webm|wmv)$/:
 			j = "film"
 			break
-		case /\.(aac|alac|ape|flac|m4a|mp3|ogg|wav|wma)$/:
+		case /^(aac|alac|ape|flac|m4a|mp3|ogg|wav|wma)$/:
 			j = "music"
 			break
 		default:
@@ -75,7 +75,7 @@ function output(type, dest, destDisply)
 	}
 	destDisply = dest
 	if (rootStat["type"] == "file") {
-		dest = (dest "/" (gensub(/\.[^.]*$/, "", "1", torrentName)))
+		dest = (dest "/" (gensub(/\.[^.]*$/, "", 1, torrentName)))
 	}
 	printf "%s\000%s\000", dest, destDisply
 	exit 0
@@ -110,13 +110,12 @@ function pattern_match(files, videos, f, n, i, j)
 	}
 }
 
-function read_av_regex(av_regex, avRegex, n)
+function read_av_regex(av_regex, avRegex, i)
 {
 	if ((getline < av_regex) > 0) {
-		n = 1
 		do {
 			if ($0 ~ /\S/) {
-				avRegex[n++] = $0
+				avRegex[++i] = $0
 			}
 		} while ((getline < av_regex) > 0)
 	} else {
