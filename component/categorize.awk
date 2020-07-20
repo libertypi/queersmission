@@ -35,7 +35,7 @@ BEGIN {
 
 function ext_match(files, i, j, sum)
 {
-	for (i = 1; i <= 3 && i in files; i++) {
+	for (i = 1; i in files && i <= 3; i++) {
 		switch (gensub(/^.*\./, "", 1, files[i])) {
 		case /^(3gp|asf|avi|flv|iso|m2ts|m2v|m4p|m4v|mkv|mov|mp2|mp4|mpeg|mpg|mpv|mts|mxf|rm|rmvb|ts|vob|webm|wmv)$/:
 			j = "film"
@@ -141,12 +141,17 @@ function series_match(videos, f, n, i, j, words, nums, groups, connected)
 	for (i in videos) {
 		n = split(videos[i], words, /[0-9]+/, nums)
 		for (j = 1; j < n; j++) {
-			if (match(words[j], /\/[^/]+$/)) {
-				words[j] = substr(words[j], RSTART + 1)
-			}
-			groups[words[j]][int(nums[j])] = i
+			gsub(/[[:space:]._-]+|.*\//, "", words[j])
+			groups[words[j] == "" ? j : words[j]][int(nums[j])] = i
 		}
 	}
+	# for (i in groups) {
+	# 	printf("[DEBUG] group: '%s'\n  ", i) > "/dev/stderr"
+	# 	for (j in groups[i]) {
+	# 		printf("'%s' ", j) > "/dev/stderr"
+	# 	}
+	# 	print("") > "/dev/stderr"
+	# }
 	for (f in groups) {
 		if (length(groups[f]) >= 3) {
 			n = asorti(groups[f], nums, "@ind_num_asc")
