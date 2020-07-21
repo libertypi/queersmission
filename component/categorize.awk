@@ -130,10 +130,8 @@ function series_match(videos, f, n, i, j, words, nums, groups, connected)
 	# After split, grouped as:
 	#   groups["string"][3] = 1
 	#   groups["string"][4] = 2
-	#   where 3, 4 are the matched numbers as integers,
-	#   and 1, 2 are the indices of array videos.
-	# After comparison, videos connected with
-	# at least 2 of others will be saved as:
+	#   where 3, 4 are the matched numbers as integers, and 1, 2 are the indices of array videos.
+	# After comparison, videos connected with at least 2 of others will be saved as:
 	#   connected[1]
 	#   connected[2]
 	#   where 1, 2 are the indices of array videos.
@@ -145,13 +143,6 @@ function series_match(videos, f, n, i, j, words, nums, groups, connected)
 			groups[words[j] == "" ? j : words[j]][int(nums[j])] = i
 		}
 	}
-	# for (i in groups) {
-	# 	printf("[DEBUG] group: '%s'\n  ", i) > "/dev/stderr"
-	# 	for (j in groups[i]) {
-	# 		printf("'%s' ", j) > "/dev/stderr"
-	# 	}
-	# 	print("") > "/dev/stderr"
-	# }
 	for (f in groups) {
 		if (length(groups[f]) >= 3) {
 			n = asorti(groups[f], nums, "@ind_num_asc")
