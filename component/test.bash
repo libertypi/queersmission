@@ -13,6 +13,12 @@ case $1 in
   2)
     TR_TORRENT_DIR='/volume1/video/Films'
     ;;
+  r)
+    printf '%s\n' "Testing Regex..."
+    grep -Eif "${av_regex}" <(find '/volume1/video' -type f -not -path '*/[.@#]*' -printf '%P\n')
+    printf '%s\n' "Done."
+    exit
+    ;;
   *)
     TR_TORRENT_DIR='/volume2/@transmission'
     ;;

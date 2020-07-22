@@ -11,23 +11,31 @@ def read_file(file, optimize=False):
 
     with open(file, mode="r+", encoding="utf-8") as f:
         org = [i.strip() for i in f.readlines()]
-        rlist = sorted(org)
 
         if optimize:
+            rlist = org[:]
             optimize_regex(rlist)
+        else:
+            rlist = sorted(i.lower() for i in org if i)
 
         if rlist != org:
             f.seek(0)
             f.writelines(f"{i}\n" for i in rlist)
             f.truncate()
 
-    return "|".join(rlist).lower()
+    if optimize:
+        return "|".join(rlist).lower()
+    else:
+        return "|".join(rlist)
 
 
 def optimize_regex(rlist):
     group = defaultdict(set)
     for regex in rlist:
+        if not regex:
+            continue
         regex = regex.upper()
+
         p = regex.find("(")
         if p == -1:
             p = 2
