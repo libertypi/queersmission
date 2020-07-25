@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from collections import defaultdict
 import re
 
@@ -124,7 +126,7 @@ def compute_regex(source: set) -> str:
             )
             del group[key]
             val.intersection_update(words)
-            if not val or len(val) == 1 and "" in val:
+            if not val:
                 continue
 
             sep = key.index("~")
@@ -193,10 +195,8 @@ def unit_test(extracted: set, computed: str) -> bool:
 
 
 if __name__ == "__main__":
-    origion = "/home/laop/git/transmission-torrent-done/component/test/av_id_prefix.txt"
-    extract = "/home/laop/git/transmission-torrent-done/component/test/av_id_prefix_extract.txt"
-    compute = "/home/laop/git/transmission-torrent-done/component/test/av_id_prefix_computed.txt"
 
+    origion = "av_id_prefix.txt"
     extracted = set()
     with open(origion, "r",) as f:
         for string in f.readlines():

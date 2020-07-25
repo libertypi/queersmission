@@ -19,9 +19,9 @@ def read_file(file, optimize=False):
             rlist.sort()
             extracted = set(i.lower() for i in rlist)
             computed = re_compute.compute_regex(extracted)
-            re_compute.unit_test(extracted, computed)
+            assert re_compute.unit_test(extracted, computed) == True
         else:
-            rlist = sorted(i.lower() for i in org if i)
+            rlist = sorted(set(i.lower() for i in org if i))
 
         if rlist != org:
             f.seek(0)
