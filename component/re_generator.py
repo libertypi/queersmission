@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 
 import os.path
-import re
 import sys
-from collections import defaultdict
 
 import re_compute
 
@@ -18,7 +16,9 @@ def read_file(file, optimize=False):
             rlist = [i.upper() for j in map(re_compute.extract_regex, org) for i in j]
             rlist.sort()
             extracted = set(i.lower() for i in rlist)
+            print(f"Original string length: {sum(len(i) for i in org)}")
             computed = re_compute.compute_regex(extracted)
+            print(f"Computed regex length: {len(computed)}")
             assert re_compute.unit_test(extracted, computed) == True
         else:
             rlist = sorted(set(i.lower() for i in org if i))

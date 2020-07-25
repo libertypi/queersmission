@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 
-from collections import defaultdict
-import re
+try:
+    import regex as re
+except:
+    import re
 
 
 def extract_regex(string: str) -> set:
@@ -88,94 +90,89 @@ def extract_regex(string: str) -> set:
 
 
 def compute_regex(source: set) -> str:
-    candidate = []
+
+    words = source.copy()
+    group = {}
+
+    if "" in words:
+        qmark = True
+        words.discard("")
+    else:
+        qmark = False
+
+    for word in words:
+        skip = re.search(r"[\[\(].*[\[\)?*+]", word)
+        if skip:
+            skip = skip.span()
+
+        for sepLength in range(len(word)):
+            for sep in range(len(word) + 1):
+                if not (skip and skip[0] - sepLength < sep < skip[1] + sepLength - 1):
+                    key = f"{word[:sep]}~{word[sep+sepLength:]}"
+                    if key in group:
+                        group[key].add(word)
+                    else:
+                        group[key] = {word}
+
+    group = {k: v for k, v in group.items() if len(v) > 1}
     result = []
 
-    for _ in range(3):
+    while group and words:
+        key, val = max(
+            group.items(),
+            key=lambda x: ((len(x[0]) - 1) * len(x[1]), -sum(len(i) for i in x[1]),),
+        )
+        del group[key]
+        if not val:
+            continue
 
-        words = source.copy()
-        group = defaultdict(set)
+        sep = key.index("~")
+        prefix, posfix = key[:sep], key[sep + 1 :]
+        prefixLength, posfixLength = sep, len(posfix)
+        members = {w[prefixLength : len(w) - posfixLength] for w in val}
 
-        if "" in words:
-            qmark = True
-            words.discard("")
+        if any(len(w) > 1 for w in members):
+            string = compute_regex(members)
         else:
-            qmark = False
-
-        for word in words:
-            skip = re.search(r"[\[\(].*[\[\)?*+]", word)
-            if skip:
-                skip = skip.span()
-
-            for sepLength in range(0, len(word)):
-                for sep in range(len(word) + 1):
-                    if not (
-                        skip and skip[0] - sepLength < sep < skip[1] + sepLength - 1
-                    ):
-                        group[f"{word[:sep]}~{word[sep+sepLength:]}"].add(word)
-                        group[f"{word[:sep]}~{word[sep:]}"].add(word)
-
-        group = {k: v for k, v in group.items() if len(v) > 1}
-        result.clear()
-
-        while group and words:
-            key, val = max(
-                group.items(),
-                key=lambda x: (len(x[0]) - 1)
-                * len(tuple(i for i in x[1] if i in words)),
-            )
-            del group[key]
-            val.intersection_update(words)
-            if not val:
+            q = True if "" in members else False
+            if q and len(members) == 1:
                 continue
 
-            sep = key.index("~")
-            prefix, posfix = key[:sep], key[sep + 1 :]
-            prefixLength, posfixLength = sep, len(posfix)
-            members = {w[prefixLength : len(w) - posfixLength] for w in val}
+            string = "".join(sorted(members))
+            if len(string) > 1:
+                string = f"[{string}]"
+            if q:
+                string = f"{string}?"
 
-            if any(len(w) > 1 for w in members):
-                string = compute_regex(members)
-            else:
-                q = True if "" in members else False
-                if q and len(members) == 1:
-                    continue
+        string = f"{prefix}{string}{posfix}"
+        result.append(string)
+        words.difference_update(val)
+        for val in group.values():
+            val.intersection_update(words)
 
-                string = "".join(sorted(members))
-                if len(string) > 1:
-                    string = f"[{string}]"
-                if q:
-                    string = f"{string}?"
+    if words:
+        c = "".join(sorted(i for i in words if len(i) == 1))
+        if c:
+            if len(c) > 1:
+                c = f"[{c}]"
+            result.append(c)
+        result.extend(i for i in words if len(i) > 1)
 
-            string = f"{prefix}{string}{posfix}"
-            result.append(string)
-            words.difference_update(val)
+    result.sort()
+    string = "|".join(result)
+    if len(result) > 1 or (
+        qmark and len(string) > 1 and not re.fullmatch(r"\[[^]]+\]", string)
+    ):
+        string = f"({string})"
 
-        if words:
-            c = "".join(sorted(i for i in words if len(i) == 1))
-            if c:
-                if len(c) > 1:
-                    c = f"[{c}]"
-                result.append(c)
-            result.extend(i for i in words if len(i) > 1)
+    if qmark:
+        string = f"{string}?"
 
-        result.sort()
-        string = "|".join(result)
-        if len(result) > 1 or (
-            qmark and len(string) > 1 and not re.fullmatch(r"\[[^]]+\]", string)
-        ):
-            string = f"({string})"
-
-        if qmark:
-            string = f"{string}?"
-
-        candidate.append(string)
-
-    return min(candidate, key=len)
+    return string
 
 
 def unit_test(extracted: set, computed: str) -> bool:
-    print("Matching test:")
+    print("Matching test begin...")
     regex = re.compile(computed, flags=re.IGNORECASE)
     for e in extracted:
         if not regex.fullmatch(e):
@@ -190,33 +187,38 @@ def unit_test(extracted: set, computed: str) -> bool:
             computed = compute_regex(extracted)
             extracted = extracted2
 
-    print("Passed!")
+    print("All passed!")
     return True
 
 
 if __name__ == "__main__":
 
-    origion = "av_id_prefix.txt"
-    extracted = set()
-    with open(origion, "r",) as f:
-        for string in f.readlines():
-            extracted.update(extract_regex(string.strip().lower()))
-    computed = compute_regex(extracted).lower()
+    # origion = "av_id_prefix.txt"
+    # extracted = set()
+    # with open(origion, "r",) as f:
+    #     for string in f.readlines():
+    #         extracted.update(extract_regex(string.strip().lower()))
+    # computed = compute_regex(extracted).lower()
 
-    unit_test(extracted, computed)
+    # unit_test(extracted, computed)
 
     # test = {"harg", "lean", "om", "reat"}
 
-    # test = {
-    #     "M",
-    #     "MX",
-    #     "MXG",
-    #     "MXGS",
-    #     "MXPA",
-    #     "MXSPS",
-    #     "MXX",
-    #     "MYAB",
-    #     "MYBA",
-    #     "MYWIFE",
-    # }
+    test = {
+        "M",
+        "MX",
+        "MXG",
+        "MXGS",
+        "MXPA",
+        "MXSPS",
+        "MXX",
+        "MYAB",
+        "MYBA",
+        "MYWIFE",
+    }
+
+    # test = {"carf", "farf"}
+
+    res = compute_regex(test)
+    print(res)
 
