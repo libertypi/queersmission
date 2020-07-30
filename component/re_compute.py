@@ -102,6 +102,7 @@ def compute_regex(words) -> str:
 
     if not words:
         return ""
+
     elif any(len(w) > 1 for w in words):
         if len(words) == 1:
             return f"({str(*words)})?" if qmark else str(*words)
@@ -132,12 +133,14 @@ def compute_regex(words) -> str:
                 if key.startswith("~"):
                     target = prefixs
                     v = key[1:]
-                    k = sorted(w[: -len(v)] for w in val)
-                elif key.endswith("~"):
+                    l = -len(v)
+                    k = (w[:l] for w in val)
+                else:
                     target = posfixs
                     v = key[:-1]
-                    k = sorted(w[len(v) :] for w in val)
-                target[tuple(k)].add(v)
+                    l = len(v)
+                    k = (w[l:] for w in val)
+                target[tuple(sorted(k))].add(v)
 
             for source in prefixs, posfixs:
                 for key, val in source.items():
@@ -250,7 +253,8 @@ if __name__ == "__main__":
     #     "test2girlfriend",
     # }
 
-    # computed = "(cb3|k3d2)(db)?"
+    # computed = "(avi|iso|m(4p|[24kop]v|p([24]|e?g))|rm(vb)?|wmv)"
+    # computed = "(avi|iso|m4p|m[24ko]v|mp([24v]|e?g)|rm(vb)?|wmv)"
     # extracted = extract_regex(computed)
     # print(extracted)
 
