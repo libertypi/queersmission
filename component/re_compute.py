@@ -249,4 +249,3 @@ if __name__ == "__main__":
         unit_test(extracted, computed)
     else:
         print("Usage:\n{} <wordfile>".format(sys.argv[0]))
-
