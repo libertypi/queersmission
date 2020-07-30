@@ -234,32 +234,19 @@ def unit_test(extracted: set, computed: str) -> bool:
 if __name__ == "__main__":
 
     import os.path
+    import sys
 
-    # file = os.path.join(os.path.dirname(__file__), "test.txt")
-    file = os.path.join(os.path.dirname(__file__), "av_id_prefix.txt")
-    extracted = set()
-    with open(file, "r",) as f:
-        for string in f.readlines():
-            extracted.update(extract_regex(string.strip().lower()))
+    if len(sys.argv) == 2 and os.path.exists(sys.argv[1]):
+        with open(sys.argv[1], "r",) as f:
+            extracted = set(
+                i for j in map(extract_regex, f.read().lower().splitlines()) for i in j
+            )
 
-    # extracted = {
-    #     "xart",
-    #     "x-art",
-    #     "sexart",
-    #     "atkgirlfriends",
-    #     "tonightsgirlfriends",
-    #     "cruelgirlfriends",
-    #     "testgirlfriend",
-    #     "test2girlfriend",
-    # }
-
-    # computed = "(avi|iso|m(4p|[24kop]v|p([24]|e?g))|rm(vb)?|wmv)"
-    # computed = "(avi|iso|m4p|m[24ko]v|mp([24v]|e?g)|rm(vb)?|wmv)"
-    # extracted = extract_regex(computed)
-    # print(extracted)
-
-    computed = compute_regex(extracted)
-    print(computed)
-    print(len(computed))
-    unit_test(extracted, computed)
+        computed = compute_regex(extracted)
+        print(computed)
+        print()
+        print("Length:", len(computed))
+        unit_test(extracted, computed)
+    else:
+        print("Usage:\n{} <wordfile>".format(sys.argv[0]))
 
