@@ -10,17 +10,23 @@ def read_file(file, optimize=False):
     file = os.path.join(sys.path[0], file)
 
     with open(file, mode="r+", encoding="utf-8") as f:
-        org = [i.strip() for i in f.readlines()]
 
         if optimize:
+            orgf = f.read()
+            org = orgf.splitlines()
+
             rlist = [i.upper() for j in map(re_compute.extract_regex, org) for i in j]
             rlist.sort()
+
             extracted = set(i.lower() for i in rlist)
-            print(f"Original string length: {sum(len(i) for i in org)}")
+            print(f"Original string length: {len(orgf)}")
+
             computed = re_compute.compute_regex(extracted)
             print(f"Computed regex length: {len(computed)}")
+
             assert re_compute.unit_test(extracted, computed) == True
         else:
+            org = [i.strip() for i in f.readlines()]
             rlist = sorted(set(i.lower() for i in org if i))
 
         if rlist != org:
