@@ -15,7 +15,7 @@ def read_file(file, optimize=False):
             orgf = f.read()
             org = orgf.splitlines()
 
-            rlist = [i.upper() for j in map(re_compute.extract_regex, org) for i in j]
+            rlist = [i.upper() for i in re_compute.extract_regex(*org)]
             rlist.sort()
 
             extracted = set(i.lower() for i in rlist)

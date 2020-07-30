@@ -7,87 +7,94 @@ except:
 from collections import defaultdict
 
 
-def extract_regex(string: str) -> set:
-    prefix = {""}
+def extract_regex(*strings: str) -> set:
+    result = set()
     substr = set()
-    length = len(string)
-    i = j = 0
-    while i < length:
-        if string[i] == "[":
-            p = 1
-            for c, s in enumerate(string[i + 1 :]):
-                if s == "[":
-                    p += 1
-                elif s == "]":
-                    p -= 1
-                if p == 0:
-                    break
-            else:
-                raise ValueError(f"Unbalanced bracket: {string}")
-
-            c += i + 1
-            s = string[i + 1 : c]
-            posfix = string[c + 1] if c + 1 < length else "~"
-
-            if posfix in "*+":
-                i = c + 1
-            elif not s.isalnum():
-                if posfix in "?*+":
-                    i = c + 1
+    for string in strings:
+        prefix = {""}
+        substr.clear()
+        length = len(string)
+        i = j = 0
+        while i < length:
+            if string[i] == "[":
+                p = 1
+                for c, s in enumerate(string[i + 1 :]):
+                    if s == "[":
+                        p += 1
+                    elif s == "]":
+                        p -= 1
+                    if p == 0:
+                        break
                 else:
-                    i = c
-            else:
+                    raise ValueError(f"Unbalanced bracket: {string}")
+
+                c += i + 1
+                s = string[i + 1 : c]
+                posfix = string[c + 1] if c + 1 < length else "~"
+
+                if posfix in "*+":
+                    i = c + 1
+                elif not s.isalnum():
+                    if posfix in "?*+":
+                        i = c + 1
+                    else:
+                        i = c
+                else:
+                    if i - j > 0:
+                        prefix = {f"{p}{string[j:i]}" for p in prefix}
+                    if posfix == "?":
+                        i = c + 1
+                        prefix.update({f"{p}{c}" for p in prefix for c in s})
+                    else:
+                        i = c
+                        prefix = {f"{p}{c}" for p in prefix for c in s}
+                    j = i + 1
+
+            elif string[i] == "(":
                 if i - j > 0:
                     prefix = {f"{p}{string[j:i]}" for p in prefix}
-                if posfix == "?":
-                    i = c + 1
-                    prefix.update({f"{p}{c}" for p in prefix for c in s})
+                substr.clear()
+                p = 1
+                j = i + 1
+                while j < length:
+                    if string[j] == "(":
+                        p += 1
+                    elif string[j] == ")":
+                        p -= 1
+                    if p == 1 and string[j] == "|" or p == 0 and string[j] == ")":
+                        substr.update(extract_regex(string[i + 1 : j]))
+                        i = j
+                        if p == 0:
+                            if j + 1 < length and string[j + 1] == "?":
+                                prefix.update(
+                                    {f"{p}{s}" for p in prefix for s in substr}
+                                )
+                                j += 1
+                                i = j
+                            else:
+                                prefix = {f"{p}{s}" for p in prefix for s in substr}
+                            j += 1
+                            break
+                    j += 1
                 else:
-                    i = c
-                    prefix = {f"{p}{c}" for p in prefix for c in s}
+                    raise ValueError(f"Unbalanced parenthesis: {string}")
+
+            elif string[i] == "?":
+                prefix = {f"{p}{string[j:i-1]}" for p in prefix}
+                prefix.update({f"{p}{string[i-1]}" for p in prefix})
                 j = i + 1
 
-        elif string[i] == "(":
-            if i - j > 0:
-                prefix = {f"{p}{string[j:i]}" for p in prefix}
-            substr.clear()
-            p = 1
-            j = i + 1
-            while j < length:
-                if string[j] == "(":
-                    p += 1
-                elif string[j] == ")":
-                    p -= 1
-                if p == 1 and string[j] == "|" or p == 0 and string[j] == ")":
-                    substr.update(extract_regex(string[i + 1 : j]))
-                    i = j
-                    if p == 0:
-                        if j + 1 < length and string[j + 1] == "?":
-                            prefix.update({f"{p}{s}" for p in prefix for s in substr})
-                            j += 1
-                            i = j
-                        else:
-                            prefix = {f"{p}{s}" for p in prefix for s in substr}
-                        j += 1
-                        break
-                j += 1
-            else:
-                raise ValueError(f"Unbalanced parenthesis: {string}")
+            elif string[i] in "])}{":
+                raise ValueError(f"{i} of {string[i]} in {string}")
 
-        elif string[i] == "?":
-            prefix = {f"{p}{string[j:i-1]}" for p in prefix}
-            prefix.update({f"{p}{string[i-1]}" for p in prefix})
-            j = i + 1
+            i += 1
 
-        elif string[i] in "])}{":
-            raise ValueError(f"{i} of {string[i]} in {string}")
+        if i - j > 0:
+            prefix = {f"{p}{string[j:]}" for p in prefix}
 
-        i += 1
+        result.update(prefix)
 
-    if i - j > 0:
-        prefix = {f"{p}{string[j:]}" for p in prefix}
-
-    return prefix
+    return result
 
 
 def compute_regex(words) -> str:
@@ -238,9 +245,7 @@ if __name__ == "__main__":
 
     if len(sys.argv) == 2 and os.path.exists(sys.argv[1]):
         with open(sys.argv[1], "r",) as f:
-            extracted = set(
-                i for j in map(extract_regex, f.read().lower().splitlines()) for i in j
-            )
+            extracted = extract_regex(*f.read().lower().splitlines())
 
         computed = compute_regex(extracted)
         print(computed)
