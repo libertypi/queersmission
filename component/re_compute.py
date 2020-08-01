@@ -159,18 +159,18 @@ def compute_regex(words) -> str:
                         )
                     )
                     if fullwords not in connections:
-                        OrgLength = len("".join(fullwords))
+                        orgLength = len("".join(fullwords))
                         preLength = None
                     else:
-                        OrgLength = connections[fullwords][2]
+                        orgLength = connections[fullwords][2]
                         preLength = connections[fullwords][3]
                     OptLength = len("".join((*key, *val)))
 
                     if not preLength or OptLength < preLength:
                         connections[fullwords] = (
-                            (key, val, OrgLength, OptLength)
+                            (key, val, orgLength, OptLength)
                             if source is prefixs
-                            else (val, key, OrgLength, OptLength)
+                            else (val, key, orgLength, OptLength)
                         )
 
             for fullwords, prefix, posfix, _, _ in sorted(
