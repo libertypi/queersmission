@@ -109,13 +109,19 @@ get_tr_info() {
   if ! hash jq 1>/dev/null 2>&1; then
     printf '[DEBUG] %s\n' "Jq not found, will not proceed." 1>&2
     exit 1
-  elif tr_info="$(query_tr_api '{"arguments":{"fields":["activityDate","status","sizeWhenDone","percentDone","id","name"]},"method":"torrent-get"}')" &&
-    [[ "$(jq -r '.result' <<<"${tr_info}")" == 'success' ]]; then
-    printf '[DEBUG] %s\n' "Getting torrents info success." 1>&2
-  else
-    printf '[DEBUG] Getting torrents info failed. Response: "%s"\n"' "${tr_info}" 1>&2
-    exit 1
+  elif tr_json="$(query_tr_api '{"arguments":{"fields":["activityDate","status","sizeWhenDone","percentDone","trackerStats","id","name"]},"method":"torrent-get"}')"; then
+    local result
+    IFS='/' read -r result total_torrent_size error_torrents < <(
+      jq -r '"\(.result)/\([.arguments.torrents[].sizeWhenDone]|add)/\([.arguments.torrents[]|select(.status < 4)]|length)"' <<<"${tr_json}"
+    )
+    if [[ ${result} == 'success' ]]; then
+      printf '[DEBUG] %s\n' "Getting torrents info success." 1>&2
+      return 0
+    fi
   fi
+
+  printf '[DEBUG] Getting torrents info failed. Response: "%s"\n"' "${tr_json}" 1>&2
+  exit 1
 }
 
 clean_local_disk() {
@@ -125,8 +131,8 @@ clean_local_disk() {
   if pushd "${seed_dir}" >/dev/null; then
     declare -A dict
     while IFS= read -r -d '' i; do
-      [[ -n ${i} ]] && dict["${i}"]=1
-    done < <(jq -j '.arguments.torrents[]|"\(.name)\u0000"' <<<"${tr_info}")
+      dict["${i}"]=1
+    done < <(jq -j '.arguments.torrents[]|"\(.name)\u0000"' <<<"${tr_json}")
 
     for i in [^.\#@]*; do
       [[ -n ${dict["${i}"]} ]] || {
@@ -157,7 +163,7 @@ clean_local_disk() {
 }
 
 clean_inactive_feed() {
-  local ids names disk_size free_space total_torrent_size space_threshold space_to_free m n
+  local ids names disk_size free_space space_threshold space_to_free m n
 
   for i in 1 2; do
     read -r disk_size free_space
@@ -166,7 +172,6 @@ clean_inactive_feed() {
     return
   }
 
-  total_torrent_size="$(jq -r '[.arguments.torrents[].sizeWhenDone]|add' <<<"${tr_info}")"
   if ((space_threshold = 50 * (1024 ** 3), m = space_threshold - disk_size + total_torrent_size, n = space_threshold - free_space, (space_to_free = m > n ? m : n) > 0)); then
     printf '[DEBUG] Cleanup inactive feeds. Disk free space: %d GiB, Space to free: %d GiB.\n' "$((free_space / 1024 ** 3))" "$((space_to_free / 1024 ** 3))" 1>&2
   else
@@ -190,11 +195,11 @@ clean_inactive_feed() {
       }
       break
     fi
-  done < <(jq -j '.arguments.torrents|sort_by(.activityDate)[]|select(.percentDone==1)|"\(.id)/\(.sizeWhenDone)/\(.name)\u0000"' <<<"${tr_info}")
+  done < <(jq -j '.arguments.torrents|sort_by(([.trackerStats[].leecherCount]|add),.activityDate)[]|select(.percentDone==1)|"\(.id)/\(.sizeWhenDone)/\(.name)\u0000"' <<<"${tr_json}")
 }
 
 resume_tr_torrent() {
-  if [[ -n "$(jq -r '.arguments.torrents[]|select(.status < 4)' <<<"${tr_info}")" ]]; then
+  if ((error_torrents > 0)); then
     query_tr_api '{"method":"torrent-start"}' >/dev/null
   fi
 }
