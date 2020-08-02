@@ -112,7 +112,7 @@ get_tr_info() {
   elif tr_json="$(query_tr_api '{"arguments":{"fields":["activityDate","status","sizeWhenDone","percentDone","trackerStats","id","name"]},"method":"torrent-get"}')"; then
     local result
     IFS='/' read -r result total_torrent_size error_torrents < <(
-      jq -r '"\(.result)/\([.arguments.torrents[].sizeWhenDone]|add)/\([.arguments.torrents[]|select(.status < 4)]|length)"' <<<"${tr_json}"
+      jq -r '"\(.result)/\([.arguments.torrents[].sizeWhenDone]|add)/\([.arguments.torrents[]|select(.status<4)]|length)"' <<<"${tr_json}"
     )
     if [[ ${result} == 'success' ]]; then
       printf '[DEBUG] %s\n' "Getting torrents info success." 1>&2
@@ -187,7 +187,7 @@ clean_inactive_feed() {
     if (((space_to_free -= size) <= 0)); then
       printf '[DEBUG] %s\n' 'Remove torrents:' "${names[@]}" 1>&2
       ((debug == 1)) || {
-        query_tr_api "{\"arguments\":{\"ids\":[${ids%,}],\"delete-local-data\":\"true\"},\"method\":\"torrent-remove\"}" >/dev/null
+        query_tr_api "{\"arguments\":{\"ids\":[${ids%,}],\"delete-local-data\":true},\"method\":\"torrent-remove\"}" >/dev/null
       } && {
         for name in "${names[@]}"; do
           append_log "Remove" "${seed_dir}" "${name}"
