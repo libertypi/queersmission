@@ -155,7 +155,7 @@ clean_local_disk() {
   fi
 
   if ((${#obsolete[@]} > 0)); then
-    printf '[DEBUG] %s\n' 'Cleanup local disk:' "${obsolete[@]}" 1>&2
+    printf '[DEBUG] %s\n' 'Cleanup redundant files:' "${obsolete[@]}" 1>&2
     ((debug == 0)) && rm -rf -- "${obsolete[@]}"
   fi
 
@@ -168,14 +168,14 @@ clean_inactive_feed() {
   for i in 1 2; do
     read -r disk_size free_space
   done < <(df --block-size=1 --output=size,avail "${seed_dir}") && [[ ${disk_size} =~ ^[0-9]+$ && ${free_space} =~ ^[0-9]+$ ]] || {
-    printf '[DEBUG] %s\n' 'Read disk stats failed.' 1>&2
+    printf '[DEBUG] %s\n' 'Reading disk stats failed.' 1>&2
     return
   }
 
   if ((space_threshold = 50 * (1024 ** 3), m = space_threshold - disk_size + total_torrent_size, n = space_threshold - free_space, (space_to_free = m > n ? m : n) > 0)); then
-    printf '[DEBUG] Cleanup inactive feeds. Disk free space: %d GiB, Space to free: %d GiB.\n' "$((free_space / 1024 ** 3))" "$((space_to_free / 1024 ** 3))" 1>&2
+    printf '[DEBUG] Disk free space: %d GiB, Space to free: %d GiB. Cleanup inactive feeds.\n' "$((free_space / 1024 ** 3))" "$((space_to_free / 1024 ** 3))" 1>&2
   else
-    printf '[DEBUG] Space enough, skip action. Disk free space: %d GiB.\n' "$((free_space / 1024 ** 3))" 1>&2
+    printf '[DEBUG] Disk free space: %d GiB. Skip action.\n' "$((free_space / 1024 ** 3))" 1>&2
     return
   fi
 
