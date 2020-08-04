@@ -10,8 +10,8 @@ av_regex='component/av_regex.txt'
 tr_api='http://localhost:9091/transmission/rpc'
 
 prepare() {
-  cd "${BASH_SOURCE[0]%/*}" || exit 1
   printf '[DEBUG] %s' "Acquiring lock..." 1>&2
+  cd "${BASH_SOURCE[0]%/*}" || exit 1
   exec {i}<"${BASH_SOURCE[0]##*/}"
   flock -x "${i}"
   printf '%s\n' 'Done.' 1>&2
