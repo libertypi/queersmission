@@ -13,13 +13,22 @@ prepare() {
   printf '[DEBUG] %s' "Acquiring lock..." 1>&2
   cd "${BASH_SOURCE[0]%/*}" || exit 1
   exec {i}<"${BASH_SOURCE[0]##*/}"
-  flock -x "${i}"
+  if [[ -n ${TR_TORRENT_DIR} && -n ${TR_TORRENT_NAME} ]]; then
+    flock -x "${i}"
+    trDoneScript=1
+  else
+    flock -xn "${i}" || {
+      printf '%s\n' 'Failed.' 1>&2
+      exit 1
+    }
+    trDoneScript=0
+  fi
   printf '%s\n' 'Done.' 1>&2
   trap 'write_log' EXIT
 }
 
 handle_torrent_done() {
-  [[ -n ${TR_TORRENT_DIR} && -n ${TR_TORRENT_NAME} ]] || return
+  ((trDoneScript == 1)) || return
   [[ -e "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" ]] || {
     append_log "Missing" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
     return
@@ -82,7 +91,8 @@ get_tr_info() {
     exit 1
   fi
   [[ -z ${tr_session_header} ]] && get_tr_session_header
-  if tr_json="$(query_tr_api '{"arguments":{"fields":["activityDate","status","sizeWhenDone","percentDone","trackerStats","id","name"]},"method":"torrent-get"}')" && local result &&
+  local result
+  if tr_json="$(query_tr_api '{"arguments":{"fields":["activityDate","status","sizeWhenDone","percentDone","trackerStats","id","name"]},"method":"torrent-get"}')" &&
     IFS='/' read -r result totalTorrentSize errorTorrents < <(jq -r '"\(.result)/\([.arguments.torrents[].sizeWhenDone]|add)/\([.arguments.torrents[]|select(.status<4)]|length)"' <<<"${tr_json}") &&
     [[ ${result} == 'success' ]]; then
     printf '[DEBUG] Getting torrents info success, total size: %d GiB, error torrents: %d.\n' "$((totalTorrentSize / 1024 ** 3))" "${errorTorrents}" 1>&2

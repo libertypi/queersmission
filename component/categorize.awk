@@ -139,7 +139,7 @@ function series_match(videos, f, n, i, j, words, nums, groups, connected)
 	for (i in videos) {
 		n = split(videos[i], words, /[0-9]+/, nums)
 		for (j = 1; j < n; j++) {
-			gsub(/[[:space:]._-]+|.*\//, "", words[j])
+			gsub(/.*\/|[[:space:]._-]+/, "", words[j])
 			groups[words[j] == "" ? j : words[j]][int(nums[j])] = i
 		}
 	}
