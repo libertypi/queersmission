@@ -16,11 +16,10 @@ prepare() {
   if [[ -n ${TR_TORRENT_DIR} && -n ${TR_TORRENT_NAME} ]]; then
     flock -x "${i}"
     trDoneScript=1
+  elif ! flock -xn "${i}"; then
+    printf '%s\n' 'Failed.' 1>&2
+    exit 1
   else
-    flock -xn "${i}" || {
-      printf '%s\n' 'Failed.' 1>&2
-      exit 1
-    }
     trDoneScript=0
   fi
   printf '%s\n' 'Done.' 1>&2
@@ -93,9 +92,9 @@ get_tr_info() {
   [[ -z ${tr_session_header} ]] && get_tr_session_header
   local result
   if tr_json="$(query_tr_api '{"arguments":{"fields":["activityDate","status","sizeWhenDone","percentDone","trackerStats","id","name"]},"method":"torrent-get"}')" &&
-    IFS='/' read -r result totalTorrentSize errorTorrents < <(jq -r '"\(.result)/\([.arguments.torrents[].sizeWhenDone]|add)/\([.arguments.torrents[]|select(.status<4)]|length)"' <<<"${tr_json}") &&
+    IFS='/' read -r result totalTorrentSize errorTorrents < <(jq -r '"\(.result)/\([.arguments.torrents[].sizeWhenDone]|add)/\([.arguments.torrents[]|select(.status==0)]|length)"' <<<"${tr_json}") &&
     [[ ${result} == 'success' ]]; then
-    printf '[DEBUG] Getting torrents info success, total size: %d GiB, error torrents: %d.\n' "$((totalTorrentSize / 1024 ** 3))" "${errorTorrents}" 1>&2
+    printf '[DEBUG] Getting torrents info success, total size: %d GiB, stopped torrents: %d.\n' "$((totalTorrentSize / 1024 ** 3))" "${errorTorrents}" 1>&2
     return 0
   else
     printf '[DEBUG] Getting torrents info failed. Response: "%s"\n"' "${tr_json}" 1>&2
@@ -144,9 +143,10 @@ clean_local_disk() {
 clean_inactive_feed() {
   local diskSize freeSpace quota target m n id size name ids names
 
-  for _ in 1 2; do
+  {
+    read _
     read -r diskSize freeSpace
-  done < <(df --block-size=1 --output=size,avail "${seed_dir}") && [[ ${diskSize} =~ ^[0-9]+$ && ${freeSpace} =~ ^[0-9]+$ ]] || {
+  } < <(df --block-size=1 --output=size,avail "${seed_dir}") && [[ ${diskSize} =~ ^[0-9]+$ && ${freeSpace} =~ ^[0-9]+$ ]] || {
     printf '[DEBUG] %s\n' 'Reading disk stats failed.' 1>&2
     return
   }
