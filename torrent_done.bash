@@ -27,7 +27,7 @@ prepare() {
 }
 
 handle_torrent_done() {
-  ((trDoneScript == 1)) || return
+  ((trDoneScript)) || return
   [[ -e "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" ]] || {
     append_log "Missing" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
     return
@@ -97,7 +97,7 @@ get_tr_info() {
     printf '[DEBUG] Getting torrents info success, total size: %d GiB, stopped torrents: %d.\n' "$((totalTorrentSize / 1024 ** 3))" "${errorTorrents}" 1>&2
     return 0
   else
-    printf '[DEBUG] Getting torrents info failed. Response: "%s"\n"' "${tr_json}" 1>&2
+    printf '[DEBUG] Getting torrents info failed. Response: "%s"\n' "${tr_json}" 1>&2
     exit 1
   fi
 }
@@ -132,9 +132,9 @@ clean_local_disk() {
     printf '[DEBUG] Unable to enter: %s\n' "${watch_dir}" 1>&2
   fi
 
-  if ((${#obsolete[@]} > 0)); then
+  if ((${#obsolete[@]})); then
     printf '[DEBUG] %s\n' 'Cleanup redundant files:' "${obsolete[@]}" 1>&2
-    ((debug == 0)) && rm -rf -- "${obsolete[@]}"
+    ((debug)) || rm -rf -- "${obsolete[@]}"
   fi
 
   shopt -u nullglob dotglob globstar
@@ -165,7 +165,7 @@ clean_inactive_feed() {
 
     if (((target -= size) <= 0)); then
       printf '[DEBUG] %s\n' 'Remove torrents:' "${names[@]}" 1>&2
-      ((debug == 1)) || {
+      ((debug)) || {
         query_tr_api "{\"arguments\":{\"ids\":[${ids%,}],\"delete-local-data\":true},\"method\":\"torrent-remove\"}" >/dev/null
       } && {
         for name in "${names[@]}"; do
@@ -178,7 +178,7 @@ clean_inactive_feed() {
 }
 
 resume_tr_torrent() {
-  if ((errorTorrents > 0)); then
+  if ((errorTorrents)); then
     query_tr_api '{"method":"torrent-start"}' >/dev/null
   fi
 }
@@ -188,8 +188,11 @@ append_log() {
 }
 
 write_log() {
-  if ((${#logs[@]} > 0)); then
-    if ((debug == 0)); then
+  if ((${#logs[@]})); then
+    if ((debug)); then
+      printf '[DEBUG] Logs: (%s entries)\n' "${#logs[@]}" 1>&2
+      printf '%s\n' "${logs[@]}" 1>&2
+    else
       local logBackup
       [[ -s ${log_file} ]] && logBackup="$(tail -n +3 "${log_file}")"
       {
@@ -201,9 +204,6 @@ write_log() {
         done
         [[ -n ${logBackup} ]] && printf '%s\n' "${logBackup}"
       } >"${log_file}"
-    else
-      printf '[DEBUG] Logs: (%s entries)\n' "${#logs[@]}" 1>&2
-      printf '%s\n' "${logs[@]}" 1>&2
     fi
   fi
 }
