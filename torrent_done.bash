@@ -10,9 +10,22 @@ av_regex='component/av_regex.txt'
 tr_api='http://localhost:9091/transmission/rpc'
 
 prepare() {
+  ((debug = saveJson = 0))
+  while getopts djh i; do
+    case "${i}" in
+      d) debug=1 ;;
+      j) saveJson=1 ;;
+      h | *)
+        printf '%s\n' "Options:" "-d  Debug" "-j  Save json" 1>&2
+        exit 1
+        ;;
+    esac
+  done
+
   printf '[DEBUG] %s' "Acquiring lock..." 1>&2
   cd "${BASH_SOURCE[0]%/*}" || exit 1
   exec {i}<"${BASH_SOURCE[0]##*/}"
+
   if [[ -n ${TR_TORRENT_DIR} && -n ${TR_TORRENT_NAME} ]]; then
     flock -x "${i}"
     trDoneScript=1
@@ -22,6 +35,7 @@ prepare() {
   else
     trDoneScript=0
   fi
+
   printf '%s\n' 'Done.' 1>&2
   trap 'write_log' EXIT
 }
@@ -55,7 +69,7 @@ handle_torrent_done() {
       query_tr_api "{\"arguments\":{\"ids\":[${TR_TORRENT_ID}],\"location\":\"${seed_dir}/\"},\"method\":\"torrent-set-location\"}"; then
       append_log "Finish" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
     else
-      append_log "Error" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
+      append_log "Error" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}, ${dest}"
     fi
 
   fi
@@ -92,9 +106,10 @@ get_tr_info() {
   [[ -z ${tr_session_header} ]] && get_tr_session_header
   local result
   if tr_json="$(query_tr_api '{"arguments":{"fields":["activityDate","status","sizeWhenDone","percentDone","trackerStats","id","name"]},"method":"torrent-get"}')" &&
-    IFS='/' read -r result totalTorrentSize errorTorrents < <(jq -r '"\(.result)/\([.arguments.torrents[].sizeWhenDone]|add)/\([.arguments.torrents[]|select(.status==0)]|length)"' <<<"${tr_json}") &&
+    IFS='/' read -r result totalTorrentSize errorTorrents < <(jq -r '"\(.result)/\([.arguments.torrents[].sizeWhenDone]|add)/\([.arguments.torrents[]|select(.status<=0)]|length)"' <<<"${tr_json}") &&
     [[ ${result} == 'success' ]]; then
     printf '[DEBUG] Getting torrents info success, total size: %d GiB, stopped torrents: %d.\n' "$((totalTorrentSize / 1024 ** 3))" "${errorTorrents}" 1>&2
+    ((saveJson)) && jq '.' <<<"${tr_json}" >'tr_json.json'
     return 0
   else
     printf '[DEBUG] Getting torrents info failed. Response: "%s"\n' "${tr_json}" 1>&2
@@ -209,12 +224,7 @@ write_log() {
 }
 
 # Main
-case "$1" in
-  'debug' | '-d' | '-debug') readonly debug=1 ;;
-  *) readonly debug=0 ;;
-esac
-
-prepare
+prepare "$@"
 handle_torrent_done
 
 get_tr_info

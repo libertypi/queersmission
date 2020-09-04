@@ -41,7 +41,7 @@ def read_file(file, optimize=False):
 
 
 if __name__ == "__main__":
-    re_template = """(^|[^a-z0-9])(__AV_KEYWORD__|([1-9][0-9]{1,2})?__AV_ID_PREFIX__([[:space:]_-]?[0-9]{2,6}|[0-9]{3,6}hhb[1-9]?))([^a-z0-9]|$)\n"""
+    re_template = """(^|[^a-z0-9])(__AV_KEYWORD__|([1-9][0-9]{,2})?__AV_ID_PREFIX__(([[:space:]_-]|00)?[0-9]{2,6}|[0-9]{3,6}hhb[1-9]?))([^a-z0-9]|$)\n"""
 
     av_keyword = read_file("av_keyword.txt")
     av_id_prefix = read_file("av_id_prefix.txt", True)
