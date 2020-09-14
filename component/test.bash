@@ -20,12 +20,19 @@ case $1 in
     exit
     ;;
   *)
-    TR_TORRENT_DIR='/volume2/@transmission'
+    if [[ -e $1 ]]; then
+      TR_TORRENT_DIR="${1%/*}"
+      files=("${1##*/}")
+    else
+      TR_TORRENT_DIR='/volume2/@transmission'
+    fi
     ;;
 esac
-pushd "${TR_TORRENT_DIR}" >/dev/null
-files=([^@\#.]*)
-popd >/dev/null
+if ((${#files[@]} == 0)); then
+  pushd "${TR_TORRENT_DIR}" >/dev/null
+  files=([^@\#.]*)
+  popd >/dev/null
+fi
 
 # mkdir "component/profile"
 

@@ -37,7 +37,7 @@ function ext_match(files, i, j, sum)
 {
 	for (i = 1; i in files && i <= 3; i++) {
 		switch (gensub(/^.*\./, "", 1, files[i])) {
-		case /^(3gp|asf|avi|flv|iso|m(2?ts|4p|[24kop]v|p([24]|e?g)|xf)|rm(vb)?|ts|vob|webm|wmv)$/:
+		case /^(3gp|asf|avi|bdmv|flv|iso|m(2?ts|4p|[24kop]v|p([24]|e?g)|xf)|rm(vb)?|ts|vob|webm|wmv)$/:
 			j = "film"
 			break
 		case /^((al?|fl)ac|ape|m4a|mp3|ogg|wav|wma)$/:
@@ -92,7 +92,7 @@ function pattern_match(files, videos, n, i, j)
 		switch (files[j]) {
 		case /[^a-z0-9]([se][0-9]{1,2}|s[0-9]{1,2}e[0-9]{1,2}|ep[[:space:]_-]?[0-9]{1,3})[^a-z0-9]/:
 			output("tv")
-		case /\.(avi|iso|m(4p|[24kop]v|p([24]|e?g))|rm(vb)?|wmv)$/:
+		case /\.(avi|iso|m(4p|[24kop]v|p([24]|e?g))|rm(vb)?|wmv)$|\/index\.bdmv$/:
 			videos[++i] = files[j]
 		}
 	}
@@ -175,7 +175,7 @@ function series_match(videos, f, n, i, j, words, nums, groups, connected)
 
 function walkdir(dir, fsize, fpath, fstat)
 {
-	while ((getline < dir) > 0) {
+	while ((getline < dir) > 0) {		
 		if ($2 !~ /^[.#@]/) {
 			fpath = (dir "/" $2)
 			switch ($3) {
@@ -192,8 +192,20 @@ function walkdir(dir, fsize, fpath, fstat)
 				fsize[tolower(substr(fpath, prefix))] = fstat["size"]
 				break
 			case "d":
+				if ($2 == "BDMV") {
+					while ((getline < fpath) > 0) {
+						if ($2 == "index.bdmv" && $3 == "f") {
+							fsize[tolower(substr(fpath, prefix) "/" $2)] = "+inf"
+							sizeReached = 1
+							close(fpath)
+							return
+						}
+					}
+					close(fpath)
+				}
 				walkdir(fpath, fsize)
 			}
 		}
 	}
+	close(dir)
 }
