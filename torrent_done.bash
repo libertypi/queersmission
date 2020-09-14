@@ -10,13 +10,12 @@ av_regex='component/av_regex.txt'
 tr_api='http://localhost:9091/transmission/rpc'
 
 prepare() {
-  ((debug = saveJson = 0))
-  while getopts djh i; do
+  ((debug = 0))
+  while getopts dh i; do
     case "${i}" in
       d) debug=1 ;;
-      j) saveJson=1 ;;
       h | *)
-        printf '%s\n' "Options:" "-d  Debug" "-j  Save json" 1>&2
+        printf '%s\n' "Options:" "-d  Debug" 1>&2
         exit 1
         ;;
     esac
@@ -109,7 +108,7 @@ get_tr_info() {
     IFS='/' read -r result totalTorrentSize errorTorrents < <(jq -r '"\(.result)/\([.arguments.torrents[].sizeWhenDone]|add)/\([.arguments.torrents[]|select(.status<=0)]|length)"' <<<"${tr_json}") &&
     [[ ${result} == 'success' ]]; then
     printf '[DEBUG] Getting torrents info success, total size: %d GiB, stopped torrents: %d.\n' "$((totalTorrentSize / 1024 ** 3))" "${errorTorrents}" 1>&2
-    ((saveJson)) && jq '.' <<<"${tr_json}" >'tr_json.json'
+    ((debug)) && jq '.' <<<"${tr_json}" >'debug.json'
     return 0
   else
     printf '[DEBUG] Getting torrents info failed. Response: "%s"\n' "${tr_json}" 1>&2
