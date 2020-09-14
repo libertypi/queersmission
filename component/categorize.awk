@@ -92,7 +92,7 @@ function pattern_match(files, videos, n, i, j)
 		switch (files[j]) {
 		case /[^a-z0-9]([se][0-9]{1,2}|s[0-9]{1,2}e[0-9]{1,2}|ep[[:space:]_-]?[0-9]{1,3})[^a-z0-9]/:
 			output("tv")
-		case /\.(avi|iso|m(4p|[24kop]v|p([24]|e?g))|rm(vb)?|wmv)$|\/index\.bdmv$/:
+		case /\.(avi|iso|m(4p|[24kop]v|p([24]|e?g))|rm(vb)?|wmv)$|bdmv\/index\.bdmv$/:
 			videos[++i] = files[j]
 		}
 	}
