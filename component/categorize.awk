@@ -20,7 +20,7 @@ BEGIN {
 
     if (rootStat["type"] == "directory") {
         prefix = (length(rootPath) + 2)
-        minSize = (100 * 1024 ^ 2)
+        minSize = (80 * 1024 ^ 2)
         sizeReached = 0
         walkdir(rootPath, fsize)
         asorti(fsize, files, "@val_num_desc")
@@ -37,7 +37,7 @@ function ext_match(files, i, j, sum)
 {
     for (i = 1; i in files && i <= 3; i++) {
         switch (gensub(/^.*\./, "", 1, files[i])) {
-        case /^(3gp|asf|avi|bdmv|flv|iso|m(2?ts|4p|[24kop]v|p([24]|e?g)|xf)|rm(vb)?|ts|vob|webm|wmv)$/:
+        case /^((bd|w)mv|3gp|asf|avi|flv|iso|m(2?ts|4p|[24kop]v|p([24]|e?g)|xf)|rm(vb)?|ts|vob|webm)$/:
             j = "film"
             break
         case /^((al?|fl)ac|ape|m4a|mp3|ogg|wav|wma)$/:
