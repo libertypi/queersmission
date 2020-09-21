@@ -144,22 +144,21 @@ function series_match(videos, f, n, i, j, words, nums, groups, connected)
         }
     }
     for (f in groups) {
-        if (length(groups[f]) >= 3) {
-            n = asorti(groups[f], nums, "@ind_num_asc")
-            i = 1
-            for (j = 2; j <= n; j++) {
-                if (nums[j - 1] == nums[j] - 1) {
-                    i++
-                    if (i >= 3) {
-                        if (i == 3) {
-                            connected[groups[f][nums[j - 2]]]
-                            connected[groups[f][nums[j - 1]]]
-                        }
-                        connected[groups[f][nums[j]]]
+        if (length(groups[f]) < 3) continue
+        n = asorti(groups[f], nums, "@ind_num_asc")
+        i = 1
+        for (j = 2; j <= n; j++) {
+            if (nums[j - 1] == nums[j] - 1) {
+                i++
+                if (i >= 3) {
+                    if (i == 3) {
+                        connected[groups[f][nums[j - 2]]]
+                        connected[groups[f][nums[j - 1]]]
                     }
-                } else {
-                    i = 1
+                    connected[groups[f][nums[j]]]
                 }
+            } else {
+                i = 1
             }
         }
     }
@@ -176,35 +175,27 @@ function series_match(videos, f, n, i, j, words, nums, groups, connected)
 function walkdir(dir, fsize, fpath, fstat)
 {
     while ((getline < dir) > 0) {
-        if ($2 !~ /^[.#@]/) {
-            fpath = (dir "/" $2)
-            switch ($3) {
-            case "f":
-                stat(fpath, fstat)
-                if (fstat["size"] >= minSize) {
-                    if (! sizeReached) {
-                        delete fsize
-                        sizeReached = 1
-                    }
-                } else if (sizeReached) {
-                    continue
+        if ($2 ~ /^[.#@]/) continue
+        fpath = (dir "/" $2)
+        switch ($3) {
+        case "f":
+            stat(fpath, fstat)
+            if (fstat["size"] >= minSize) {
+                if (! sizeReached) {
+                    delete fsize
+                    sizeReached = 1
                 }
-                fsize[tolower(substr(fpath, prefix))] = fstat["size"]
-                break
-            case "d":
-                if ($2 == "BDMV") {
-                    while ((getline < fpath) > 0) {
-                        if ($2 == "index.bdmv" && $3 == "f") {
-                            fsize[tolower(substr(fpath, prefix) "/" $2)] = "+inf"
-                            sizeReached = 1
-                            close(fpath)
-                            return
-                        }
-                    }
-                    close(fpath)
-                }
-                walkdir(fpath, fsize)
+            } else if (sizeReached) {
+                continue
             }
+            fpath = tolower(substr(fpath, prefix))
+            if (match(fpath, /\ybdmv\/stream\/[^./]+\.m2ts$/)) {
+                fpath = (substr(fpath, 1, RSTART + 4) "index.bdmv")
+            }
+            fsize[fpath] += fstat["size"]
+            break
+        case "d":
+            walkdir(fpath, fsize)
         }
     }
     close(dir)
