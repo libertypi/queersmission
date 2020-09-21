@@ -117,7 +117,7 @@ function read_av_regex(av_regex)
         }
     }
     close(av_regex)
-    printf("[DEBUG] Cannot read regex from file: %s\n", av_regex) > "/dev/stderr"
+    printf("[DEBUG] Reading regex from file failed: %s\n", av_regex) > "/dev/stderr"
     avRegex = "^$"
 }
 
