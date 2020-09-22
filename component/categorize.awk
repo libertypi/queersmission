@@ -32,7 +32,7 @@ BEGIN {
 }
 
 
-function ext_match(files, i, j, sum)
+function ext_match(files,  i, j, sum)
 {
     for (i = 1; i in files && i <= 3; i++) {
         switch (gensub(/^.*\./, "", 1, files[i])) {
@@ -51,7 +51,7 @@ function ext_match(files, i, j, sum)
     output(sum[1])
 }
 
-function output(type, dest, destDisply)
+function output(type,  dest, destDisply)
 {
     switch (type) {
     case "av":
@@ -74,13 +74,13 @@ function output(type, dest, destDisply)
     }
     destDisply = dest
     if (rootStat["type"] == "file") {
-        dest = (dest "/" (gensub(/\.[^.\/]*$/, "", 1, torrentName)))
+        dest = (dest "/" (gensub(/\.[^./]*$/, "", 1, torrentName)))
     }
     printf "%s\000%s\000", dest, destDisply
     exit 0
 }
 
-function pattern_match(files, videos, n, i, j)
+function pattern_match(files,  videos, n, i, j)
 {
     n = length(files)
     i = 0
@@ -120,7 +120,7 @@ function read_av_regex(av_regex)
     avRegex = "^$"
 }
 
-function series_match(videos, f, n, i, j, words, nums, groups, connected)
+function series_match(videos,  f, n, i, j, words, nums, groups, connected)
 {
     # Scan multiple videos to identify consecutive digits:
     # Files will be stored as:
@@ -168,7 +168,7 @@ function series_match(videos, f, n, i, j, words, nums, groups, connected)
     }
 }
 
-function walkdir(dir, fsize, fpath, fstat)
+function walkdir(dir, fsize,  fpath, fstat)
 {
     while ((getline < dir) > 0) {
         if ($2 ~ /^[.#@]/) {
@@ -187,7 +187,7 @@ function walkdir(dir, fsize, fpath, fstat)
                 continue
             }
             fpath = tolower(substr(fpath, prefix))
-            if (match(fpath, /\ybdmv\/stream\/[^.\/]+\.m2ts$/)) {
+            if (match(fpath, /\ybdmv\/stream\/[^./]+\.m2ts$/)) {
                 fpath = (substr(fpath, 1, RSTART + 4) "index.bdmv")
             }
             fsize[fpath] += fstat["size"]
