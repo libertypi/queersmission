@@ -1,8 +1,7 @@
 @load "readdir"
 @load "filefuncs"
 
-# Usage:
-# awk -v av_regex="${av_regex}" -v torrentDir="${TR_TORRENT_DIR}" -v torrentName="${TR_TORRENT_NAME}" -f "${categorize}"
+# Usage: awk -v av_regex="${av_regex}" -v torrentDir="${TR_TORRENT_DIR}" -v torrentName="${TR_TORRENT_NAME}" -f "${categorize}"
 
 BEGIN {
     if (av_regex == "" || torrentDir == "" || torrentName == "") {
@@ -75,7 +74,7 @@ function output(type, dest, destDisply)
     }
     destDisply = dest
     if (rootStat["type"] == "file") {
-        dest = (dest "/" (gensub(/\.[^.]*$/, "", 1, torrentName)))
+        dest = (dest "/" (gensub(/\.[^.\/]*$/, "", 1, torrentName)))
     }
     printf "%s\000%s\000", dest, destDisply
     exit 0
@@ -90,7 +89,7 @@ function pattern_match(files, videos, n, i, j)
             output("av")
         }
         switch (files[j]) {
-        case /[^a-z0-9]([se][0-9]{1,2}|s[0-9]{1,2}e[0-9]{1,2}|ep[[:space:]_-]?[0-9]{1,3})[^a-z0-9]/:
+        case /\y([se][0-9]{1,2}|s[0-9]{1,2}e[0-9]{1,2}|ep[[:space:]_-]?[0-9]{1,3})\y/:
             output("tv")
         case /\.(avi|iso|m(4p|[24kop]v|p([24]|e?g))|rm(vb)?|wmv)$|bdmv\/index\.bdmv$/:
             videos[++i] = files[j]
@@ -98,9 +97,9 @@ function pattern_match(files, videos, n, i, j)
     }
     if (n == 1) {
         switch (files[1]) {
-        case /(^|[^a-z0-9])(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)([^a-z0-9]|$)/:
+        case /\y(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)\y/:
             output("adobe")
-        case /(^|[^a-z0-9])(windows|mac(os)?|x(86|64)|(32|64)bit|v[0-9]+\.[0-9]+)([^a-z0-9]|$)/:
+        case /\y(windows|mac(os)?|x(86|64)|(32|64)bit|v[0-9]+\.[0-9]+)\y/:
             output()
         }
     } else if (i >= 3) {
@@ -123,7 +122,7 @@ function read_av_regex(av_regex)
 
 function series_match(videos, f, n, i, j, words, nums, groups, connected)
 {
-    # To identify TV Series:
+    # Scan multiple videos to identify consecutive digits:
     # Files will be stored as:
     #   videos[1] = parent/string_03.mp4
     #   videos[2] = parent/string_04.mp4
@@ -139,12 +138,14 @@ function series_match(videos, f, n, i, j, words, nums, groups, connected)
     for (i in videos) {
         n = split(videos[i], words, /[0-9]+/, nums)
         for (j = 1; j < n; j++) {
-            gsub(/.*\/|[[:space:]._-]+/, "", words[j])
+            gsub(/.*\/|\s+/, "", words[j])
             groups[words[j] == "" ? j : words[j]][int(nums[j])] = i
         }
     }
     for (f in groups) {
-        if (length(groups[f]) < 3) continue
+        if (length(groups[f]) < 3) {
+            continue
+        }
         n = asorti(groups[f], nums, "@ind_num_asc")
         i = 1
         for (j = 2; j <= n; j++) {
@@ -156,26 +157,23 @@ function series_match(videos, f, n, i, j, words, nums, groups, connected)
                         connected[groups[f][nums[j - 1]]]
                     }
                     connected[groups[f][nums[j]]]
+                    if (length(connected) >= 3) {
+                        output("tv")
+                    }
                 }
             } else {
                 i = 1
             }
         }
     }
-    i = length(connected)
-    j = length(videos)
-    if (i / j >= 0.5) {
-        printf("[DEBUG] Consecutive videos: %d / %d, categorized as TV Series.\n", i, j) > "/dev/stderr"
-        output("tv")
-    } else {
-        printf("[DEBUG] Consecutive videos: %d / %d, categorized as Films.\n", i, j) > "/dev/stderr"
-    }
 }
 
 function walkdir(dir, fsize, fpath, fstat)
 {
     while ((getline < dir) > 0) {
-        if ($2 ~ /^[.#@]/) continue
+        if ($2 ~ /^[.#@]/) {
+            continue
+        }
         fpath = (dir "/" $2)
         switch ($3) {
         case "f":
@@ -189,7 +187,7 @@ function walkdir(dir, fsize, fpath, fstat)
                 continue
             }
             fpath = tolower(substr(fpath, prefix))
-            if (match(fpath, /\ybdmv\/stream\/[^./]+\.m2ts$/)) {
+            if (match(fpath, /\ybdmv\/stream\/[^.\/]+\.m2ts$/)) {
                 fpath = (substr(fpath, 1, RSTART + 4) "index.bdmv")
             }
             fsize[fpath] += fstat["size"]
