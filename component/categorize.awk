@@ -187,9 +187,7 @@ function walkdir(dir, fsize,  fpath, fstat)
                 continue
             }
             fpath = tolower(substr(fpath, prefix))
-            if (fpath ~ /\ybdmv\/stream\/[^./]+\.m2ts$/) {
-                sub(/stream\/[^/]+$/, "index.bdmv", fpath)
-            }
+            sub(/\ybdmv\/stream\/[^/]+\.m2ts$/, "bdmv/index.bdmv", fpath)
             fsize[fpath] += fstat["size"]
             break
         case "d":
