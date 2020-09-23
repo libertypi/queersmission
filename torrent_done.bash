@@ -121,13 +121,13 @@ clean_local_disk() {
   shopt -s nullglob dotglob globstar
 
   if pushd "${seed_dir}" >/dev/null; then
-    declare -A dict
+    declare -A names
     while IFS= read -r -d '' i; do
-      dict["${i}"]=1
+      names["${i}"]=1
     done < <(jq -j '.arguments.torrents[]|"\(.name)\u0000"' <<<"${tr_json}")
 
     for i in [^.\#@]*; do
-      [[ -n ${dict["${i}"]} ]] || {
+      [[ -n ${names["${i}"]} ]] || {
         append_log 'Cleanup' "${seed_dir}" "${i}"
         obsolete+=("${seed_dir}/${i}")
       }
