@@ -6,11 +6,11 @@ seed_dir='/volume2/@transmission'
 watch_dir='/volume1/video/Torrents'
 log_file='transmission.log'
 categorize='component/categorize.awk'
-av_regex='component/av_regex.txt'
+avRegexFile='component/av_regex.txt'
 tr_api='http://localhost:9091/transmission/rpc'
 
 prepare() {
-  ((debug = 0))
+  debug=0
   while getopts dh i; do
     case "${i}" in
       d) debug=1 ;;
@@ -53,7 +53,7 @@ handle_torrent_done() {
     for i in dest dest_display; do
       IFS= read -r -d '' "$i"
     done < <(
-      awk -v av_regex="${av_regex}" -v torrentDir="${TR_TORRENT_DIR}" -v torrentName="${TR_TORRENT_NAME}" -f "${categorize}"
+      awk -v avRegexFile="${avRegexFile}" -v torrentDir="${TR_TORRENT_DIR}" -v torrentName="${TR_TORRENT_NAME}" -f "${categorize}"
     )
 
     if [[ -d ${dest} ]] || mkdir -p "${dest}" && cp -rf "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" "${dest}/"; then

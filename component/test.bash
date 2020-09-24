@@ -4,7 +4,7 @@ export LC_ALL=C LANG=C
 
 cd "${BASH_SOURCE[0]%/*}/.."
 categorize="component/categorize.awk"
-av_regex="component/av_regex.txt"
+avRegexFile="component/av_regex.txt"
 
 case $1 in
   1)
@@ -15,7 +15,7 @@ case $1 in
     ;;
   r)
     printf '%s\n' "Testing Regex..."
-    grep -Eif "${av_regex}" <(find '/volume1/video' -type f -not -path '*/[.@#]*' -printf '%P\n')
+    grep -Eif "${avRegexFile}" <(find '/volume1/video' -type f -not -path '*/[.@#]*' -printf '%P\n')
     printf '%s\n' "Done."
     exit
     ;;
@@ -43,8 +43,8 @@ for TR_TORRENT_NAME in "${files[@]}"; do
   for i in dest dest_display; do
     IFS= read -r -d '' "$i"
   done < <(
-    awk -v av_regex="${av_regex}" -v torrentDir="${TR_TORRENT_DIR}" -v torrentName="${TR_TORRENT_NAME}" -f "${categorize}"
-	# awk -v av_regex="${av_regex}" -v torrentDir="${TR_TORRENT_DIR}" -v torrentName="${TR_TORRENT_NAME}" --profile="component/profile/${TR_TORRENT_NAME}.awk" -f "${categorize}"
+    awk -v avRegexFile="${avRegexFile}" -v torrentDir="${TR_TORRENT_DIR}" -v torrentName="${TR_TORRENT_NAME}" -f "${categorize}"
+	# awk -v avRegexFile="${avRegexFile}" -v torrentDir="${TR_TORRENT_DIR}" -v torrentName="${TR_TORRENT_NAME}" --profile="component/profile/${TR_TORRENT_NAME}.awk" -f "${categorize}"
   )
 
   if [[ ${TR_TORRENT_DIR} != '/volume2/@transmission' && ${dest_display} != "${TR_TORRENT_DIR}" ]]; then

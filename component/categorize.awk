@@ -1,16 +1,16 @@
 @load "readdir"
 @load "filefuncs"
 
-# Usage: awk -v av_regex="${av_regex}" -v torrentDir="${TR_TORRENT_DIR}" -v torrentName="${TR_TORRENT_NAME}" -f "${categorize}"
+# Usage: awk -v avRegexFile="${avRegexFile}" -v torrentDir="${TR_TORRENT_DIR}" -v torrentName="${TR_TORRENT_NAME}" -f "${categorize}"
 
 BEGIN {
-    if (av_regex == "" || torrentDir == "" || torrentName == "") {
+    if (avRegexFile == "" || torrentDir == "" || torrentName == "") {
         print("[DEBUG] Awk: Invalid parameter.") > "/dev/stderr"
         output()
     }
 
     FS = "/"
-    read_av_regex(av_regex)
+    read_av_regex()
     rootPath = (torrentDir "/" torrentName)
     stat(rootPath, rootStat)
 
@@ -107,16 +107,16 @@ function pattern_match(files,  videos, n, i, j)
     }
 }
 
-function read_av_regex(av_regex)
+function read_av_regex()
 {
-    while ((getline avRegex < av_regex) > 0) {
+    while ((getline avRegex < avRegexFile) > 0) {
         if (avRegex ~ /\S/) {
-            close(av_regex)
+            close(avRegexFile)
             return
         }
     }
-    close(av_regex)
-    printf("[DEBUG] Reading regex from file failed: %s\n", av_regex) > "/dev/stderr"
+    close(avRegexFile)
+    printf("[DEBUG] Reading regex from file failed: %s\n", avRegexFile) > "/dev/stderr"
     avRegex = "^$"
 }
 
