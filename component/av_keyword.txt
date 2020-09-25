@@ -37,7 +37,7 @@ evilangel
 facialabuse
 fakedrivingschool
 familystrokes
-fc2([[:space:]_-]*ppv)?[[:space:]_-]*[0-9]{1,10}
+fc2([[:space:]_-]*ppv)?[[:space:]_-]*[0-9]{4,10}
 footjob
 foreveralonedude
 g[[:space:]_-]?queen
