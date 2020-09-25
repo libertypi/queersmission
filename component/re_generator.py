@@ -13,7 +13,7 @@ def read_file(file, optimize=False):
 
         if optimize:
             orgf = f.read()
-            org = orgf.splitlines()
+            org = tuple(i for i in orgf.splitlines() if i)
 
             rlist = [i.upper() for i in re_compute.extract_regex(*org)]
             rlist.sort()
@@ -41,22 +41,17 @@ def read_file(file, optimize=False):
 
 
 if __name__ == "__main__":
-    re_template = """(^|[^a-z0-9])(__AV_KEYWORD__|([1-9][0-9]{,2})?__AV_ID_PREFIX__(([[:space:]_-]|00)?[0-9]{2,6}|[0-9]{3,6}hhb[1-9]?))([^a-z0-9]|$)\n"""
-
     av_keyword = read_file("av_keyword.txt")
-    av_id_prefix = read_file("av_id_prefix.txt", True)
+    av_censored_id = read_file("av_censored_id.txt", optimize=True)
+    av_uncencored_id = read_file("av_uncencored_id.txt", optimize=True)
 
-    re_template = re_template.replace("__AV_KEYWORD__", av_keyword, 1).replace(
-        "__AV_ID_PREFIX__", av_id_prefix, 1
-    )
+    regex = f"(^|[^a-z0-9])({av_keyword}|[0-9]{{,4}}{av_censored_id}[[:space:]_-]*[0-9]{{2,6}}(hhb[1-9]?)?|{av_uncencored_id}[[:space:]_-]*[0-9]{{2,6}})([^a-z0-9]|$)\n"
 
-    with open(
-        os.path.join(sys.path[0], "av_regex.txt"), mode="r+", encoding="utf-8"
-    ) as f:
+    with open(os.path.join(sys.path[0], "av_regex.txt"), mode="r+", encoding="utf-8") as f:
         oldRegex = f.read()
-        if re_template != oldRegex:
+        if regex != oldRegex:
             f.seek(0)
-            f.write(re_template)
+            f.write(regex)
             f.truncate()
             print("Updated.")
         else:

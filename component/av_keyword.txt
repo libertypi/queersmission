@@ -1,6 +1,8 @@
 (3[01]|[12][0-9]|0[1-9]){3}[_-][0-9]{2,4}
 (5k|amateur|wow|girlsdo)porn
 (atk|tonights|cruel)girlfriends?
+(bd[_-]m|mkb?d[[:space:]_-]?s)[0-9]{2,3}
+(erotica|hard)x
 (exotic|tiny)4k
 (ftv|wow|t)girls
 (lethal|handson|party)hardcore
@@ -31,17 +33,16 @@ defloration
 devilsfilm
 digitalplayground
 dorcelclub
-eroticax
 evilangel
 facialabuse
 fakedrivingschool
 familystrokes
-fc2(ppv)?
+fc2([[:space:]_-]*ppv)?[[:space:]_-]*[0-9]{1,10}
 footjob
 foreveralonedude
 g[[:space:]_-]?queen
 gangbang
-girls[[:space:]_-]?delta
+girls([[:space:]_-]?delta|way)
 h4610
 hardcoreyouth
 hentai
@@ -69,7 +70,7 @@ realitykings
 sexart
 sharemybf
 siterip
-sm[_-]miracle
+sm[[:space:]_-]?miracle
 teenslove((huge|black)cocks|cream|money|anal)
 th101
 threesome

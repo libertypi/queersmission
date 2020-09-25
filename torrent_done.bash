@@ -64,7 +64,7 @@ handle_torrent_done() {
 
   else
 
-    if cp -rf "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" "${seed_dir}/" &&
+    if cp -rf "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" "${seed_dir}/" && get_tr_session_header &&
       query_tr_api "{\"arguments\":{\"ids\":[${TR_TORRENT_ID}],\"location\":\"${seed_dir}/\"},\"method\":\"torrent-set-location\"}"; then
       append_log "Finish" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
     else
@@ -82,7 +82,6 @@ get_tr_session_header() {
 }
 
 query_tr_api() {
-  [[ -z ${tr_session_header} ]] && get_tr_session_header
   for i in {1..4}; do
     if curl -sf --header "${tr_session_header}" "${tr_api}" -d "$@"; then
       printf '[DEBUG] Querying API success: "%s"\n' "$*" 1>&2
@@ -127,7 +126,7 @@ clean_local_disk() {
     done < <(jq -j '.arguments.torrents[]|"\(.name)\u0000"' <<<"${tr_json}")
 
     for i in [^.\#@]*; do
-      [[ -n ${names["${i}"]} ]] || {
+      [[ -z ${names["${i}"]} ]] && {
         append_log 'Cleanup' "${seed_dir}" "${i}"
         obsolete+=("${seed_dir}/${i}")
       }
@@ -165,7 +164,7 @@ clean_inactive_feed() {
     return
   }
 
-  if ((quota = 50 * (1024 ** 3), m = quota - diskSize + totalTorrentSize, n = quota - freeSpace, (target = m > n ? m : n) > 0)); then
+  if ((quota = 50 * 1024 ** 3, m = quota - diskSize + totalTorrentSize, n = quota - freeSpace, (target = m > n ? m : n) > 0)); then
     printf '[DEBUG] Disk free space: %d GiB, Space to free: %d GiB. Cleanup inactive feeds.\n' "$((freeSpace / 1024 ** 3))" "$((target / 1024 ** 3))" 1>&2
   else
     printf '[DEBUG] Disk free space: %d GiB. Skip action.\n' "$((freeSpace / 1024 ** 3))" 1>&2
