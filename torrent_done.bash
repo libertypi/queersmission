@@ -28,11 +28,11 @@ prepare() {
   if [[ -n ${TR_TORRENT_DIR} && -n ${TR_TORRENT_NAME} ]]; then
     flock -x "${i}"
     trDoneScript=1
-  elif ! flock -xn "${i}"; then
+  elif flock -xn "${i}"; then
+    trDoneScript=0
+  else
     printf '%s\n' 'Failed.' 1>&2
     exit 1
-  else
-    trDoneScript=0
   fi
 
   printf '%s\n' 'Done.' 1>&2
@@ -104,7 +104,7 @@ get_tr_info() {
   fi
   [[ -z ${tr_session_header} ]] && get_tr_session_header
   local result
-  if tr_json="$(query_tr_api '{"arguments":{"fields":["activityDate","status","sizeWhenDone","percentDone","trackerStats","id","name"]},"method":"torrent-get"}')" &&
+  if tr_json="$(query_tr_api '{"arguments":{"fields":["activityDate","id","name","percentDone","sizeWhenDone","status","trackerStats"]},"method":"torrent-get"}')" &&
     IFS='/' read -r result totalTorrentSize errorTorrents < <(jq -r '"\(.result)/\([.arguments.torrents[].sizeWhenDone]|add)/\([.arguments.torrents[]|select(.status<=0)]|length)"' <<<"${tr_json}") &&
     [[ ${result} == 'success' ]]; then
     printf '[DEBUG] Getting torrents info success, total size: %d GiB, stopped torrents: %d.\n' "$((totalTorrentSize / 1024 ** 3))" "${errorTorrents}" 1>&2
