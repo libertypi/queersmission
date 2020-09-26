@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 
-try:
-    import regex as re
-except:
-    import re
+import re
 from collections import defaultdict
 
 
@@ -66,9 +63,7 @@ def extract_regex(*strings: str) -> set:
                         i = j
                         if p == 0:
                             if j + 1 < length and string[j + 1] == "?":
-                                prefix.update(
-                                    {f"{p}{s}" for p in prefix for s in substr}
-                                )
+                                prefix.update({f"{p}{s}" for p in prefix for s in substr})
                                 j += 1
                                 i = j
                             else:
@@ -151,13 +146,7 @@ def compute_regex(words) -> str:
 
             for source in prefixs, posfixs:
                 for key, val in source.items():
-                    fullwords = tuple(
-                        sorted(
-                            f"{k}{v}" if source is prefixs else f"{v}{k}"
-                            for k in key
-                            for v in val
-                        )
-                    )
+                    fullwords = tuple(sorted(f"{k}{v}" if source is prefixs else f"{v}{k}" for k in key for v in val))
                     if fullwords not in connections:
                         orgLength = len("".join(fullwords))
                         preLength = None
@@ -168,14 +157,15 @@ def compute_regex(words) -> str:
 
                     if not preLength or OptLength < preLength:
                         connections[fullwords] = (
-                            (key, val, orgLength, OptLength)
-                            if source is prefixs
-                            else (val, key, orgLength, OptLength)
+                            (key, val, orgLength, OptLength) if source is prefixs else (val, key, orgLength, OptLength)
                         )
 
             for fullwords, prefix, posfix, _, _ in sorted(
                 ((k, *v) for k, v in connections.items()),
-                key=lambda x: (x[3] - x[4], -x[3],),
+                key=lambda x: (
+                    x[3] - x[4],
+                    -x[3],
+                ),
                 reverse=True,
             ):
                 if not words.issuperset(fullwords):
@@ -244,7 +234,10 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) == 2 and os.path.exists(sys.argv[1]):
-        with open(sys.argv[1], "r",) as f:
+        with open(
+            sys.argv[1],
+            "r",
+        ) as f:
             extracted = extract_regex(*f.read().lower().splitlines())
 
         computed = compute_regex(extracted)

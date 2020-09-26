@@ -45,13 +45,13 @@ if __name__ == "__main__":
     av_censored_id = read_file("av_censored_id.txt", optimize=True)
     av_uncencored_id = read_file("av_uncencored_id.txt", optimize=True)
 
-    regex = f"(^|[^a-z0-9])({av_keyword}|[0-9]{{,4}}{av_censored_id}[[:space:]_-]*[0-9]{{2,6}}(hhb[1-9]?)?|{av_uncencored_id}[[:space:]_-]*[0-9]{{2,6}})([^a-z0-9]|$)\n"
+    avReg = f"(^|[^a-z0-9])({av_keyword}|[0-9]{{,4}}{av_censored_id}[ _-]*[0-9]{{2,6}}(hhb[1-9]?)?|{av_uncencored_id}[ _-]*[0-9]{{2,6}})([^a-z0-9]|$)\n"
 
     with open(os.path.join(sys.path[0], "av_regex.txt"), mode="r+", encoding="utf-8") as f:
         oldRegex = f.read()
-        if regex != oldRegex:
+        if avReg != oldRegex:
             f.seek(0)
-            f.write(regex)
+            f.write(avReg)
             f.truncate()
             print("Updated.")
         else:
