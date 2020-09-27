@@ -6,14 +6,16 @@ from collections import defaultdict
 
 def extract_regex(*strings: str) -> set:
     result = set()
-    substr = set()
+    substr = []
     for string in strings:
-        prefix = {""}
-        substr.clear()
+        prefix = [""]
         length = len(string)
         i = j = 0
         while i < length:
-            if string[i] == "[":
+            if string[i] == "\\":
+                i += 1
+
+            elif string[i] == "[":
                 p = 1
                 for c, s in enumerate(string[i + 1 :]):
                     if s == "[":
@@ -37,19 +39,19 @@ def extract_regex(*strings: str) -> set:
                     else:
                         i = c
                 else:
-                    if i - j > 0:
-                        prefix = {f"{p}{string[j:i]}" for p in prefix}
+                    if i > j:
+                        prefix = [f"{p}{string[j:i]}" for p in prefix]
                     if posfix == "?":
                         i = c + 1
-                        prefix.update({f"{p}{c}" for p in prefix for c in s})
+                        prefix.extend(tuple(f"{p}{c}" for p in prefix for c in s))
                     else:
                         i = c
-                        prefix = {f"{p}{c}" for p in prefix for c in s}
+                        prefix = [f"{p}{c}" for p in prefix for c in s]
                     j = i + 1
 
             elif string[i] == "(":
-                if i - j > 0:
-                    prefix = {f"{p}{string[j:i]}" for p in prefix}
+                if i > j:
+                    prefix = [f"{p}{string[j:i]}" for p in prefix]
                 substr.clear()
                 p = 1
                 j = i + 1
@@ -59,15 +61,15 @@ def extract_regex(*strings: str) -> set:
                     elif string[j] == ")":
                         p -= 1
                     if p == 1 and string[j] == "|" or p == 0 and string[j] == ")":
-                        substr.update(extract_regex(string[i + 1 : j]))
+                        substr.extend(extract_regex(string[i + 1 : j]))
                         i = j
                         if p == 0:
                             if j + 1 < length and string[j + 1] == "?":
-                                prefix.update({f"{p}{s}" for p in prefix for s in substr})
+                                prefix.extend(tuple(f"{p}{s}" for p in prefix for s in substr))
                                 j += 1
                                 i = j
                             else:
-                                prefix = {f"{p}{s}" for p in prefix for s in substr}
+                                prefix = [f"{p}{s}" for p in prefix for s in substr]
                             j += 1
                             break
                     j += 1
@@ -75,8 +77,7 @@ def extract_regex(*strings: str) -> set:
                     raise ValueError(f"Unbalanced parenthesis: {string}")
 
             elif string[i] == "?":
-                prefix = {f"{p}{string[j:i-1]}" for p in prefix}
-                prefix.update({f"{p}{string[i-1]}" for p in prefix})
+                prefix = [s for p in prefix for s in (f"{p}{string[j:i-1]}", f"{p}{string[j:i-1]}{string[i-1]}")]
                 j = i + 1
 
             elif string[i] in "])}{":
@@ -84,8 +85,8 @@ def extract_regex(*strings: str) -> set:
 
             i += 1
 
-        if i - j > 0:
-            prefix = {f"{p}{string[j:]}" for p in prefix}
+        if i > j:
+            prefix = [f"{p}{string[j:]}" for p in prefix]
 
         result.update(prefix)
 
