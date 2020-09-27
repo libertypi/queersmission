@@ -58,7 +58,7 @@ def main():
     av_censored_id = optimize_regex(av_censored_id)
     av_uncencored_id = optimize_regex(av_uncencored_id)
 
-    avReg = f"(^|[^a-z0-9])({av_keyword}|{av_uncencored_id}[ _-]*[0-9]{{2,6}}|[0-9]{{,4}}{av_censored_id}[ _-]*[0-9]{{2,6}}(hhb[1-9]?)?)([^a-z0-9]|$)\n"
+    avReg = f"(^|[^a-z0-9])({av_keyword}|{av_uncencored_id}[ _-]*[0-9]{{2,6}}|[0-9]{{,4}}{av_censored_id}[ _-]*[0-9]{{2,6}})([^a-z0-9]|$)\n"
     write_file("av_regex.txt", avReg, checkDiff=True)
 
 

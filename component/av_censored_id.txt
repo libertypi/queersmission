@@ -7,7 +7,6 @@ abpn
 abs
 abw
 acme
-ad
 add
 adn
 adv
@@ -670,6 +669,7 @@ ienf
 iesm
 iesp
 ievd
+ifdve
 iga
 ikep
 ikst
