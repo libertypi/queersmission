@@ -33,6 +33,9 @@ def extract_regex(*strings: str) -> set:
 
                 if posfix in "*+":
                     i = c + 1
+                elif posfix == "{":
+                    i = string.find("}", c + 1)
+                    assert i > 0, f"Unmatched curly: {string}"
                 elif not s.isalnum():
                     if posfix in "?*+":
                         i = c + 1
@@ -64,7 +67,8 @@ def extract_regex(*strings: str) -> set:
                         substr.extend(extract_regex(string[i + 1 : j]))
                         i = j
                         if p == 0:
-                            if j + 1 < length and string[j + 1] == "?":
+                            posfix = string[j + 1] if j + 1 < length else "~"
+                            if posfix == "?":
                                 prefix.extend(tuple(f"{p}{s}" for p in prefix for s in substr))
                                 j += 1
                                 i = j
@@ -77,7 +81,7 @@ def extract_regex(*strings: str) -> set:
                     raise ValueError(f"Unbalanced parenthesis: {string}")
 
             elif string[i] == "?":
-                prefix = [s for p in prefix for s in (f"{p}{string[j:i-1]}", f"{p}{string[j:i-1]}{string[i-1]}")]
+                prefix = [s for p in prefix for s in (f"{p}{string[j:i-1]}", f"{p}{string[j:i]}")]
                 j = i + 1
 
             elif string[i] in "])}{":
@@ -211,6 +215,10 @@ def compute_regex(words) -> str:
 
 def unit_test(extracted: set, computed: str) -> bool:
     print("Matching test begin...")
+
+    if not isinstance(extracted, set):
+        extracted = set(extracted)
+
     regex = re.compile(computed, flags=re.IGNORECASE)
     for e in extracted:
         if not regex.fullmatch(e):
@@ -231,20 +239,16 @@ def unit_test(extracted: set, computed: str) -> bool:
 
 if __name__ == "__main__":
 
-    import os.path
-    import sys
+    from sys import argv, exit
 
-    if len(sys.argv) == 2 and os.path.exists(sys.argv[1]):
-        with open(
-            sys.argv[1],
-            "r",
-        ) as f:
-            extracted = extract_regex(*f.read().lower().splitlines())
+    if len(argv) > 2:
+        if argv[1] == "-e":
+            r = extract_regex(argv[2])
+            print(r)
+            exit()
+        elif argv[1] == "-c":
+            r = compute_regex([argv[2]])
+            print(r)
+            exit()
 
-        computed = compute_regex(extracted)
-        print(computed)
-        print()
-        print("Length:", len(computed))
-        unit_test(extracted, computed)
-    else:
-        print("Usage:\n{} <wordfile>".format(sys.argv[0]))
+    print("-e: extract, -c: compute")
