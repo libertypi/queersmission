@@ -4,7 +4,7 @@ export LC_ALL=C LANG=C
 
 cd "${BASH_SOURCE[0]%/*}/.."
 categorize="component/categorize.awk"
-avRegexFile="component/av_regex.txt"
+avRegexFile="../re-generator/av_regex/av_regex.txt"
 
 case $1 in
   1)
