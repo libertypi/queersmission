@@ -15,8 +15,8 @@ def read_file(file: str, extractWriteBack: bool = False):
 
         o_list = f.read().splitlines()
         s_list = {i.lower() for i in o_list if i}
-
         extracters = tuple(regen.Extractor(i) for i in s_list)
+
         if extractWriteBack:
             s_list = [j for i in extracters for j in i.get_text()]
         else:
@@ -70,9 +70,9 @@ def main():
     ucidExtractors, ucidList = read_file("av_uncensored_id.txt", extractWriteBack=True)
 
     remove = set(ucidList)
-    intersect = remove.intersection(cidList)
-    if intersect:
-        remove.difference_update(intersect)
+    removeLength = len(remove)
+    remove.difference_update(cidList)
+    if len(remove) != removeLength:
         ucidList = sorted(remove)
         ucidExtractors = tuple(regen.Extractor(i) for i in remove)
         write_file("av_uncensored_id.txt", "\n".join(ucidList), checkDiff=False)
