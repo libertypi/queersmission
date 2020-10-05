@@ -6,7 +6,7 @@ seed_dir='/volume2/@transmission'
 watch_dir='/volume1/video/Torrents'
 log_file='transmission.log'
 categorize='component/categorize.awk'
-avRegexFile="../re-generator/av_regex/av_regex.txt"
+avRegexFile="component/av_regex.txt"
 tr_api='http://localhost:9091/transmission/rpc'
 
 prepare() {
