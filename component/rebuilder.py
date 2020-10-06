@@ -15,7 +15,7 @@ def read_file(file: str, extractWriteBack: bool = False):
 
         o_list = f.read().splitlines()
         s_list = {i.lower() for i in o_list if i}
-        extracters = tuple(regen.Extractor(i) for i in s_list)
+        extracters = tuple(map(regen.Extractor, s_list))
 
         if extractWriteBack:
             s_list = [j for i in extracters for j in i.get_text()]
@@ -54,11 +54,12 @@ def write_file(file: str, content: str, checkDiff: bool = True):
         print(f"{file} updated.")
 
 
-def optimize_regex(extractors: list, wordlist: list, unittest=True):
+def optimize_regex(extractors: list, wordlist: list = None):
     computed = regen.Optimizer(*extractors).result
 
-    if unittest:
+    if wordlist is not None:
         regen.test_regex(regex=computed, wordlist=wordlist)
+        print("Regex test passed.")
 
     return computed
 
@@ -74,7 +75,7 @@ def main():
     remove.difference_update(cidList)
     if len(remove) != removeLength:
         ucidList = sorted(remove)
-        ucidExtractors = tuple(regen.Extractor(i) for i in remove)
+        ucidExtractors = map(regen.Extractor, remove)
         write_file("av_uncensored_id.txt", "\n".join(ucidList), checkDiff=False)
 
     av_keyword = "|".join(kwList)
