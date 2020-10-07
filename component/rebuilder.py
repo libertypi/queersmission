@@ -3,7 +3,6 @@
 import os.path
 import sys
 
-
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 import regenerator as regen
 
@@ -54,12 +53,21 @@ def write_file(file: str, content: str, checkDiff: bool = True):
         print(f"{file} updated.")
 
 
-def optimize_regex(extractors: list, wordlist: list = None):
+def optimize_regex(extractors: list, wordlist: list, name: str, test: bool = True) -> str:
     computed = regen.Optimizer(*extractors).result
 
-    if wordlist is not None:
+    concat = "|".join(wordlist)
+    if len(wordlist) > 1:
+        concat = f"({concat})"
+
+    diff = len(computed) - len(concat)
+    if diff > 0:
+        print(f"{name}: Computed regex is {diff} characters longer than concatenation, use the latter.")
+        return concat
+
+    if test:
         regen.test_regex(regex=computed, wordlist=wordlist)
-        print("Regex test passed.")
+        print(f"{name}: Regex test passed. Characters saved: {-diff}.")
 
     return computed
 
@@ -78,9 +86,12 @@ def main():
         ucidExtractors = map(regen.Extractor, remove)
         write_file("av_uncensored_id.txt", "\n".join(ucidList), checkDiff=False)
 
-    av_keyword = "|".join(kwList)
-    av_censored_id = optimize_regex(cidExtractors, cidList)
-    av_uncensored_id = optimize_regex(ucidExtractors, ucidList)
+    av_keyword = optimize_regex(kwExtractors, kwList, "Keywords", False)
+    if av_keyword.startswith("(") and av_keyword.endswith(")"):
+        av_keyword = av_keyword[1:-1]
+
+    av_censored_id = optimize_regex(cidExtractors, cidList, "Censored ID")
+    av_uncensored_id = optimize_regex(ucidExtractors, ucidList, "Uncensored ID")
 
     avReg = f"(^|[^a-z0-9])({av_keyword}|{av_uncensored_id}[ _-]*[0-9]{{2,6}}|[0-9]{{,4}}{av_censored_id}[ _-]*[0-9]{{2,6}})([^a-z0-9]|$)"
     write_file("av_regex.txt", avReg, checkDiff=True)
