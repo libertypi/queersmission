@@ -20,8 +20,7 @@ BEGIN {
     if (rootStat["type"] == "directory") {
         prefix = (length(rootPath) + 2)
         minSize = (80 * 1024 ^ 2)
-        sizeReached = 0
-        walkdir(rootPath, fsize)
+        walkdir(rootPath, fsize, 0)
         asorti(fsize, files, "@val_num_desc")
         pattern_match(files)
     } else {
@@ -36,7 +35,7 @@ function ext_match(files,  i, j, sum)
 {
     for (i = 1; i in files && i <= 3; i++) {
         switch (gensub(/^.*\./, "", 1, files[i])) {
-        case /^((bd|w)mv|3gp|asf|avi|flv|iso|m(2?ts|4p|[24kop]v|p([24]|e?g)|xf)|rm(vb)?|ts|vob|webm)$/:
+        case /^(3gp|asf|avi|bdmv|flv|iso|m(2?ts|4p|[24kop]v|p2|p4|pe?g|xf)|rm|rmvb|ts|vob|webm|wmv)$/:
             j = "film"
             break
         case /^((al?|fl)ac|ape|m4a|mp3|ogg|wav|wma)$/:
@@ -89,9 +88,9 @@ function pattern_match(files,  videos, n, i, j)
             output("av")
         }
         switch (files[j]) {
-        case /\y(([se]|ep[ _-]?)[0-9]{2}|s[0-9]{2}e[0-9]{2})\y/:
+        case /\y([es]|ep[ _-]?|s[0-9]{2}e)[0-9]{2}\y/:
             output("tv")
-        case /\.(avi|iso|m(4p|[24kop]v|p([24]|e?g))|rm(vb)?|wmv)$|\ybdmv\/index\.bdmv$/:
+        case /\.(avi|iso|m(4p|[24kop]v|p2|p4|pe?g)|rm|rmvb|wmv)$|\ybdmv\/index\.bdmv$/:
             videos[++i] = files[j]
         }
     }
@@ -99,7 +98,7 @@ function pattern_match(files,  videos, n, i, j)
         switch (files[1]) {
         case /\y(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)\y/:
             output("adobe")
-        case /\y(windows|mac(os)?|x(86|64)|(32|64)bit)\y/:
+        case /\y((32|64)bit|mac(os)?|windows|x64|x86)\y/:
             output()
         }
     } else if (i >= 3) {
@@ -168,7 +167,7 @@ function series_match(videos,  f, n, i, j, words, nums, groups, connected)
     }
 }
 
-function walkdir(dir, fsize,  fpath, fstat)
+function walkdir(dir, fsize, sizeReached,  fpath, fstat)
 {
     while ((getline < dir) > 0) {
         if ($2 ~ /^[.#@]/) {
@@ -191,7 +190,7 @@ function walkdir(dir, fsize,  fpath, fstat)
             fsize[fpath] += fstat["size"]
             break
         case "d":
-            walkdir(fpath, fsize)
+            walkdir(fpath, fsize, sizeReached)
         }
     }
     close(dir)
