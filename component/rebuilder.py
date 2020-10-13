@@ -56,11 +56,12 @@ def write_file(file: str, content: str, checkDiff: bool = True):
         try:
             with open(path, mode="r", encoding="utf-8") as f:
                 old = f.read()
+        except FileNotFoundError:
+            pass
+        else:
             if old == content:
                 print(f"{file} skiped.")
                 return
-        except FileNotFoundError:
-            pass
 
     with open(path, mode="w", encoding="utf-8") as f:
         f.write(content)
@@ -92,12 +93,12 @@ def main():
     av_censored_id = optimize_regex(cidRegen, "Censored ID")
     av_uncensored_id = optimize_regex(ucidRegen, "Uncensored ID")
 
-    avRegex = f"(^|[^a-z0-9])({av_keyword}|{av_uncensored_id}[ _-]*[0-9]{{2,6}}|[0-9]{{,4}}{av_censored_id}[ _-]*[0-9]{{2,6}})([^a-z0-9]|$)\n"
-    write_file("av_regex.txt", avRegex, checkDiff=True)
+    final_regex = f"(^|[^a-z0-9])({av_keyword}|{av_uncensored_id}[ _-]*[0-9]{{2,6}}|[0-9]{{,4}}{av_censored_id}[ _-]*[0-9]{{2,6}})([^a-z0-9]|$)\n"
+    write_file("av_regex.txt", final_regex, checkDiff=True)
 
     print("Regex:")
-    print(avRegex)
-    print("Length:", len(avRegex))
+    print(final_regex)
+    print("Length:", len(final_regex))
 
 
 if __name__ == "__main__":
