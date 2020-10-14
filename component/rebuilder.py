@@ -30,13 +30,13 @@ def read_file(file: str, extractWriteback: bool = False) -> Regen:
     return regen
 
 
-def optimize_regex(regen: Regen, name: str) -> str:
+def optimize_regex(regen: Regen, name: str, omitOuterParen: bool = False) -> str:
 
     wordlist = regen.wordlist
-    computed = regen.to_regex()
+    computed = regen.to_regex(omitOuterParen=omitOuterParen)
 
     concat = "|".join(wordlist)
-    if len(wordlist) > 1:
+    if not omitOuterParen and len(wordlist) > 1:
         concat = f"({concat})"
 
     diff = len(computed) - len(concat)
@@ -68,12 +68,6 @@ def write_file(file: str, content: str, checkDiff: bool = True):
         print(f"{file} updated.")
 
 
-def remove_outer_parentheses(s: str):
-    if s.startswith("(") and s.endswith(")") and s.count("(", 1, -1) == s.count(")", 1, -1):
-        return s[1:-1]
-    return s
-
-
 def main():
 
     kwRegen = read_file("av_keyword.txt", extractWriteback=False)
@@ -88,8 +82,7 @@ def main():
         ucidRegen = Regen(source)
         write_file("av_uncensored_id.txt", "\n".join(source) + "\n", checkDiff=False)
 
-    av_keyword = optimize_regex(kwRegen, "Keywords")
-    av_keyword = remove_outer_parentheses(av_keyword)
+    av_keyword = optimize_regex(kwRegen, "Keywords", omitOuterParen=True)
     av_censored_id = optimize_regex(cidRegen, "Censored ID")
     av_uncensored_id = optimize_regex(ucidRegen, "Uncensored ID")
 
