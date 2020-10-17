@@ -18,7 +18,7 @@ def read_file(file: str, extractWriteback: bool = False) -> Regen:
         regen = Regen(s_list)
 
         if extractWriteback:
-            s_list = regen.to_text()
+            s_list = list(regen.to_text())
 
         if o_list != s_list:
             f.seek(0)
