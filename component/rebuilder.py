@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 
-import os.path
 import sys
+from pathlib import Path
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../regenerator")))
+scriptDir = Path(__file__).parent
+sys.path.insert(0, str(scriptDir.joinpath("../../regenerator").resolve()))
+
 from regenerator import Regen
 
 
 def read_file(file: str, extractWriteback: bool = False) -> Regen:
 
-    path = os.path.join(os.path.dirname(__file__), file)
+    path = scriptDir / file
 
-    with open(path, mode="r+", encoding="utf-8") as f:
+    with path.open(mode="r+", encoding="utf-8") as f:
 
         o_list = f.read().splitlines()
         s_list = sorted({i.lower() for i in o_list if i})
@@ -49,23 +51,25 @@ def optimize_regex(regen: Regen, name: str, omitOuterParen: bool = False) -> str
     return computed
 
 
-def write_file(file: str, content: str, checkDiff: bool = True):
-    path = os.path.join(os.path.dirname(__file__), file)
+def write_file(file: str, content: str):
 
-    if checkDiff:
-        try:
-            with open(path, mode="r", encoding="utf-8") as f:
-                old = f.read()
-        except FileNotFoundError:
-            pass
-        else:
+    path = scriptDir / file
+
+    try:
+        with path.open(mode="r+", encoding="utf-8") as f:
+            old = f.read()
             if old == content:
                 print(f"{file} skiped.")
-                return
+            else:
+                f.seek(0)
+                f.write(content)
+                f.truncate()
+                print(f"{file} updated.")
 
-    with open(path, mode="w", encoding="utf-8") as f:
-        f.write(content)
-        print(f"{file} updated.")
+    except FileNotFoundError:
+        with path.open(mode="w", encoding="utf-8") as f:
+            f.write(content)
+            print(f"{file} updated.")
 
 
 def main():
@@ -80,14 +84,14 @@ def main():
     if sourceLen != len(source):
         source = sorted(source)
         ucidRegen = Regen(source)
-        write_file("av_uncensored_id.txt", "\n".join(source) + "\n", checkDiff=False)
+        write_file("av_uncensored_id.txt", "\n".join(source) + "\n")
 
     av_keyword = optimize_regex(kwRegen, "Keywords", omitOuterParen=True)
     av_censored_id = optimize_regex(cidRegen, "Censored ID")
     av_uncensored_id = optimize_regex(ucidRegen, "Uncensored ID")
 
     final_regex = f"(^|[^a-z0-9])({av_keyword}|{av_uncensored_id}[ _-]*[0-9]{{2,6}}|[0-9]{{,4}}{av_censored_id}[ _-]*[0-9]{{2,6}})([^a-z0-9]|$)\n"
-    write_file("av_regex.txt", final_regex, checkDiff=True)
+    write_file("av_regex.txt", final_regex)
 
     print("Regex:")
     print(final_regex)
