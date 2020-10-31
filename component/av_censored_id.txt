@@ -1185,6 +1185,7 @@ pcha
 pchd
 pdv
 pdz
+ped
 pep
 pet
 pgd
