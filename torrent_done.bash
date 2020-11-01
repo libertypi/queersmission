@@ -9,6 +9,8 @@ categorize='component/categorize.awk'
 avRegexFile="component/av_regex.txt"
 tr_api='http://localhost:9091/transmission/rpc'
 
+((quota = 100 * 1024 ** 3)) # Disk space quota: 100 GiB
+
 prepare() {
   debug=0
   while getopts dh i; do
@@ -154,7 +156,7 @@ clean_local_disk() {
 }
 
 clean_inactive_feed() {
-  local diskSize freeSpace quota target m n id size name ids names
+  local diskSize freeSpace target m n id size name ids names
 
   {
     read _
@@ -164,7 +166,7 @@ clean_inactive_feed() {
     return
   }
 
-  if ((quota = 50 * 1024 ** 3, m = quota - diskSize + totalTorrentSize, n = quota - freeSpace, (target = m > n ? m : n) > 0)); then
+  if ((m = quota - diskSize + totalTorrentSize, n = quota - freeSpace, (target = m > n ? m : n) > 0)); then
     printf '[DEBUG] Disk free space: %d GiB, Space to free: %d GiB. Cleanup inactive feeds.\n' "$((freeSpace / 1024 ** 3))" "$((target / 1024 ** 3))" 1>&2
   else
     printf '[DEBUG] Disk free space: %d GiB. Skip action.\n' "$((freeSpace / 1024 ** 3))" 1>&2
