@@ -108,6 +108,7 @@ get_tr_info() {
   if tr_json="$(query_tr_api '{"arguments":{"fields":["activityDate","id","name","percentDone","sizeWhenDone","status","trackerStats"]},"method":"torrent-get"}')" &&
     IFS='/' read -r result totalTorrentSize errorTorrents < <(jq -r '"\(.result)/\([.arguments.torrents[].sizeWhenDone]|add)/\([.arguments.torrents[]|select(.status<=0)]|length)"' <<<"${tr_json}") &&
     [[ ${result} == 'success' ]]; then
+
     printf '[DEBUG] Getting torrents info success, total size: %d GiB, stopped torrents: %d.\n' "$((totalTorrentSize / 1024 ** 3))" "${errorTorrents}" 1>&2
     ((debug)) && jq '.' <<<"${tr_json}" >'debug.json'
     return 0
@@ -128,7 +129,7 @@ clean_local_disk() {
     done < <(jq -j '.arguments.torrents[]|"\(.name)\u0000"' <<<"${tr_json}")
 
     for i in [^.\#@]*; do
-      [[ -z ${names["${i}"]} ]] && {
+      [[ -z ${names["${i}"]} && -z ${names["${i%.part}"]} ]] && {
         append_log 'Cleanup' "${seed_dir}" "${i}"
         obsolete+=("${seed_dir}/${i}")
       }
