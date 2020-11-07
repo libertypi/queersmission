@@ -43,6 +43,7 @@ er
 erika
 eyu
 fa
+fad
 fro
 gachi[a-z]*
 gag
@@ -110,6 +111,7 @@ mayuki
 mcb3d
 mcb3dbd
 mcbd
+mcdv
 mel
 merumo
 mia
