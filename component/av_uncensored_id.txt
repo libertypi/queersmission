@@ -192,14 +192,12 @@ ta
 tar
 thx
 tim
-to
 tob
 tom
 tos
 uch
 udd
 ugo
-us
 usu
 vai
 van
@@ -210,7 +208,6 @@ ver
 vin
 vla
 voa
-vol
 vor
 vrb
 wald

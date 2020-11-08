@@ -1,46 +1,45 @@
 #!/usr/bin/env python3
 
+import argparse
 import pickle
 import re
+import subprocess
 import sys
 from collections import Counter, defaultdict
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from pathlib import Path
 from urllib.parse import urljoin
-import subprocess
 
 import requests
 from lxml import html
 from torrentool.api import Torrent
 from torrentool.exceptions import TorrentoolException
 
-domain = "https://pt.m-team.cc/"
-page = "https://pt.m-team.cc/adult.php"
-id_finder = re.compile(r"\bid=(?P<id>[0-9]+)").search
+BASE_DIR = Path("/mnt/d/Downloads/jav")
+DOMAIN = "https://pt.m-team.cc/"
+link_id_finder = re.compile(r"\bid=(?P<id>[0-9]+)").search
 transmission_re = re.compile(r"\s+(?P<file>.+?) \([^)]+\)").fullmatch
 
-torrent_dir = Path("/mnt/d/Downloads/jav/torrent")
+
+def fetch(page: str, dir: Path, lo: int, hi: int):
+    with ThreadPoolExecutor(max_workers=None) as tex, ProcessPoolExecutor(max_workers=None) as pex:
+        links = as_completed(tex.submit(_get_link, page, i) for i in range(lo, hi + 1))
+        for future in as_completed(pex.submit(_fetch_torrent, link, dir) for f in links for link in f.result()):
+            yield future.result()
 
 
-def fetch_page(lo: int, hi: int):
-
-    with ThreadPoolExecutor(max_workers=None) as ex:
-        for future in as_completed(ex.submit(_get_link, i) for i in range(lo, hi + 1)):
-            for link in future.result():
-                yield link
-
-
-def _get_link(n: int):
+def _get_link(page: str, n: int):
 
     print("Fetching page:", n)
 
     for _ in range(3):
         try:
-            r = session.get(f"{page}?page={n}")
+            r = session.get(f"{page}?page={n}", timeout=7)
             r.raise_for_status()
-            break
         except requests.RequestException:
             pass
+        else:
+            break
     else:
         print(f"Downloading page {n} failed.")
         return ()
@@ -52,23 +51,16 @@ def _get_link(n: int):
     )
 
 
-def analyze_torrent(link: str, av_regex: re.Pattern.search):
+def _fetch_torrent(link: str, dir: Path):
 
-    print("Analyzing torrent:", link)
+    file = dir.joinpath(link_id_finder(link)["id"] + ".txt")
 
-    file = torrent_dir.joinpath(id_finder(link)["id"] + ".txt")
-
-    try:
-        with open(file, "r", encoding="utf-8") as f:
-            if not any(map(av_regex, f)):
-                f.seek(0)
-                return tuple(filter(is_video, f))
-
-    except FileNotFoundError:
+    if not file.exists():
+        print("Fetching torrent:", link)
 
         for _ in range(3):
             try:
-                content = session.get(urljoin(domain, link)).content
+                content = session.get(urljoin(DOMAIN, link), timeout=7).content
             except (requests.RequestException, AttributeError):
                 pass
             else:
@@ -79,7 +71,6 @@ def analyze_torrent(link: str, av_regex: re.Pattern.search):
 
         try:
             filelist = Torrent.from_string(content).files
-
             with open(file, "w", encoding="utf-8") as f:
                 f.writelines(i[0].lower() + "\n" for i in filelist)
 
@@ -108,70 +99,48 @@ def analyze_torrent(link: str, av_regex: re.Pattern.search):
             finally:
                 torrent_file.unlink(missing_ok=True)
 
-        return analyze_torrent(link, av_regex)
+    return file
 
 
-def is_video(string: str):
-    return string.rstrip().endswith((".mp4", ".wmv", ".avi", ".iso", ".m2ts"))
+def analyze_av(dir: Path, lo: int, hi: int):
 
-
-def main():
-
-    try:
-        if not all(s.isdigit() for s in sys.argv[1:]):
-            raise ValueError
-        if len(sys.argv) == 2:
-            lo = 1
-            hi = int(sys.argv[1])
-        else:
-            lo, hi = (int(i) for i in sys.argv[1:])
-    except (IndexError, ValueError):
-        print("Argument must be one or two integers.")
-        sys.exit()
-
-    try:
-        if not torrent_dir.exists():
-            torrent_dir.mkdir()
-    except OSError as e:
-        print(f'Creating "{torrent_dir}" failed: {e}')
-        sys.exit()
-
-    global session
-    with open(torrent_dir.with_name("data"), "rb") as f:
-        session = pickle.load(f)[4]
-
-    with open("av_regex.txt", "r") as f:
-        av_regex = re.compile(f.read().strip()).search
-
-    sep = "-" * 80 + "\n"
+    page = DOMAIN + "adult.php"
+    unmatched_file = BASE_DIR / "unmatched.txt"
+    freq_file = BASE_DIR / "freq.txt"
     total = unmatched = 0
-    unmatched_file = torrent_dir.with_name("unmatched.txt")
-    freq_file = torrent_dir.with_name("freq.txt")
+    sep = "-" * 80 + "\n"
 
-    id_searcher = re.compile(r"\b[0-9]*(?P<id>[a-z]{2,8})[ _-]?[0-9]{2,6}\b").search
+    prefix_searcher = re.compile(r"\b[0-9]*(?P<id>[a-z]{2,8})[ _-]?[0-9]{2,6}(hhb[0-9]?)?\b").search
     word_finder = re.compile(r"\w{3,}").findall
     id_count = defaultdict(set)
     word_count = Counter()
 
-    with ProcessPoolExecutor(max_workers=None) as ex, open(unmatched_file, "w", encoding="utf-8") as f:
+    with unmatched_file.open("w", encoding="utf-8") as f:
 
-        for future in as_completed(ex.submit(analyze_torrent, i, av_regex) for i in fetch_page(lo, hi)):
+        for file in fetch(page, dir, lo, hi):
 
-            total += 1
-            result = future.result()
+            try:
+                with file.open("r", encoding="utf-8") as t:
+                    total += 1
+                    if any(map(av_regex, t)):
+                        continue
+                    t.seek(0)
+                    result = tuple(filter(is_video, t))
+
+            except AttributeError:
+                continue
 
             if result:
                 unmatched += 1
-
                 f.write(sep)
                 f.writelines(result)
                 f.write("\n")
 
-                for m in filter(None, map(id_searcher, result)):
+                for m in filter(None, map(prefix_searcher, result)):
                     id_count[m["id"]].add(m.group())
 
-                for r in map(word_finder, result):
-                    word_count.update(r)
+                for m in map(word_finder, result):
+                    word_count.update(m)
 
         f.write(f"Total: {total}. Unmatched: {unmatched}.\n")
 
@@ -189,6 +158,72 @@ def main():
         f.writelines(f"{v:6d}: {k}\n" for v, k in word_count)
 
     print("Done.")
+
+
+def analyze_non_av(dir: Path, lo: int, hi: int):
+
+    page = DOMAIN + "torrents.php"
+    mismatched_file = BASE_DIR / "mismatched.txt"
+    count = defaultdict(list)
+    word_searcher = re.compile(r"[a-z]+").search
+
+    for file in fetch(page, dir, lo, hi):
+        try:
+            with file.open("r", encoding="utf-8") as f:
+                for m in filter(None, map(av_regex, f)):
+                    m = m.group()
+                    count[word_searcher(m).group()].append(m)
+        except AttributeError:
+            pass
+
+    count = [(i, k, set(v)) for k, v in count.items() if (i := len(v)) > 1]
+    count.sort(reverse=True)
+
+    with mismatched_file.open("w", encoding="utf-8") as f:
+        f.writelines(f"{l:6d}: {k:20}  {v}\n" for l, k, v in count)
+
+
+def is_video(string: str):
+    return string.rstrip().endswith((".mp4", ".wmv", ".avi", ".iso", ".m2ts"))
+
+
+def parse_arguments():
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-m", "--mismatch", dest="mismatch", action="store_true", help="test mismatch via regular torrents"
+    )
+    parser.add_argument(
+        "range", nargs=2, action="store", type=int, help="range of pages to be scaned, should be 2 integers"
+    )
+    return parser.parse_args()
+
+
+def main():
+
+    args = parse_arguments()
+
+    av_dir = BASE_DIR / "av"
+    non_av_dir = BASE_DIR / "non_av"
+    for dir in (av_dir, non_av_dir):
+        if not dir.exists():
+            try:
+                dir.mkdir(parents=True)
+            except OSError as e:
+                print(f'Creating "{dir}" failed: {e}')
+                sys.exit()
+
+    global session
+    global av_regex
+    with open(BASE_DIR / "data", "rb") as f:
+        session = pickle.load(f)[4]
+    with open("av_regex.txt", "r", encoding="utf-8") as f:
+        av_regex = re.compile(f.read().strip()).search
+
+    if args.mismatch:
+        analyze_non_av(non_av_dir, *args.range)
+    else:
+        analyze_av(av_dir, *args.range)
 
 
 if __name__ == "__main__":

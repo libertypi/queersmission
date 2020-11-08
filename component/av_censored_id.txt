@@ -22,7 +22,6 @@ agr
 ahshiro
 aikb
 aims
-air
 ajvr
 aka
 akb
@@ -76,7 +75,6 @@ armd
 armg
 arms
 arso
-asd
 asi
 asia
 aspc
@@ -126,13 +124,13 @@ bbss
 bbwm
 bcdp
 bcpv
+bcv
 bda
 bdd
 bdsm
 bdsr
 bdst
 beb
-bf
 bfaz
 bfd
 bgn
@@ -142,6 +140,7 @@ bhsp
 bid
 bijc
 bijn
+bikmvr
 bkd
 bkds
 bksp
@@ -175,7 +174,6 @@ bsk
 bst
 bstc
 bsy
-bt
 bth
 btha
 btis
@@ -232,7 +230,6 @@ cmv
 cnd
 cobbvr
 cod
-com
 con
 core
 cosbvr
@@ -307,6 +304,7 @@ dgc
 dgcead
 dgcesd
 dgkd
+dgl
 dgre
 dhjp
 dhsl
@@ -516,6 +514,7 @@ gbsa
 gcpr
 gdga
 gdhh
+gdju
 gdtm
 geki
 gen
@@ -546,6 +545,7 @@ gmen
 gmmd
 gnab
 gnax
+gne
 goal
 god
 godr
@@ -695,6 +695,7 @@ ifdve
 iga
 ikep
 ikst
+imbd
 impno
 impnob
 inct
@@ -829,6 +830,7 @@ kosp
 kp
 kpb
 kpp
+kray
 krbv
 krhk
 kri
@@ -1031,6 +1033,7 @@ mope
 mopg
 mopp
 mot
+mpd
 mrm
 mrsc
 mrss
@@ -1264,7 +1267,6 @@ psd
 psst
 psxa
 psz
-pt
 ptj
 ptko
 ptks
@@ -1301,6 +1303,7 @@ rct
 rctd
 rcts
 rd
+rdt
 rdvhj
 real
 rebd
@@ -1531,6 +1534,7 @@ td
 tdln
 tdp
 tek
+tem
 ten
 tenh
 tera
@@ -1574,7 +1578,6 @@ totte
 tppn
 tprm
 tpvr
-tr
 trac
 tre
 trg
@@ -1610,6 +1613,8 @@ tyod
 tywd
 tzz
 udak
+ufd
+ugug
 ukm
 uljm
 umd
