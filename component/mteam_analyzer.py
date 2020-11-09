@@ -18,7 +18,7 @@ from torrentool.exceptions import TorrentoolException
 BASE_DIR = Path("/mnt/d/Downloads/jav")
 DOMAIN = "https://pt.m-team.cc/"
 link_id_finder = re.compile(r"\bid=(?P<id>[0-9]+)").search
-transmission_re = re.compile(r"\s+(?P<file>.+?) \([^)]+\)").fullmatch
+transmission_split = re.compile(r"\s+(.+?) \([^)]+\)\n").findall
 
 
 def fetch(page: str, dir: Path, lo: int, hi: int):
@@ -82,15 +82,14 @@ def _fetch_torrent(link: str, dir: Path):
                 with open(torrent_file, "wb") as f:
                     f.write(content)
 
-                filelist = subprocess.check_output(("transmission-show", torrent_file), encoding="utf-8").splitlines()
-                filelist = "\n".join(m["file"] for m in map(transmission_re, filelist[filelist.index("FILES") :]) if m)
+                filelist = subprocess.check_output(("transmission-show", torrent_file), encoding="utf-8")
+                filelist = transmission_split(filelist, filelist.index("\n\nFILES\n\n"))
 
                 if not filelist:
                     raise ValueError
 
                 with open(file, "w", encoding="utf-8") as f:
-                    f.write(filelist.lower())
-                    f.write("\n")
+                    f.writelines(s.lower() + "\n" for s in filelist)
 
             except (subprocess.CalledProcessError, ValueError, OSError):
                 print(f'Parsing torrent error: "{link}"')
