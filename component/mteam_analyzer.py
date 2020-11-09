@@ -18,7 +18,7 @@ from torrentool.exceptions import TorrentoolException
 BASE_DIR = Path("/mnt/d/Downloads/jav")
 DOMAIN = "https://pt.m-team.cc/"
 link_id_finder = re.compile(r"\bid=(?P<id>[0-9]+)").search
-transmission_split = re.compile(r"\s+(.+?) \([^)]+\)\n").findall
+transmission_split = re.compile(r"^\s+(.+?) \([^)]+\)$", flags=re.MULTILINE).findall
 
 
 def fetch(page: str, dir: Path, lo: int, hi: int):
