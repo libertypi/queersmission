@@ -201,9 +201,9 @@ class JavReBuilder:
             flags=re.MULTILINE,
         ).search
 
-        for f in self.mtscraper.fetch(page, "av", 1, self.limit["mteam"]):
-            for m in filter(None, map(matcher, f)):
-                yield m.group(1, 2)
+        files = self.mtscraper.fetch(page, "av", 1, self.limit["mteam"])
+        for m in filter(None, map(matcher, chain.from_iterable(files))):
+            yield m.group(1, 2)
 
     def _scrape_javbus(self):
 
@@ -223,9 +223,7 @@ class JavReBuilder:
 
                     product = ((f"https://www.javbus.com/{base}/{i}", xpath) for i in range(idx, idx + step))
                     try:
-                        for result in filter(None, ex.map(self._scrap_jav, product)):
-                            for uid in result:
-                                yield uid
+                        yield from chain.from_iterable(filter(None, ex.map(self._scrap_jav, product)))
                     except LastPageReached:
                         ex.shutdown(wait=False)
                         break
@@ -241,9 +239,7 @@ class JavReBuilder:
             with ThreadPoolExecutor(max_workers=3) as ex:
                 product = ((f"{base}?page={i}", xpath) for i in range(1, self.limit["javdb"] + 1))
                 try:
-                    for result in filter(None, ex.map(self._scrap_jav, product)):
-                        for uid in result:
-                            yield uid
+                    yield from chain.from_iterable(filter(None, ex.map(self._scrap_jav, product)))
                 except LastPageReached:
                     ex.shutdown(wait=False)
 

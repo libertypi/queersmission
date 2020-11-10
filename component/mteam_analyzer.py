@@ -7,11 +7,12 @@ import subprocess
 import sys
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from itertools import chain
 from pathlib import Path
 from urllib.parse import urljoin
 
 import requests
-from lxml import html, etree
+from lxml import etree, html
 from torrentool.api import Torrent
 from torrentool.exceptions import TorrentoolException
 
@@ -151,8 +152,7 @@ def analyze_av(lo: int, hi: int):
                 for m in filter(None, map(prefix_searcher, result)):
                     id_count[m["id"]].add(m.group())
 
-                for m in map(word_finder, result):
-                    word_count.update(m)
+                word_count.update(chain.from_iterable(map(word_finder, result)))
 
         f.write(f"Total: {total}. Unmatched: {unmatched}.\n")
 
@@ -179,13 +179,13 @@ def analyze_non_av(lo: int, hi: int):
     count = defaultdict(list)
     word_searcher = re.compile(r"[a-z]+").search
 
-    for f in MteamScraper().fetch(page, "non_av", lo, hi):
-        for m in filter(None, map(av_regex, f)):
-            m = m.group()
-            try:
-                count[word_searcher(m).group()].append(m)
-            except AttributeError:
-                pass
+    files = MteamScraper().fetch(page, "non_av", lo, hi)
+    for m in filter(None, map(av_regex, chain.from_iterable(files))):
+        m = m.group()
+        try:
+            count[word_searcher(m).group()].append(m)
+        except AttributeError:
+            pass
 
     count = [(i, k, set(v)) for k, v in count.items() if (i := len(v)) > 1]
     count.sort(reverse=True)
