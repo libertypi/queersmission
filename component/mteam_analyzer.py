@@ -31,7 +31,6 @@ def fetch(page: str, dir: Path, lo: int, hi: int):
 def _get_link(page: str, n: int):
 
     print("Fetching page:", n)
-
     for _ in range(3):
         try:
             r = session.get(f"{page}?page={n}", timeout=7)
@@ -97,7 +96,7 @@ def _fetch_torrent(link: str, dir: Path):
 
             finally:
                 torrent_file.unlink(missing_ok=True)
-
+    print("return:", file)
     return file
 
 
@@ -190,12 +189,26 @@ def parse_arguments():
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "-m", "--mismatch", dest="mismatch", action="store_true", help="test mismatch via regular torrents"
+        "-m",
+        "--mismatch",
+        dest="mismatch",
+        action="store_true",
+        help="test mismatch via regular torrents",
     )
     parser.add_argument(
-        "range", nargs=2, action="store", type=int, help="range of pages to be scaned, should be 2 integers"
+        "range",
+        nargs="+",
+        action="store",
+        type=int,
+        help="range of pages to be scaned, should be 1 or 2 integers",
     )
-    return parser.parse_args()
+
+    args = parser.parse_args()
+    if len(args.range) == 1:
+        args.range.insert(0, 0)
+    elif len(args.range) != 2 or args.range[0] >= args.range[1]:
+        parser.error("Ranges should be 1 or 2 integers (low to high)")
+    return args
 
 
 def main():

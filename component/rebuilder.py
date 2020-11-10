@@ -57,8 +57,7 @@ def write_file(file: str, content: str):
 
     try:
         with path.open(mode="r+", encoding="utf-8") as f:
-            old = f.read()
-            if old == content:
+            if f.read() == content:
                 print(f"{file} skiped.")
             else:
                 f.seek(0)
@@ -75,22 +74,12 @@ def write_file(file: str, content: str):
 def main():
 
     kwRegen = read_file("av_keyword.txt", extractWriteback=False)
-    cidRegen = read_file("av_censored_id.txt", extractWriteback=True)
-    ucidRegen = read_file("av_uncensored_id.txt", extractWriteback=True)
-
-    source = set(ucidRegen.to_text())
-    sourceLen = len(source)
-    source.difference_update(cidRegen.to_text())
-    if sourceLen != len(source):
-        source = sorted(source)
-        ucidRegen = Regen(source)
-        write_file("av_uncensored_id.txt", "\n".join(source) + "\n")
+    idRegen = read_file("av_id_prefix.txt", extractWriteback=True)
 
     av_keyword = optimize_regex(kwRegen, "Keywords", omitOuterParen=True)
-    av_censored_id = optimize_regex(cidRegen, "Censored ID")
-    av_uncensored_id = optimize_regex(ucidRegen, "Uncensored ID")
+    av_id_prefix = optimize_regex(idRegen, "ID Prefix")
 
-    final_regex = f"(^|[^a-z0-9])({av_keyword}|{av_uncensored_id}[ _-]*[0-9]{{2,6}}|[0-9]{{,4}}{av_censored_id}[ _-]*[0-9]{{2,6}})([^a-z0-9]|$)\n"
+    final_regex = f"(^|[^a-z0-9])({av_keyword}|[0-9]{{,3}}{av_id_prefix}[ _-]?[0-9]{{2,6}})([^a-z0-9]|$)\n"
     write_file("av_regex.txt", final_regex)
 
     print("Regex:")
