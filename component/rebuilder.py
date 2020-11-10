@@ -188,8 +188,7 @@ class JavReBuilder:
     def _normalize_id(wordlist):
 
         matcher = re.compile(r"\s*([a-z]{3,6})[ _-]?0*([0-9]{2,4})(?:[^0-9]|$)").match
-        matches = map(matcher, map(str.lower, wordlist))
-        for m in filter(None, matches):
+        for m in filter(None, map(matcher, map(str.lower, wordlist))):
             yield m.group(1, 2)
 
     def _scrape_mteam(self):
