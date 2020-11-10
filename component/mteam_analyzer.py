@@ -6,103 +6,123 @@ import re
 import subprocess
 import sys
 from collections import Counter, defaultdict
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from urllib.parse import urljoin
 
 import requests
-from lxml import html
+from lxml import html, etree
 from torrentool.api import Torrent
 from torrentool.exceptions import TorrentoolException
 
 BASE_DIR = Path("/mnt/d/Downloads/jav")
-DOMAIN = "https://pt.m-team.cc/"
-link_id_finder = re.compile(r"\bid=(?P<id>[0-9]+)").search
-transmission_split = re.compile(r"^\s+(.+?) \([^)]+\)$", flags=re.MULTILINE).findall
 
 
-def fetch(page: str, dir: Path, lo: int, hi: int):
-    with ThreadPoolExecutor(max_workers=None) as tex, ProcessPoolExecutor(max_workers=None) as pex:
-        links = as_completed(tex.submit(_get_link, page, i) for i in range(lo, hi + 1))
-        for future in as_completed(pex.submit(_fetch_torrent, link, dir) for f in links for link in f.result()):
-            yield future.result()
+class MteamScraper:
 
+    DOMAIN = "https://pt.m-team.cc/"
 
-def _get_link(page: str, n: int):
+    def __init__(self, dir: Path = BASE_DIR) -> None:
 
-    print("Fetching page:", n)
-    for _ in range(3):
-        try:
-            r = session.get(f"{page}?page={n}", timeout=7)
-            r.raise_for_status()
-        except requests.RequestException:
-            pass
-        else:
-            break
-    else:
-        print(f"Downloading page {n} failed.")
-        return ()
+        self.base_dir = dir if isinstance(dir, Path) else Path(dir)
+        self.id_searcher = re.compile(r"\bid=(?P<id>[0-9]+)").search
+        self.transmission_split = re.compile(r"^\s+(.+?) \([^)]+\)$", flags=re.MULTILINE).findall
+        self.link_finder = etree.XPath(
+            '//*[@id="form_torrent"]/table[@class="torrents"]'
+            '//*[@class="torrenttr"]/table[@class="torrentname"]'
+            '//a[contains(@href, "download.php")]/@href'
+        )
 
-    return html.fromstring(r.content).xpath(
-        '//*[@id="form_torrent"]/table[@class="torrents"]/'
-        'tr/td[@class="torrenttr"]/table[@class="torrentname"]'
-        '//a[contains(@href, "download.php")]/@href'
-    )
+        with open(self.base_dir.joinpath("data"), "rb") as f:
+            self.session: requests.Session = pickle.load(f)[4]
 
+    def fetch(self, page: str, subdir: str, lo: int, hi: int):
 
-def _fetch_torrent(link: str, dir: Path):
+        page = self.DOMAIN + page
+        subdir = self.base_dir.joinpath(subdir)
 
-    file = dir.joinpath(link_id_finder(link)["id"] + ".txt")
+        with ThreadPoolExecutor(max_workers=None) as ex:
 
-    if not file.exists():
-        print("Fetching torrent:", link)
+            links = as_completed(ex.submit(self._get_link, page, i) for i in range(lo, hi + 1))
+            paths = as_completed(ex.submit(self._fetch_torrent, link, subdir) for f in links for link in f.result())
 
+            for future in paths:
+                try:
+                    with future.result().open("r", encoding="utf-8") as f:
+                        yield f
+                except AttributeError:
+                    pass
+
+    def _get_link(self, page: str, n: int):
+
+        print("Fetching page:", n)
         for _ in range(3):
             try:
-                content = session.get(urljoin(DOMAIN, link), timeout=7).content
-            except (requests.RequestException, AttributeError):
+                r = self.session.get(page, timeout=7, params={"page": n})
+                r.raise_for_status()
+            except requests.RequestException:
                 pass
             else:
                 break
         else:
-            print(f"Downloading torrent failed: {link}")
-            return
+            print(f"Downloading page {n} failed.")
+            return ()
 
-        try:
-            filelist = Torrent.from_string(content).files
-            with open(file, "w", encoding="utf-8") as f:
-                f.writelines(i[0].lower() + "\n" for i in filelist)
+        return self.link_finder(html.fromstring(r.content))
 
-        except (TorrentoolException, OSError, TypeError):
+    def _fetch_torrent(self, link: str, subdir: Path):
 
-            torrent_file = file.with_suffix(".torrent")
+        file = subdir.joinpath(self.id_searcher(link)["id"] + ".txt")
 
-            try:
-                with open(torrent_file, "wb") as f:
-                    f.write(content)
+        if not file.exists():
+            print("Fetching torrent:", link)
 
-                filelist = subprocess.check_output(("transmission-show", torrent_file), encoding="utf-8")
-                filelist = transmission_split(filelist, filelist.index("\n\nFILES\n\n"))
-
-                if not filelist:
-                    raise ValueError
-
-                with open(file, "w", encoding="utf-8") as f:
-                    f.writelines(s.lower() + "\n" for s in filelist)
-
-            except (subprocess.CalledProcessError, ValueError, OSError):
-                print(f'Parsing torrent error: "{link}"')
+            for _ in range(3):
+                try:
+                    content = self.session.get(urljoin(self.DOMAIN, link), timeout=7).content
+                except (requests.RequestException, AttributeError):
+                    pass
+                else:
+                    break
+            else:
+                print(f"Downloading torrent failed: {link}")
                 return
 
-            finally:
-                torrent_file.unlink(missing_ok=True)
-    print("return:", file)
-    return file
+            try:
+                filelist = Torrent.from_string(content).files
+                with open(file, "w", encoding="utf-8") as f:
+                    f.writelines(i[0].lower() + "\n" for i in filelist)
+
+            except (TorrentoolException, OSError, TypeError):
+
+                torrent_file = file.with_suffix(".torrent")
+
+                try:
+                    with open(torrent_file, "wb") as f:
+                        f.write(content)
+
+                    filelist = subprocess.check_output(("transmission-show", torrent_file), encoding="utf-8")
+                    filelist = self.transmission_split(filelist, filelist.index("\n\nFILES\n\n"))
+
+                    if not filelist:
+                        raise ValueError
+
+                    with open(file, "w", encoding="utf-8") as f:
+                        f.writelines(s.lower() + "\n" for s in filelist)
+
+                except (subprocess.CalledProcessError, ValueError, OSError):
+                    print(f'Parsing torrent error: "{link}"')
+                    return
+
+                finally:
+                    torrent_file.unlink(missing_ok=True)
+
+        return file
 
 
-def analyze_av(dir: Path, lo: int, hi: int):
+def analyze_av(lo: int, hi: int):
 
-    page = DOMAIN + "adult.php"
+    page = "adult.php"
     unmatched_file = BASE_DIR / "unmatched.txt"
     freq_file = BASE_DIR / "freq.txt"
     total = unmatched = 0
@@ -115,19 +135,13 @@ def analyze_av(dir: Path, lo: int, hi: int):
 
     with unmatched_file.open("w", encoding="utf-8") as f:
 
-        for file in fetch(page, dir, lo, hi):
-
-            try:
-                with file.open("r", encoding="utf-8") as t:
-                    total += 1
-                    if any(map(av_regex, t)):
-                        continue
-                    t.seek(0)
-                    result = tuple(filter(is_video, t))
-
-            except AttributeError:
+        for t in MteamScraper().fetch(page, "av", lo, hi):
+            total += 1
+            if any(map(av_regex, t)):
                 continue
 
+            t.seek(0)
+            result = tuple(filter(is_video, t))
             if result:
                 unmatched += 1
                 f.write(sep)
@@ -158,21 +172,20 @@ def analyze_av(dir: Path, lo: int, hi: int):
     print("Done.")
 
 
-def analyze_non_av(dir: Path, lo: int, hi: int):
+def analyze_non_av(lo: int, hi: int):
 
-    page = DOMAIN + "torrents.php"
+    page = "torrents.php"
     mismatched_file = BASE_DIR / "mismatched.txt"
     count = defaultdict(list)
     word_searcher = re.compile(r"[a-z]+").search
 
-    for file in fetch(page, dir, lo, hi):
-        try:
-            with file.open("r", encoding="utf-8") as f:
-                for m in filter(None, map(av_regex, f)):
-                    m = m.group()
-                    count[word_searcher(m).group()].append(m)
-        except AttributeError:
-            pass
+    for f in MteamScraper().fetch(page, "non_av", lo, hi):
+        for m in filter(None, map(av_regex, f)):
+            m = m.group()
+            try:
+                count[word_searcher(m).group()].append(m)
+            except AttributeError:
+                pass
 
     count = [(i, k, set(v)) for k, v in count.items() if (i := len(v)) > 1]
     count.sort(reverse=True)
@@ -215,9 +228,8 @@ def main():
 
     args = parse_arguments()
 
-    av_dir = BASE_DIR / "av"
-    non_av_dir = BASE_DIR / "non_av"
-    for dir in (av_dir, non_av_dir):
+    for dir in "av", "non_av":
+        dir = BASE_DIR.joinpath(dir)
         if not dir.exists():
             try:
                 dir.mkdir(parents=True)
@@ -225,17 +237,14 @@ def main():
                 print(f'Creating "{dir}" failed: {e}')
                 sys.exit()
 
-    global session
     global av_regex
-    with open(BASE_DIR / "data", "rb") as f:
-        session = pickle.load(f)[4]
-    with open("av_regex.txt", "r", encoding="utf-8") as f:
+    with open("regex.txt", "r", encoding="utf-8") as f:
         av_regex = re.compile(f.read().strip()).search
 
     if args.mismatch:
-        analyze_non_av(non_av_dir, *args.range)
+        analyze_non_av(*args.range)
     else:
-        analyze_av(av_dir, *args.range)
+        analyze_av(*args.range)
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ seed_dir='/volume2/@transmission'
 watch_dir='/volume1/video/Torrents'
 log_file='transmission.log'
 categorize='component/categorize.awk'
-avRegexFile="component/av_regex.txt"
+avRegexFile="component/regex.txt"
 tr_api='http://localhost:9091/transmission/rpc'
 
 ((quota = 100 * 1024 ** 3)) # Disk space quota: 100 GiB
