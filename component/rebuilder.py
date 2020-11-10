@@ -187,7 +187,7 @@ class JavReBuilder:
     @staticmethod
     def _normalize_id(wordlist):
 
-        matcher = re.compile(r"\s*([a-z]{3,6})[ _-]?0*([0-9]{2,4})").match
+        matcher = re.compile(r"\s*([a-z]{3,6})[ _-]?0*([0-9]{2,4})(?:[^0-9]|$)").match
         matches = map(matcher, map(str.lower, wordlist))
         for m in filter(None, matches):
             yield m.group(1, 2)
