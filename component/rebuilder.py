@@ -53,12 +53,13 @@ class MteamScraper:
 
         with ThreadPoolExecutor(max_workers=None) as ex:
 
-            links = as_completed(ex.submit(self._get_link, page, i) for i in range(lo, hi + 1))
-            paths = as_completed(ex.submit(self._fetch_torrent, i, subdir) for f in links for i in f.result())
-
-            for future in paths:
+            for ft in as_completed(
+                ex.submit(self._fetch_torrent, i, subdir)
+                for f in as_completed(ex.submit(self._get_link, page, i) for i in range(lo, hi + 1))
+                for i in f.result()
+            ):
                 try:
-                    with future.result().open("r", encoding="utf-8") as f:
+                    with ft.result().open("r", encoding="utf-8") as f:
                         yield f
                 except AttributeError:
                     pass
