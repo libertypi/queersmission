@@ -96,6 +96,7 @@ aobd
 aofr
 aoi
 aoz
+ap
 apaa
 apad
 apae
@@ -794,6 +795,7 @@ enki
 eosd
 erh
 erod
+eroteen
 erox
 ers
 esk
@@ -1008,6 +1010,7 @@ gon
 gone
 good
 gopj
+gorilla
 gotv
 gps
 gptm
@@ -1021,6 +1024,7 @@ grgr
 grmr
 groo
 gryd
+gs
 gsad
 gsd
 gshrb
@@ -1425,6 +1429,7 @@ kird
 kire
 kiri
 kisd
+kitaike
 kitd
 kiwvr
 kizn
@@ -1461,6 +1466,7 @@ kolvr
 konn
 kool
 kop
+kosatsu
 kosk
 koz
 kpb
@@ -2036,7 +2042,9 @@ ntsu
 nttr
 ntvf
 nubi
+nuht
 nuka
+nukimax
 numa
 nvs
 nwf
@@ -2158,6 +2166,7 @@ pap
 papa
 par
 parat
+parathd
 parm
 pas
 pat
@@ -2172,6 +2181,7 @@ pdz
 peach
 per
 pet
+peworld
 pfck
 pgd
 pgod
@@ -2204,6 +2214,7 @@ pmpd
 pms
 pmsd
 pna
+pnch
 pnvi
 poka
 pokp
@@ -2260,6 +2271,7 @@ pure
 puw
 pvh
 pvmb
+pvmk
 pwr
 pxd
 pxh
@@ -2284,6 +2296,7 @@ qrvr
 queen
 qvg
 qxl
+r18
 rabs
 rad
 radc
@@ -2311,6 +2324,7 @@ rct
 rctd
 rcts
 rctvr
+rda
 rdamd
 rdd
 rdkn
@@ -2453,6 +2467,7 @@ sdnd
 sdnm
 sdnt
 sdsi
+sdxx
 sdz
 sea
 see
@@ -2604,6 +2619,7 @@ sprm
 spro
 sps
 spsa
+spsh
 spz
 sqb
 sqis
@@ -2683,6 +2699,7 @@ sybi
 sykh
 syo
 syun
+t28
 taab
 taak
 tabete
@@ -2923,7 +2940,6 @@ vgs
 vic
 vicd
 vida
-video
 vikg
 vip
 vipd
