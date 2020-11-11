@@ -209,42 +209,33 @@ class JavREBuilder:
             omitOuterParen=False,
         )
 
-        self.regex = f"(^|[^a-z0-9])({kw_regex}|[0-9]{{,3}}{prefix_regex}[ _-]?[0-9]{{2,6}})([^a-z0-9]|$)\n"
-        self._update_file(self.output_file, self.regex)
+        if not (kw_regex and prefix_regex):
+            print("Generating regex failed.")
+            return
+
+        self.regex = f"(^|[^a-z0-9])({kw_regex}|[0-9]{{,3}}{prefix_regex}[ _-]?[0-9]{{2,6}})([^a-z0-9]|$)"
+        return self._update_file(self.output_file, lambda _: (self.regex,))[0]
 
     @staticmethod
-    def _update_file(file: Path, stragety):
-
-        is_str = isinstance(stragety, str)
+    def _update_file(file: Path, stragety) -> list:
 
         try:
             with file.open(mode="r+", encoding="utf-8") as f:
 
-                if is_str:
-                    old_list = f.read()
-                    result = stragety
-                else:
-                    old_list = f.read().splitlines()
-                    result = sorted(stragety(old_list))
+                old_list = f.read().splitlines()
+                result = sorted(stragety(old_list))
 
                 if old_list != result:
                     f.seek(0)
-                    if is_str:
-                        f.write(stragety)
-                    else:
-                        f.writelines(i + "\n" for i in result)
+                    f.writelines(i + "\n" for i in result)
                     f.truncate()
-
                     print(f"{file.name} updated.")
 
         except FileNotFoundError:
 
-            if not is_str:
-                return ()
-
-            result = stragety
+            result = stragety(())
             with file.open(mode="w", encoding="utf-8") as f:
-                f.write(result)
+                f.writelines(i + "\n" for i in result)
             print(f"{file.name} created.")
 
         return result
@@ -270,13 +261,13 @@ class JavREBuilder:
 
     def _web_scrape(self) -> set:
 
-        self.mtscraper = CJKMteamScraper()
-        self.session = self.mtscraper.session
+        mtscraper = CJKMteamScraper()
+        self.session = mtscraper.session
         self.session.cookies.set_cookie(
             requests.cookies.create_cookie(domain="www.javbus.com", name="existmag", value="all")
         )
 
-        uniq_id = set(self._scrape_mteam())
+        uniq_id = set(self._scrape_mteam(mtscraper))
         uniq_id.update(self._normalize_id(chain(self._scrape_javbus(), self._scrape_javdb(), self._scrape_github())))
 
         prefix_counter = Counter(map(itemgetter(0), uniq_id))
@@ -292,7 +283,8 @@ class JavREBuilder:
         for m in filter(None, map(matcher, map(str.lower, wordlist))):
             yield m.group(1, 2)
 
-    def _scrape_mteam(self):
+    @staticmethod
+    def _scrape_mteam(mtscraper: CJKMteamScraper):
 
         page = "adult.php?cat410=1&cat429=1&cat426=1&cat437=1&cat431=1&cat432=1"
         limit = 500
@@ -304,7 +296,7 @@ class JavREBuilder:
             flags=re.MULTILINE,
         ).search
 
-        for m in filter(None, map(matcher, chain.from_iterable(self.mtscraper.fetch(page, "av", 1, limit)))):
+        for m in filter(None, map(matcher, chain.from_iterable(mtscraper.fetch(page, "av", 1, limit)))):
             yield m.group(1, 2)
 
     def _scrape_javbus(self):
@@ -564,12 +556,10 @@ def main():
 
     if args.mode == "build":
 
-        builder = JavREBuilder(SCRIPT_DIR, args.fetch)
-        builder.run()
+        regex = JavREBuilder(SCRIPT_DIR, args.fetch).run()
 
-        print("Regex:")
-        print(builder.regex)
-        print("Length:", len(builder.regex))
+        print(f"\nResult ({len(regex)} chars):")
+        print(regex)
 
     else:
 
