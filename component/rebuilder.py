@@ -7,7 +7,7 @@ import subprocess
 import sys
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from itertools import chain
+from itertools import chain, filterfalse
 from operator import itemgetter
 from pathlib import Path
 from urllib.parse import urljoin
@@ -184,22 +184,91 @@ class CJKMteamScraper(MteamScraper):
 
 
 class JavREBuilder:
-    def __init__(
-        self, report_dir: Path, remove_rare: bool = False, deep_fetch: bool = False, rare_thresh: int = 5
-    ) -> None:
+    def __init__(self, report_dir: Path, fetch: bool = False):
 
         self.kw_file = report_dir.joinpath("keyword.txt")
         self.prefix_file = report_dir.joinpath("id_prefix.txt")
         self.whitelist_file = report_dir.joinpath("id_whitelist.txt")
-        self.rare_file = report_dir.joinpath("id_rare.txt")
+        self.blacklist_file = report_dir.joinpath("id_blacklist.txt")
         self.output_file = report_dir.joinpath("regex.txt")
 
-        self.remove_rare = remove_rare
-        if deep_fetch:
-            self.limit = {"mteam": 500, "javbus": float("inf"), "javdb": 80}
+        self.fetch = fetch
+
+    def run(self):
+
+        kw_regex = self._get_regex(
+            wordlist=self._update_file(self.kw_file, self._filter_strategy),
+            name="Keywords",
+            omitOuterParen=True,
+        )
+        self._kw_filter = re.compile(kw_regex).fullmatch
+
+        prefix_regex = self._get_regex(
+            wordlist=self._update_file(self.prefix_file, self._prefix_strategy),
+            name="ID Prefix",
+            omitOuterParen=False,
+        )
+
+        self.regex = f"(^|[^a-z0-9])({kw_regex}|[0-9]{{,3}}{prefix_regex}[ _-]?[0-9]{{2,6}})([^a-z0-9]|$)\n"
+        self._update_file(self.output_file, self.regex)
+
+    @staticmethod
+    def _update_file(file: Path, stragety):
+
+        is_str = isinstance(stragety, str)
+
+        try:
+            with file.open(mode="r+", encoding="utf-8") as f:
+
+                if is_str:
+                    old_list = f.read()
+                    result = stragety
+                else:
+                    old_list = f.read().splitlines()
+                    result = sorted(stragety(old_list))
+
+                if old_list != result:
+                    f.seek(0)
+                    if is_str:
+                        f.write(stragety)
+                    else:
+                        f.writelines(i + "\n" for i in result)
+                    f.truncate()
+
+                    print(f"{file.name} updated.")
+
+        except FileNotFoundError:
+
+            if not is_str:
+                return ()
+
+            result = stragety
+            with file.open(mode="w", encoding="utf-8") as f:
+                f.write(result)
+            print(f"{file.name} created.")
+
+        return result
+
+    def _prefix_strategy(self, old_list: list):
+
+        if self.fetch:
+            result = self._web_scrape()
         else:
-            self.limit = {"mteam": 20, "javbus": 50, "javdb": 20}
-        self.rare_thresh = rare_thresh
+            result = self._filter_strategy(old_list)
+
+        result.update(self._update_file(self.whitelist_file, self._extract_strategy))
+        result.difference_update(self._update_file(self.blacklist_file, self._extract_strategy))
+
+        return filterfalse(self._kw_filter, result)
+
+    def _extract_strategy(self, old_list: list):
+        return Regen(self._filter_strategy(old_list)).to_text()
+
+    @staticmethod
+    def _filter_strategy(wordlist: list):
+        return set(map(str.lower, filter(None, map(str.strip, wordlist))))
+
+    def _web_scrape(self) -> set:
 
         self.mtscraper = CJKMteamScraper()
         self.session = self.mtscraper.session
@@ -207,132 +276,50 @@ class JavREBuilder:
             requests.cookies.create_cookie(domain="www.javbus.com", name="existmag", value="all")
         )
 
-    def run(self):
+        uniq_id = set(self._scrape_mteam())
+        uniq_id.update(self._normalize_id(chain(self._scrape_javbus(), self._scrape_javdb(), self._scrape_github())))
 
-        self.kw_regex = self._read_file(self.kw_file, "Keywords", self._keyword_strategy, True)
-        self.fromweb = self._web_scrape(re.compile(self.kw_regex).fullmatch)
-        self.prefix_regex = self._read_file(self.prefix_file, "ID Prefix", self._prefix_strategy, False)
+        prefix_counter = Counter(map(itemgetter(0), uniq_id))
+        final = {k for k, v in prefix_counter.items() if v >= 5}
 
-        self.regex = f"(^|[^a-z0-9])({self.kw_regex}|[0-9]{{,3}}{self.prefix_regex}[ _-]?[0-9]{{2,6}})([^a-z0-9]|$)\n"
-        self._write_file(self.output_file, self.regex)
-
-    def _read_file(self, file: Path, name: str, strategy, omitParen: bool):
-
-        with file.open("r+", encoding="utf-8") as f:
-            old_list = f.read().splitlines()
-            new_list = strategy(old_list)
-
-            if old_list != new_list:
-                f.seek(0)
-                f.writelines(i + "\n" for i in new_list)
-                f.truncate()
-                print(f"{name} updated.")
-
-        return self._get_regex(new_list, name, omitParen)
-
-    def _keyword_strategy(self, old_list: list) -> list:
-        return sorted(self._normalize_file(old_list))
-
-    def _prefix_strategy(self, old_list: list) -> list:
-
-        new_set = set(Regen(self._normalize_file(old_list)).to_text())
-        new_set.difference_update(self.fromweb)
-
-        try:
-            with self.whitelist_file.open("r", encoding="utf-8") as f:
-                whitelist = self._normalize_file(f)
-            new_set.difference_update(whitelist)
-            self.fromweb.difference_update(whitelist)
-
-            self._write_file(self.whitelist_file, "\n".join(sorted(whitelist)) + "\n")
-        except FileNotFoundError:
-            pass
-
-        thresh = self.rare_thresh
-        get_count = self.prefix_counter.get
-        rare = [(i, k) for k in new_set if (i := get_count(k, 0)) < thresh]
-        rare.sort(reverse=True)
-
-        if rare and self.remove_rare:
-            new_set.difference_update(map(itemgetter(1), rare))
-        self._write_file(self.rare_file, "".join(f"{i}: {k}\n" for i, k in rare))
-
-        new_list = list(new_set)
-        new_list.extend(self.fromweb)
-        new_list.sort()
-        return new_list
-
-    @staticmethod
-    def _normalize_file(wordlist):
-        return set(map(str.lower, filter(None, map(str.strip, wordlist))))
-
-    @staticmethod
-    def _get_regex(wordlist: list, name: str, omitOuterParen: bool) -> str:
-
-        regen = Regen(wordlist)
-        computed = regen.to_regex(omitOuterParen=omitOuterParen)
-
-        concat = "|".join(wordlist)
-        if not omitOuterParen and len(wordlist) > 1:
-            concat = f"({concat})"
-
-        diff = len(computed) - len(concat)
-        if diff > 0:
-            print(f"{name}: Computed regex is {diff} characters longer than concatenation, use the latter.")
-            return concat
-
-        regen.verify_result()
-        print(f"{name}: Regex test passed. Characters saved: {-diff}.")
-        return computed
-
-    def _web_scrape(self, kw_filter: re.Pattern.fullmatch) -> set:
-
-        result = set(self._scrape_mteam())
-        result.update(self._normalize_id(chain(self._scrape_javbus(), self._scrape_javdb(), self._scrape_github())))
-
-        thresh = self.rare_thresh
-        self.prefix_counter = Counter(map(itemgetter(0), result))
-        final = {k for k, v in self.prefix_counter.items() if v >= thresh and not kw_filter(k)}
-
-        print(f"Uniq ID: {len(result)}. Unid prefix: {len(self.prefix_counter)}. Final: {len(final)}.")
+        print(f"Uniq ID: {len(uniq_id)}. Uniq prefix: {len(prefix_counter)}. Final: {len(final)}.")
         return final
 
     @staticmethod
     def _normalize_id(wordlist):
 
-        matcher = re.compile(r"\s*([a-z]{3,7})[ _-]?0*([0-9]{2,5})(?:[^0-9]|$)").match
+        matcher = re.compile(r"\s*([a-z]{3,7})[ _-]?0*([0-9]{2,6})\s*").fullmatch
         for m in filter(None, map(matcher, map(str.lower, wordlist))):
             yield m.group(1, 2)
 
     def _scrape_mteam(self):
 
         page = "adult.php?cat410=1&cat429=1&cat426=1&cat437=1&cat431=1&cat432=1"
-        print(f'Scraping MTeam... limit: {self.limit["mteam"]}')
+        limit = 500
+
+        print(f"Scanning MTeam... limit: {limit} pages")
 
         matcher = re.compile(
-            r"(?:^|/)(?:[0-9]{3})?([a-z]{3,6})-0*([0-9]{2,4})(?:hhb[0-9]?)?\b.*\.(?:mp4|wmv|avi|iso|m2ts)$",
+            r"(?:^|/)(?:[0-9]{3})?([a-z]{3,6})-0*([0-9]{2,4})(?:hhb[0-9]?)?\b.*\.(?:mp4|wmv|avi|iso)$",
             flags=re.MULTILINE,
         ).search
 
-        files = self.mtscraper.fetch(page, "av", 1, self.limit["mteam"])
-        for m in filter(None, map(matcher, chain.from_iterable(files))):
+        for m in filter(None, map(matcher, chain.from_iterable(self.mtscraper.fetch(page, "av", 1, limit)))):
             yield m.group(1, 2)
 
     def _scrape_javbus(self):
 
-        print(f'Scraping javbus... limit: {self.limit["javbus"]}')
+        print("Scanning javbus...")
         xpath = etree.XPath('//div[@id="waterfall"]//a[@class="movie-box"]//span/date[1]/text()')
-        step = min(self.limit["javbus"], 500)
+        step = 500
 
         for base in ("page", "uncensored/page", "genre/hd", "uncensored/genre/hd"):
             idx = 1
+            print(f"  /{base}: ", end="", flush=True)
 
             with ThreadPoolExecutor(max_workers=None) as ex:
-
-                while idx < self.limit["javbus"]:
-
-                    if self.limit["javbus"] == float("inf"):
-                        print(f"Page: {base}/{idx}")
+                while True:
+                    print(f"{idx}:{idx+step}...", end="", flush=True)
 
                     product = ((f"https://www.javbus.com/{base}/{i}", xpath) for i in range(idx, idx + step))
                     try:
@@ -342,15 +329,17 @@ class JavREBuilder:
                         break
 
                     idx += step
+            print()
 
     def _scrape_javdb(self):
 
-        print(f'Scraping javdb... limit: {self.limit["javdb"]}')
+        limit = 80
+        print(f"Scanning javdb...")
         xpath = etree.XPath('//*[@id="videos"]//a/div[@class="uid"]/text()')
 
         for base in ("https://javdb.com/uncensored", "https://javdb.com/"):
             with ThreadPoolExecutor(max_workers=3) as ex:
-                product = ((f"{base}?page={i}", xpath) for i in range(1, self.limit["javdb"] + 1))
+                product = ((f"{base}?page={i}", xpath) for i in range(1, limit + 1))
                 try:
                     yield from chain.from_iterable(filter(None, ex.map(self._scrap_jav, product)))
                 except LastPageReached:
@@ -371,8 +360,7 @@ class JavREBuilder:
             else:
                 return xpath(html.fromstring(res.content))
         else:
-            print("Downloading page error:", url)
-            raise requests.RequestException
+            raise requests.RequestException(f"Downloading page error: {url}")
 
     def _scrape_github(self):
 
@@ -388,21 +376,23 @@ class JavREBuilder:
             raise requests.RequestException
 
     @staticmethod
-    def _write_file(file: Path, string: str):
+    def _get_regex(wordlist: list, name: str, omitOuterParen: bool) -> str:
 
-        try:
-            with file.open(mode="r+", encoding="utf-8") as f:
-                if f.read() == string:
-                    return
-                f.seek(0)
-                f.write(string)
-                f.truncate()
+        regen = Regen(wordlist)
+        computed = regen.to_regex(omitOuterParen=omitOuterParen)
 
-        except FileNotFoundError:
-            with file.open(mode="w", encoding="utf-8") as f:
-                f.write(string)
+        concat = "|".join(wordlist)
+        if not omitOuterParen and len(wordlist) > 1:
+            concat = f"({concat})"
 
-        print(f"{file.name} updated.")
+        diff = len(computed) - len(concat)
+        if diff > 0:
+            print(f"{name}: Computed regex is {diff} characters longer than concatenation, use the latter.")
+            return concat
+
+        regen.verify_result()
+        print(f"{name}: Regex test passed. Characters saved: {-diff}.")
+        return computed
 
 
 def analyze_av(lo: int, hi: int, av_matcher: re.Pattern.search):
@@ -512,46 +502,41 @@ def analyze_non_av(lo: int, hi: int, av_matcher: re.Pattern.search):
 
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.RawTextHelpFormatter,
-        description=(
-            "build and test regex.\n"
-            "\nbuild:\n"
-            "   %(prog)s\n"
-            "   %(prog)s -r -d\n"
-            "\ntest:\n"
-            "   %(prog)s -m match\n"
-            "   %(prog)s -m match 100\n"
-            "   %(prog)s -m miss 500 600\n"
-        ),
+    parser = argparse.ArgumentParser(description="build and test regex.")
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "-b",
+        "--build",
+        dest="mode",
+        action="store_const",
+        const="build",
+        help="build and save regex to file (default)",
     )
+    group.add_argument(
+        "-t",
+        "--test-match",
+        dest="mode",
+        action="store_const",
+        const="test_match",
+        help="test regex with av torrents",
+    )
+    group.add_argument(
+        "-m",
+        "--test-miss",
+        dest="mode",
+        action="store_const",
+        const="test_miss",
+        help="test regex with non-av torrents",
+    )
+    group.set_defaults(mode="build")
 
     parser.add_argument(
-        "-m",
-        "--mode",
-        dest="mode",
-        action="store",
-        default="build",
-        choices=("build", "match", "miss"),
-        help=(
-            "build: build and save regex to file (default)\n"
-            "match: test regex with av torrents\n"
-            "miss: test regex with non-av torrents"
-        ),
-    )
-    parser.add_argument(
-        "-r",
-        "--remove-rare",
-        dest="remove_rare",
+        "-f",
+        "--fetch",
+        dest="fetch",
         action="store_true",
-        help="when building regex, remove rare id prefixes",
-    )
-    parser.add_argument(
-        "-d",
-        "--deep-fetch",
-        dest="deep_fetch",
-        action="store_true",
-        help="when building regex, fetch more torrents from web",
+        help="fetch id prefixes from web",
     )
     parser.add_argument(
         "range",
@@ -565,7 +550,7 @@ def parse_arguments():
     args = parser.parse_args()
 
     if args.mode != "build":
-        if len(args.range) == 1:
+        if len(args.range) == 1 and args.range[0] > 0:
             args.range.insert(0, 0)
         elif len(args.range) != 2 or args.range[0] >= args.range[1]:
             parser.error("Ranges should be 1 or 2 integers (low to high)")
@@ -579,7 +564,7 @@ def main():
 
     if args.mode == "build":
 
-        builder = JavREBuilder(SCRIPT_DIR, args.remove_rare, args.deep_fetch)
+        builder = JavREBuilder(SCRIPT_DIR, args.fetch)
         builder.run()
 
         print("Regex:")
@@ -600,7 +585,7 @@ def main():
         with open(SCRIPT_DIR.joinpath("regex.txt"), "r", encoding="utf-8") as f:
             av_matcher = re.compile(f.read().strip(), flags=re.MULTILINE).search
 
-        if args.mode == "match":
+        if args.mode == "test_match":
             analyze_av(*args.range, av_matcher)
         else:
             analyze_non_av(*args.range, av_matcher)

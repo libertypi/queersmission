@@ -8,7 +8,6 @@ aavm
 abba
 abc
 abcb
-abcd
 abev
 abf
 abg
@@ -152,7 +151,6 @@ ati
 atid
 atk
 atkd
-atm
 atmd
 atn
 atom
@@ -221,7 +219,6 @@ bdsr
 beb
 bebe
 bell
-bes
 bfaz
 bged
 bgn
@@ -752,7 +749,6 @@ eebh
 egd
 egt
 ehm
-eight
 eih
 eiki
 eikr
@@ -795,7 +791,6 @@ endx
 enfd
 enjk
 enki
-eosd
 erh
 erod
 eroteen
@@ -828,7 +823,6 @@ exvd
 exvr
 eyan
 eys
-eyu
 ezd
 faa
 fabs
@@ -837,7 +831,6 @@ fadss
 fai
 fajs
 fax
-faxx
 fbs
 fcdc
 fch
@@ -1028,7 +1021,6 @@ grmo
 grmr
 groo
 gryd
-gs
 gsad
 gsd
 gshrb
@@ -1260,7 +1252,6 @@ iptd
 ipvr
 ipx
 ipz
-iqpa
 iqqq
 ircp
 iro
@@ -1435,7 +1426,6 @@ kird
 kire
 kiri
 kisd
-kitaike
 kitd
 kiwvr
 kizn
@@ -1490,7 +1480,6 @@ kri
 krmv
 krnd
 kru
-krvs
 ksat
 ksbe
 ksbj
@@ -1500,7 +1489,6 @@ ksdo
 ksh
 ksko
 kst
-ksv
 ktb
 ktdh
 ktds
@@ -1744,7 +1732,6 @@ mgvr
 mhd
 mhip
 mhso
-mht
 mhv
 mhy
 miaa
@@ -2049,7 +2036,6 @@ ntsu
 nttr
 ntvf
 nubi
-nuht
 nuka
 nukimax
 numa
@@ -2105,7 +2091,6 @@ okyh
 okz
 oled
 ols
-omama
 omc
 omeg
 omnd
@@ -2185,7 +2170,6 @@ pcde
 pdv
 pdx
 pdz
-peach
 per
 pet
 peworld
@@ -2278,7 +2262,6 @@ pure
 puw
 pvh
 pvmb
-pvmk
 pwr
 pxd
 pxh
@@ -2288,7 +2271,6 @@ pyd
 pydvr
 pyld
 pym
-pypy
 pyu
 pzd
 pzo
@@ -2477,7 +2459,6 @@ sdsi
 sdxx
 sdz
 sea
-see
 seed
 sek
 sekao
@@ -2626,7 +2607,6 @@ sprm
 spro
 sps
 spsa
-spsh
 spz
 sqb
 sqis
@@ -2705,7 +2685,6 @@ sxvd
 sybi
 sykh
 syo
-syun
 t28
 taab
 taak
@@ -3023,7 +3002,6 @@ wow
 wpc
 wpe
 wplvr
-wpp
 wpvr
 wrc
 wrg
