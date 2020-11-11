@@ -12,6 +12,7 @@ abcd
 abev
 abf
 abg
+abnomal
 abod
 abon
 abp
@@ -318,6 +319,7 @@ bunc
 buno
 bur
 buz
+buzx
 bvd
 bwsd
 bxdr
@@ -339,6 +341,7 @@ cao
 caoh
 capi
 carem
+casmani
 casp
 cav
 cawd
@@ -1021,6 +1024,7 @@ grch
 grd
 gredb
 grgr
+grmo
 grmr
 groo
 gryd
@@ -1155,6 +1159,7 @@ hon
 honb
 hone
 hos
+hotvr
 hpd
 hpf
 hpl
@@ -1366,6 +1371,7 @@ jutn
 juvr
 jux
 juy
+jwebcam
 jykjv
 jym
 jzbd
@@ -1985,6 +1991,7 @@ nikm
 nima
 nin
 nine
+nip
 nise
 nit
 nitr
