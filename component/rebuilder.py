@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from itertools import chain, filterfalse
 from operator import itemgetter
 from pathlib import Path
+from typing import Callable, Iterable, Iterator, List, Set, TextIO, Tuple
 from urllib.parse import urljoin
 
 import requests
@@ -46,40 +47,35 @@ class MteamScraper:
         with open(self.base_dir.joinpath("data"), "rb") as f:
             self.session: requests.Session = pickle.load(f)[4]
 
-    def fetch(self, page: str, subdir: str, lo: int, hi: int):
+    def fetch(self, page: str, subdir: str, lo: int, hi: int) -> Iterator[TextIO]:
 
         page = self.DOMAIN + page
         subdir = self.base_dir.joinpath(subdir)
 
-        with ThreadPoolExecutor(max_workers=None) as ex:
+        with ThreadPoolExecutor(max_workers=None) as l_ex, ThreadPoolExecutor(max_workers=None) as t_ex:
 
-            for ft in as_completed(
-                ex.submit(self._fetch_torrent, i, subdir)
-                for f in as_completed(ex.submit(self._get_link, page, i) for i in range(lo, hi + 1))
-                for i in f.result()
-            ):
-                try:
-                    with ft.result().open("r", encoding="utf-8") as f:
-                        yield f
-                except AttributeError:
-                    pass
+            for l_ft in as_completed(l_ex.submit(self._get_link, page, i) for i in range(lo, hi + 1)):
+                for t_ft in as_completed(t_ex.submit(self._fetch_torrent, i, subdir) for i in l_ft.result()):
+                    try:
+                        with t_ft.result().open("r", encoding="utf-8") as f:
+                            yield f
+                    except AttributeError:
+                        pass
 
-    def _get_link(self, page: str, n: int):
+    def _get_link(self, page: str, n: int) -> List[str]:
 
         print("Fetching page:", n)
-        for _ in range(3):
+        for retry in range(3):
             try:
                 r = self.session.get(page, timeout=7, params={"page": n})
                 r.raise_for_status()
             except requests.RequestException:
-                pass
+                if retry == 2:
+                    raise
             else:
                 return self.link_finder(html.fromstring(r.content))
-        else:
-            print(f"Downloading page {n} failed.")
-            return ()
 
-    def _fetch_torrent(self, link: str, subdir: Path):
+    def _fetch_torrent(self, link: str, subdir: Path) -> Path:
 
         file = subdir.joinpath(self.id_searcher(link)["id"] + ".txt")
 
@@ -140,47 +136,26 @@ class CJKMteamScraper(MteamScraper):
         self.title_finder = etree.XPath('(.//a[contains(@href, "details.php")]/@title)[1]')
         self.link_finder = etree.XPath('(.//a[contains(@href, "download.php")]/@href)[1]')
 
-    def _get_link(self, page: str, n: int):
+    def _get_link(self, page: str, n: int) -> List[str]:
 
-        for _ in range(3):
+        for retry in range(3):
             try:
                 r = self.session.get(page, timeout=7, params={"page": n})
                 r.raise_for_status()
             except requests.RequestException:
-                pass
+                if retry == 2:
+                    raise
             else:
-                break
-        else:
-            print(f"Downloading page {n} failed.")
-            return ()
-
-        result = []
-        title_finder = self.title_finder
-        link_finder = self.link_finder
-        for table in self.table_finder(html.fromstring(r.content)):
-            try:
-                if self._contains_cjk(title_finder(table)[0]):
-                    result.append(link_finder(table)[0])
-            except IndexError:
-                pass
-        return result
-
-    @staticmethod
-    def _contains_cjk(string: str):
-        return any(
-            i <= c <= j
-            for c in map(ord, string)
-            for i, j in (
-                (4352, 4607),
-                (11904, 42191),
-                (43072, 43135),
-                (44032, 55215),
-                (63744, 64255),
-                (65072, 65103),
-                (65381, 65500),
-                (131072, 196607),
-            )
-        )
+                result = []
+                title_finder = self.title_finder
+                link_finder = self.link_finder
+                for table in self.table_finder(html.fromstring(r.content)):
+                    try:
+                        if contains_cjk(title_finder(table)[0]):
+                            result.append(link_finder(table)[0])
+                    except IndexError:
+                        pass
+                return result
 
 
 class JavREBuilder:
@@ -217,30 +192,25 @@ class JavREBuilder:
         return self._update_file(self.output_file, lambda _: (self.regex,))[0]
 
     @staticmethod
-    def _update_file(file: Path, stragety) -> list:
+    def _update_file(file: Path, stragety: Callable[[Iterable[str]], Iterable[str]]) -> List[str]:
 
         try:
-            with file.open(mode="r+", encoding="utf-8") as f:
-
-                old_list = f.read().splitlines()
-                result = sorted(stragety(old_list))
-
-                if old_list != result:
-                    f.seek(0)
-                    f.writelines(i + "\n" for i in result)
-                    f.truncate()
-                    print(f"{file.name} updated.")
-
+            f = file.open(mode="r+", encoding="utf-8")
+            old_list = f.read().splitlines()
         except FileNotFoundError:
-
-            result = stragety(())
-            with file.open(mode="w", encoding="utf-8") as f:
+            f = file.open(mode="w", encoding="utf-8")
+            old_list = []
+        finally:
+            result = sorted(stragety(old_list))
+            if old_list != result:
+                f.seek(0)
                 f.writelines(i + "\n" for i in result)
-            print(f"{file.name} created.")
-
+                f.truncate()
+                print(f"{file.name} updated.")
+            f.close()
         return result
 
-    def _prefix_strategy(self, old_list: list):
+    def _prefix_strategy(self, old_list: Iterable[str]) -> Iterator[str]:
 
         if self.fetch:
             result = self._web_scrape()
@@ -252,14 +222,14 @@ class JavREBuilder:
 
         return filterfalse(self._kw_filter, result)
 
-    def _extract_strategy(self, old_list: list):
+    def _extract_strategy(self, old_list: Iterable[str]) -> Iterator[str]:
         return Regen(self._filter_strategy(old_list)).to_text()
 
     @staticmethod
-    def _filter_strategy(wordlist: list):
+    def _filter_strategy(wordlist: Iterable[str]) -> Set[str]:
         return set(map(str.lower, filter(None, map(str.strip, wordlist))))
 
-    def _web_scrape(self) -> set:
+    def _web_scrape(self) -> Set[str]:
 
         mtscraper = CJKMteamScraper()
         self.session = mtscraper.session
@@ -277,14 +247,14 @@ class JavREBuilder:
         return final
 
     @staticmethod
-    def _normalize_id(wordlist):
+    def _normalize_id(wordlist: Iterable[str]) -> Iterator[Tuple[str, str]]:
 
         matcher = re.compile(r"\s*([a-z]{3,7})[ _-]?0*([0-9]{2,6})\s*").fullmatch
         for m in filter(None, map(matcher, map(str.lower, wordlist))):
             yield m.group(1, 2)
 
     @staticmethod
-    def _scrape_mteam(mtscraper: CJKMteamScraper):
+    def _scrape_mteam(mtscraper: CJKMteamScraper) -> Iterator[Tuple[str, str]]:
 
         page = "adult.php?cat410=1&cat429=1&cat426=1&cat437=1&cat431=1&cat432=1"
         limit = 500
@@ -299,7 +269,7 @@ class JavREBuilder:
         for m in filter(None, map(matcher, chain.from_iterable(mtscraper.fetch(page, "av", 1, limit)))):
             yield m.group(1, 2)
 
-    def _scrape_javbus(self):
+    def _scrape_javbus(self) -> Iterator[str]:
 
         print("Scanning javbus...")
         xpath = etree.XPath('//div[@id="waterfall"]//a[@class="movie-box"]//span/date[1]/text()')
@@ -308,22 +278,18 @@ class JavREBuilder:
         for base in ("page", "uncensored/page", "genre/hd", "uncensored/genre/hd"):
             idx = 1
             print(f"  /{base}: ", end="", flush=True)
-
             with ThreadPoolExecutor(max_workers=None) as ex:
                 while True:
                     print(f"{idx}:{idx+step}...", end="", flush=True)
-
-                    product = ((f"https://www.javbus.com/{base}/{i}", xpath) for i in range(idx, idx + step))
+                    args = ((f"https://www.javbus.com/{base}/{i}", xpath) for i in range(idx, idx + step))
                     try:
-                        yield from chain.from_iterable(filter(None, ex.map(self._scrap_jav, product)))
+                        yield from chain.from_iterable(ex.map(self._scrap_jav, args))
                     except LastPageReached:
-                        ex.shutdown(wait=False)
                         break
-
                     idx += step
             print()
 
-    def _scrape_javdb(self):
+    def _scrape_javdb(self) -> Iterator[str]:
 
         limit = 80
         print(f"Scanning javdb...")
@@ -331,44 +297,44 @@ class JavREBuilder:
 
         for base in ("https://javdb.com/uncensored", "https://javdb.com/"):
             with ThreadPoolExecutor(max_workers=3) as ex:
-                product = ((f"{base}?page={i}", xpath) for i in range(1, limit + 1))
+                args = ((f"{base}?page={i}", xpath) for i in range(1, limit + 1))
                 try:
-                    yield from chain.from_iterable(filter(None, ex.map(self._scrap_jav, product)))
+                    yield from chain.from_iterable(ex.map(self._scrap_jav, args))
                 except LastPageReached:
-                    ex.shutdown(wait=False)
+                    pass
 
-    def _scrap_jav(self, arg) -> list:
+    def _scrap_jav(self, args: Tuple) -> List[str]:
 
-        url, xpath = arg
+        url, xpath = args
 
         for _ in range(3):
             try:
                 res = self.session.get(url, timeout=7)
-                if res.status_code == 404:
-                    raise LastPageReached
                 res.raise_for_status()
+            except requests.HTTPError as e:
+                if e.response.status_code == 404:
+                    raise LastPageReached
             except requests.RequestException:
                 pass
             else:
                 return xpath(html.fromstring(res.content))
-        else:
-            raise requests.RequestException(f"Downloading page error: {url}")
 
-    def _scrape_github(self):
+        raise requests.RequestException(f"Connection error: {url}")
+
+    def _scrape_github(self) -> List[str]:
 
         url = "https://raw.githubusercontent.com/imfht/fanhaodaquan/master/data/codes.json"
         print("Downloading github database...")
 
-        for _ in range(3):
+        for retry in range(3):
             try:
                 return self.session.get(url).json()
             except requests.RequestException:
-                pass
-        else:
-            raise requests.RequestException
+                if retry == 2:
+                    raise
 
     @staticmethod
-    def _get_regex(wordlist: list, name: str, omitOuterParen: bool) -> str:
+    def _get_regex(wordlist: List[str], name: str, omitOuterParen: bool) -> str:
 
         regen = Regen(wordlist)
         computed = regen.to_regex(omitOuterParen=omitOuterParen)
@@ -387,7 +353,7 @@ class JavREBuilder:
         return computed
 
 
-def analyze_av(lo: int, hi: int, av_matcher: re.Pattern.search):
+def analyze_av(lo: int, hi: int, av_matcher: Callable):
 
     page = "adult.php"
     unmatched_file = REPORT_DIR / "unmatched.txt"
@@ -454,11 +420,7 @@ def analyze_av(lo: int, hi: int, av_matcher: re.Pattern.search):
     print(f"Done. Results saved to: \n{unmatched_file}\n{freq_file}")
 
 
-def is_video(string: str):
-    return string.rstrip().endswith((".mp4", ".wmv", ".avi", ".iso", ".m2ts"))
-
-
-def analyze_non_av(lo: int, hi: int, av_matcher: re.Pattern.search):
+def analyze_non_av(lo: int, hi: int, av_matcher: Callable):
 
     page = "torrents.php"
     mismatched_file = REPORT_DIR / "mismatched.txt"
@@ -491,6 +453,27 @@ def analyze_non_av(lo: int, hi: int, av_matcher: re.Pattern.search):
         f.writelines(f"{i:6d}  {j:6d}  {k:15}  {s}\n" for i, j, k, s in result)
 
     print(f"Done. Result saved to: {mismatched_file}")
+
+
+def is_video(string: str):
+    return string.rstrip().endswith((".mp4", ".wmv", ".avi", ".iso", ".m2ts"))
+
+
+def contains_cjk(string: str):
+    return any(
+        i <= c <= j
+        for c in map(ord, string)
+        for i, j in (
+            (4352, 4607),
+            (11904, 42191),
+            (43072, 43135),
+            (44032, 55215),
+            (63744, 64255),
+            (65072, 65103),
+            (65381, 65500),
+            (131072, 196607),
+        )
+    )
 
 
 def parse_arguments():
@@ -557,9 +540,9 @@ def main():
     if args.mode == "build":
 
         regex = JavREBuilder(SCRIPT_DIR, args.fetch).run()
-
-        print(f"\nResult ({len(regex)} chars):")
-        print(regex)
+        if regex is not None:
+            print(f"\nResult ({len(regex)} chars):")
+            print(regex)
 
     else:
 
@@ -570,7 +553,7 @@ def main():
                     dir.mkdir(parents=True)
             except OSError as e:
                 print(f'Creating "{dir}" failed: {e}')
-                sys.exit()
+                return
 
         with open(SCRIPT_DIR.joinpath("regex.txt"), "r", encoding="utf-8") as f:
             av_matcher = re.compile(f.read().strip(), flags=re.MULTILINE).search
