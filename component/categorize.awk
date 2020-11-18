@@ -107,22 +107,6 @@ function pattern_match(file_to_size, files, videos,  i, n, p)
     }
 }
 
-function ext_match(file_to_size, files, videos,  i, j, sum)
-{
-    for (i = 1; i in files && i <= 3; i++) {
-        if (files[i] in videos) {
-            j = "film"
-        } else if (files[i] ~ /\.((al?|fl)ac|ape|m4a|mp3|ogg|wav|wma)$/) {
-            j = "music"
-        } else {
-            j = "default"
-        }
-        sum[j] += file_to_size[files[i]]
-    }
-    asorti(sum, sum, "@val_num_desc")
-    output(sum[1])
-}
-
 function series_match(videos,  p, n, i, j, words, nums, groups, connected)
 {
     # Scan multiple videos to identify consecutive digits:
@@ -175,6 +159,22 @@ function series_match(videos,  p, n, i, j, words, nums, groups, connected)
             }
         }
     }
+}
+
+function ext_match(file_to_size, files, videos,  i, j, sum)
+{
+    for (i = 1; i in files && i <= 3; i++) {
+        if (files[i] in videos) {
+            j = "film"
+        } else if (files[i] ~ /\.((al?|fl)ac|ape|m4a|mp3|ogg|wav|wma)$/) {
+            j = "music"
+        } else {
+            j = "default"
+        }
+        sum[j] += file_to_size[files[i]]
+    }
+    asorti(sum, sum, "@val_num_desc")
+    output(sum[1])
 }
 
 function output(type,  dest, display)
