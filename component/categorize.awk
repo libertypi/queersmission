@@ -12,17 +12,17 @@ BEGIN {
     split("", files)
     split("", videos)
 
-    avRegex = read_av_regex(REGEX_FILE)
-    rootPath = (TR_TORRENT_DIR "/" TR_TORRENT_NAME)
-    stat(rootPath, rootStat)
+    av_regex = read_regex(REGEX_FILE)
+    root_path = (TR_TORRENT_DIR "/" TR_TORRENT_NAME)
+    stat(root_path, root_stat)
 
-    if (rootStat["type"] == "directory") {
-        pathOffset = (length(TR_TORRENT_DIR) + 2)
-        sizeReached = 0
-        sizeThresh = (80 * 1024 ^ 2)
-        walkdir(rootPath, file_to_size)
+    if (root_stat["type"] == "directory") {
+        path_offset = (length(TR_TORRENT_DIR) + 2)
+        size_reached = 0
+        size_thresh = (80 * 1024 ^ 2)
+        walkdir(root_path, file_to_size)
     } else {
-        file_to_size[tolower(TR_TORRENT_NAME)] = rootStat["size"]
+        file_to_size[tolower(TR_TORRENT_NAME)] = root_stat["size"]
     }
 
     pattern_match(file_to_size, files, videos)
@@ -34,7 +34,7 @@ BEGIN {
 }
 
 
-function read_av_regex(file,  line)
+function read_regex(file,  line)
 {
     while ((getline line < file) > 0) {
         if (line ~ /\S/) {
@@ -43,7 +43,7 @@ function read_av_regex(file,  line)
         }
     }
     close(file)
-    printf("[DEBUG] Reading regex from file failed: %s\n", file) > "/dev/stderr"
+    printf("[DEBUG] Awk: Reading regex failed: %s\n", file) > "/dev/stderr"
     return "^$"
 }
 
@@ -57,21 +57,22 @@ function walkdir(dir, file_to_size,  fpath, fstat)
         switch ($3) {
         case "f":
             stat(fpath, fstat)
-            if (fstat["size"] >= sizeThresh) {
-                if (! sizeReached) {
+            if (fstat["size"] >= size_thresh) {
+                if (! size_reached) {
                     delete file_to_size
-                    sizeReached = 1
+                    size_reached = 1
                 }
-            } else if (sizeReached) {
+            } else if (size_reached) {
                 continue
             }
 
-            fpath = tolower(substr(fpath, pathOffset))
+            fpath = tolower(substr(fpath, path_offset))
             if (match(fpath, /\/bdmv\/stream\/[^/]+\.m2ts$/)) {
                 fpath = (substr(fpath, 1, RSTART) "bdmv/index.bdmv")
             } else if (match(fpath, /\/video_ts\/[^/]+\.vob$/)) {
                 fpath = (substr(fpath, 1, RSTART) "video_ts/video_ts.vob")
             }
+
             file_to_size[fpath] += fstat["size"]
             break
         case "d":
@@ -95,7 +96,7 @@ function pattern_match(file_to_size, files, videos,  i, n, p)
         p = files[i]
         switch (p) {
         case /\.(3gp|asf|avi|bdmv|flv|iso|m(2?ts|4p|[24kop]v|p2|p4|pe?g|xf)|rm|rmvb|ts|vob|webm|wmv)$/:
-            if (p ~ avRegex) {
+            if (p ~ av_regex) {
                 output("av")
             } else if (p ~ /\y([es]|ep[ _-]?|s[0-9]{2}e)[0-9]{2}\y/) {
                 output("tv")
@@ -196,7 +197,7 @@ function output(type,  dest, display)
         display = "/volume1/homes/admin/Download"
     }
 
-    if (rootStat["type"] == "file") {
+    if (root_stat["type"] == "file") {
         dest = (display "/" (gensub(/\.[^./]*$/, "", 1, TR_TORRENT_NAME)))
     } else {
         dest = display
