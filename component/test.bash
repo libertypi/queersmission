@@ -4,7 +4,7 @@ export LC_ALL=C LANG=C
 
 cd "${BASH_SOURCE[0]%/*}/.."
 categorize="component/categorize.awk"
-avRegexFile="component/regex.txt"
+regex_file="component/regex.txt"
 
 case $1 in
   1)
@@ -47,8 +47,7 @@ for TR_TORRENT_NAME in "${files[@]}"; do
   for i in dest dest_display; do
     IFS= read -r -d '' "$i"
   done < <(
-    awk -v avRegexFile="${avRegexFile}" -v torrentDir="${TR_TORRENT_DIR}" -v torrentName="${TR_TORRENT_NAME}" -f "${categorize}"
-	# awk -v avRegexFile="${avRegexFile}" -v torrentDir="${TR_TORRENT_DIR}" -v torrentName="${TR_TORRENT_NAME}" --profile="component/profile/${TR_TORRENT_NAME}.awk" -f "${categorize}"
+    awk -v REGEX_FILE="${regex_file}" -v TR_TORRENT_DIR="${TR_TORRENT_DIR}" -v TR_TORRENT_NAME="${TR_TORRENT_NAME}" -f "${categorize}"
   )
 
   if [[ ${TR_TORRENT_DIR} != '/volume2/@transmission' && ${dest_display} != "${TR_TORRENT_DIR}" ]]; then

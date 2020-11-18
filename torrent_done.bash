@@ -6,7 +6,7 @@ seed_dir='/volume2/@transmission'
 watch_dir='/volume1/video/Torrents'
 log_file='transmission.log'
 categorize='component/categorize.awk'
-avRegexFile="component/regex.txt"
+regex_file="component/regex.txt"
 tr_api='http://localhost:9091/transmission/rpc'
 
 ((quota = 100 * 1024 ** 3)) # Disk space quota: 100 GiB
@@ -55,7 +55,7 @@ handle_torrent_done() {
     for i in dest dest_display; do
       IFS= read -r -d '' "$i"
     done < <(
-      awk -v avRegexFile="${avRegexFile}" -v torrentDir="${TR_TORRENT_DIR}" -v torrentName="${TR_TORRENT_NAME}" -f "${categorize}"
+      awk -v REGEX_FILE="${regex_file}" -v TR_TORRENT_DIR="${TR_TORRENT_DIR}" -v TR_TORRENT_NAME="${TR_TORRENT_NAME}" -f "${categorize}"
     )
 
     if [[ -d ${dest} ]] || mkdir -p "${dest}" && cp -rf "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" "${dest}/"; then

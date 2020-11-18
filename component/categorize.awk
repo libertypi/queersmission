@@ -1,10 +1,8 @@
 @load "readdir"
 @load "filefuncs"
 
-# Usage: awk -v avRegexFile="${avRegexFile}" -v torrentDir="${TR_TORRENT_DIR}" -v torrentName="${TR_TORRENT_NAME}" -f "${categorize}"
-
 BEGIN {
-    if (avRegexFile == "" || torrentDir == "" || torrentName == "") {
+    if (REGEX_FILE == "" || TR_TORRENT_DIR == "" || TR_TORRENT_NAME == "") {
         print("[DEBUG] Awk: Invalid parameter.") > "/dev/stderr"
         output()
     }
@@ -14,17 +12,17 @@ BEGIN {
     split("", files)
     split("", videos)
 
-    avRegex = read_av_regex(avRegexFile)
-    rootPath = (torrentDir "/" torrentName)
+    avRegex = read_av_regex(REGEX_FILE)
+    rootPath = (TR_TORRENT_DIR "/" TR_TORRENT_NAME)
     stat(rootPath, rootStat)
 
     if (rootStat["type"] == "directory") {
-        pathOffset = (length(torrentDir) + 2)
+        pathOffset = (length(TR_TORRENT_DIR) + 2)
         sizeReached = 0
         sizeThresh = (80 * 1024 ^ 2)
         walkdir(rootPath, file_to_size)
     } else {
-        file_to_size[tolower(torrentName)] = rootStat["size"]
+        file_to_size[tolower(TR_TORRENT_NAME)] = rootStat["size"]
     }
 
     pattern_match(file_to_size, files, videos)
@@ -202,7 +200,7 @@ function output(type,  dest, display)
     }
 
     if (rootStat["type"] == "file") {
-        dest = (display "/" (gensub(/\.[^./]*$/, "", 1, torrentName)))
+        dest = (display "/" (gensub(/\.[^./]*$/, "", 1, TR_TORRENT_NAME)))
     } else {
         dest = display
     }
