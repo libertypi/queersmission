@@ -69,6 +69,8 @@ function walkdir(dir, file_to_size,  fpath, fstat)
             fpath = tolower(substr(fpath, pathOffset))
             if (match(fpath, /\/bdmv\/stream\/[^/]+\.m2ts$/)) {
                 fpath = (substr(fpath, 1, RSTART) "bdmv/index.bdmv")
+            } else if (match(fpath, /\/video_ts\/[^/]+\.vob$/)) {
+                fpath = (substr(fpath, 1, RSTART) "video_ts/video_ts.vob")
             }
             file_to_size[fpath] += fstat["size"]
             break
