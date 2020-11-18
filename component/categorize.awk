@@ -10,152 +10,164 @@ BEGIN {
     }
 
     FS = "/"
-    read_av_regex()
+    split("", file_to_size)
+    split("", files)
+    split("", videos)
+
+    avRegex = read_av_regex(avRegexFile)
     rootPath = (torrentDir "/" torrentName)
     stat(rootPath, rootStat)
 
-    files[1] = tolower(torrentName)
-    pattern_match(files)
-
     if (rootStat["type"] == "directory") {
-        prefix = (length(rootPath) + 2)
-        minSize = (80 * 1024 ^ 2)
-        walkdir(rootPath, fsize, 0)
-        asorti(fsize, files, "@val_num_desc")
-        pattern_match(files)
+        pathOffset = (length(torrentDir) + 2)
+        sizeReached = 0
+        sizeThresh = (80 * 1024 ^ 2)
+        walkdir(rootPath, file_to_size)
     } else {
-        fsize[files[1]] = rootStat["size"]
+        file_to_size[tolower(torrentName)] = rootStat["size"]
     }
 
-    ext_match(files)
+    pattern_match(file_to_size, files, videos)
+
+    if (length(videos) >= 3)
+        series_match(videos)
+
+    ext_match(file_to_size, files, videos)
 }
 
 
-function ext_match(files,  i, j, sum)
+function read_av_regex(file,  line)
 {
-    for (i = 1; i in files && i <= 3; i++) {
-        switch (gensub(/^.*\./, "", 1, files[i])) {
-        case /^(3gp|asf|avi|bdmv|flv|iso|m(2?ts|4p|[24kop]v|p2|p4|pe?g|xf)|rm|rmvb|ts|vob|webm|wmv)$/:
-            j = "film"
+    while ((getline line < file) > 0) {
+        if (line ~ /\S/) {
+            close(file)
+            return line
+        }
+    }
+    close(file)
+    printf("[DEBUG] Reading regex from file failed: %s\n", file) > "/dev/stderr"
+    return "^$"
+}
+
+function walkdir(dir, file_to_size,  fpath, fstat)
+{
+    while ((getline < dir) > 0) {
+        if ($2 ~ /^[.#@]/) {
+            continue
+        }
+        fpath = (dir "/" $2)
+        switch ($3) {
+        case "f":
+            stat(fpath, fstat)
+            if (fstat["size"] >= sizeThresh) {
+                if (! sizeReached) {
+                    delete file_to_size
+                    sizeReached = 1
+                }
+            } else if (sizeReached) {
+                continue
+            }
+
+            fpath = tolower(substr(fpath, pathOffset))
+            if (match(fpath, /\/bdmv\/stream\/[^/]+\.m2ts$/)) {
+                fpath = (substr(fpath, 1, RSTART) "bdmv/index.bdmv")
+            }
+            file_to_size[fpath] += fstat["size"]
             break
-        case /^((al?|fl)ac|ape|m4a|mp3|ogg|wav|wma)$/:
-            j = "music"
+        case "d":
+            walkdir(fpath, file_to_size)
+        }
+    }
+    close(dir)
+}
+
+function pattern_match(file_to_size, files, videos,  i, n, p)
+{
+    # set 2 arrays: files, videos
+    # files[1]: path
+    # ...
+    # (sorted by filesize (largest first))
+    # videos[path]
+    # ...
+    n = asorti(file_to_size, files, "@val_num_desc")
+    for (i = 1; i <= n; i++) {
+        p = files[i]
+        switch (p) {
+        case /\.(3gp|asf|avi|bdmv|flv|iso|m(2?ts|4p|[24kop]v|p2|p4|pe?g|xf)|rm|rmvb|ts|vob|webm|wmv)$/:
+            if (p ~ avRegex) {
+                output("av")
+            } else if (p ~ /\y([es]|ep[ _-]?|s[0-9]{2}e)[0-9]{2}\y/) {
+                output("tv")
+            }
+            videos[p]
             break
-        default:
-            j = "default"
-        }
-        sum[j] += fsize[files[i]]
-    }
-    asorti(sum, sum, "@val_num_desc")
-    output(sum[1])
-}
-
-function output(type,  dest, destDisply)
-{
-    switch (type) {
-    case "av":
-        dest = "/volume1/driver/Temp"
-        break
-    case "film":
-        dest = "/volume1/video/Films"
-        break
-    case "tv":
-        dest = "/volume1/video/TV Series"
-        break
-    case "music":
-        dest = "/volume1/music/Download"
-        break
-    case "adobe":
-        dest = "/volume1/homes/admin/Download/Adobe"
-        break
-    default:
-        dest = "/volume1/homes/admin/Download"
-    }
-    destDisply = dest
-    if (rootStat["type"] == "file") {
-        dest = (dest "/" (gensub(/\.[^./]*$/, "", 1, torrentName)))
-    }
-    printf "%s\000%s\000", dest, destDisply
-    exit 0
-}
-
-function pattern_match(files,  videos, n, i, j)
-{
-    n = length(files)
-    i = 0
-    for (j = 1; j <= n; j++) {
-        if (files[j] ~ avRegex) {
-            output("av")
-        }
-        switch (files[j]) {
-        case /\y([es]|ep[ _-]?|s[0-9]{2}e)[0-9]{2}\y/:
-            output("tv")
-        case /\.(avi|iso|m(4p|[24kop]v|p2|p4|pe?g)|rm|rmvb|wmv)$|\ybdmv\/index\.bdmv$/:
-            videos[++i] = files[j]
-        }
-    }
-    if (n == 1) {
-        switch (files[1]) {
         case /\y(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)\y/:
             output("adobe")
         case /\y((32|64)bit|mac(os)?|windows|x64|x86)\y/:
             output()
         }
-    } else if (i >= 3) {
-        series_match(videos)
     }
 }
 
-function read_av_regex()
+function ext_match(file_to_size, files, videos,  i, j, sum)
 {
-    while ((getline avRegex < avRegexFile) > 0) {
-        if (avRegex ~ /\S/) {
-            close(avRegexFile)
-            return
+    for (i = 1; i in files && i <= 3; i++) {
+        if (files[i] in videos) {
+            j = "film"
+        } else if (files[i] ~ /\.((al?|fl)ac|ape|m4a|mp3|ogg|wav|wma)$/) {
+            j = "music"
+        } else {
+            j = "default"
         }
+        sum[j] += file_to_size[files[i]]
     }
-    close(avRegexFile)
-    printf("[DEBUG] Reading regex from file failed: %s\n", avRegexFile) > "/dev/stderr"
-    avRegex = "^$"
+    asorti(sum, sum, "@val_num_desc")
+    output(sum[1])
 }
 
-function series_match(videos,  f, n, i, j, words, nums, groups, connected)
+function series_match(videos,  p, n, i, j, words, nums, groups, connected)
 {
     # Scan multiple videos to identify consecutive digits:
-    # Files will be stored as:
-    #   videos[1] = parent/string_03.mp4
-    #   videos[2] = parent/string_04.mp4
+    # input:
+    #   videos[parent/string_03.mp4]
+    #   videos[parent/string_04.mp4]
+    #   ....
     # After split, grouped as:
-    #   groups["string"][3] = 1
-    #   groups["string"][4] = 2
-    #   where 3, 4 are the matched numbers as integers, and 1, 2 are the indices of array videos.
-    # After comparison, videos connected with at least 2 of others will be saved as:
-    #   connected[1]
-    #   connected[2]
-    #   where 1, 2 are the indices of array videos.
-    # The length of "connected" will be the number of connected vertices.
-    for (i in videos) {
-        n = split(videos[i], words, /[0-9]+/, nums)
-        for (j = 1; j < n; j++) {
-            gsub(/.*\/|\s+/, "", words[j])
-            groups[words[j] == "" ? j : words[j]][int(nums[j])] = i
+    #   groups["string"][3] = parent/string_03.mp4
+    #   groups["string"][4] = parent/string_04.mp4
+    #   ....
+    # Sort each subgroup by the digits:
+    #   nums[1] = 3
+    #   nums[2] = 4
+    #   ....
+    # If we found three consecutive digits, save the path to:
+    #   connected[parent/string_03.mp4]
+    #   connected[parent/string_04.mp4]
+    #   ....
+    #   The length of "connected" will be the number of connected vertices.
+
+    for (p in videos) {
+        n = split(p, words, /[0-9]+/, nums)
+        for (i = 1; i < n; i++) {
+            gsub(/.*\/|\s+/, "", words[i])
+            groups[words[i] == "" ? i : words[i]][int(nums[i])] = p
         }
     }
-    for (f in groups) {
-        if (length(groups[f]) < 3) {
+    for (p in groups) {
+        if (length(groups[p]) < 3) {
             continue
         }
-        n = asorti(groups[f], nums, "@ind_num_asc")
+        n = asorti(groups[p], nums, "@ind_num_asc")
         i = 1
         for (j = 2; j <= n; j++) {
             if (nums[j - 1] == nums[j] - 1) {
                 i++
                 if (i >= 3) {
                     if (i == 3) {
-                        connected[groups[f][nums[j - 2]]]
-                        connected[groups[f][nums[j - 1]]]
+                        connected[groups[p][nums[j - 2]]]
+                        connected[groups[p][nums[j - 1]]]
                     }
-                    connected[groups[f][nums[j]]]
+                    connected[groups[p][nums[j]]]
                     if (length(connected) >= 3) {
                         output("tv")
                     }
@@ -167,31 +179,34 @@ function series_match(videos,  f, n, i, j, words, nums, groups, connected)
     }
 }
 
-function walkdir(dir, fsize, sizeReached,  fpath, fstat)
+function output(type,  dest, display)
 {
-    while ((getline < dir) > 0) {
-        if ($2 ~ /^[.#@]/) {
-            continue
-        }
-        fpath = (dir "/" $2)
-        switch ($3) {
-        case "f":
-            stat(fpath, fstat)
-            if (fstat["size"] >= minSize) {
-                if (! sizeReached) {
-                    delete fsize
-                    sizeReached = 1
-                }
-            } else if (sizeReached) {
-                continue
-            }
-            fpath = tolower(substr(fpath, prefix))
-            sub(/\ybdmv\/stream\/[^/]+\.m2ts$/, "bdmv/index.bdmv", fpath)
-            fsize[fpath] += fstat["size"]
-            break
-        case "d":
-            walkdir(fpath, fsize, sizeReached)
-        }
+    switch (type) {
+    case "av":
+        display = "/volume1/driver/Temp"
+        break
+    case "film":
+        display = "/volume1/video/Films"
+        break
+    case "tv":
+        display = "/volume1/video/TV Series"
+        break
+    case "music":
+        display = "/volume1/music/Download"
+        break
+    case "adobe":
+        display = "/volume1/homes/admin/Download/Adobe"
+        break
+    default:
+        display = "/volume1/homes/admin/Download"
     }
-    close(dir)
+
+    if (rootStat["type"] == "file") {
+        dest = (display "/" (gensub(/\.[^./]*$/, "", 1, torrentName)))
+    } else {
+        dest = display
+    }
+
+    printf "%s\000%s\000", dest, display
+    exit 0
 }
