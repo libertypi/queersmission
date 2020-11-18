@@ -89,6 +89,7 @@ function pattern_match(file_to_size, files, videos,  i, n, p)
     # (sorted by filesize (largest first))
     # videos[path]
     # ...
+
     n = asorti(file_to_size, files, "@val_num_desc")
     for (i = 1; i <= n; i++) {
         p = files[i]
@@ -109,32 +110,34 @@ function pattern_match(file_to_size, files, videos,  i, n, p)
     }
 }
 
-function series_match(videos,  p, n, i, j, words, nums, groups, connected)
+function series_match(videos,  p, n, i, j, words, nums, groups)
 {
     # Scan multiple videos to identify consecutive digits:
     # input:
-    #   videos[parent/string_03.mp4]
-    #   videos[parent/string_04.mp4]
+    #   videos[parent/string_05.mp4]
+    #   videos[parent/string_06.mp4]
+    #   videos[parent/string_04string_05.mp4]
     #   ....
     # After split, grouped as:
-    #   groups["string"][3] = parent/string_03.mp4
-    #   groups["string"][4] = parent/string_04.mp4
+    #   groups[1, "string"][5] (parent/string_05.mp4)
+    #   groups[1, "string"][6] (parent/string_06.mp4)
+    #   groups[1, "string"][4] (parent/string_04string_05.mp4)
+    #   groups[2, "string"][5] (parent/string_04string_05.mp4)
     #   ....
-    # Sort each subgroup by the digits:
-    #   nums[1] = 3
-    #   nums[2] = 4
+    #   (same file would never appear in the same group)
+    # For each group, sort its subgroup by the digits:
+    #   nums[1] = 4
+    #   nums[2] = 5
+    #   nums[3] = 6
     #   ....
-    # If we found three consecutive digits, save the path to:
-    #   connected[parent/string_03.mp4]
-    #   connected[parent/string_04.mp4]
-    #   ....
-    #   The length of "connected" will be the number of connected vertices.
+    # If we found three consecutive digits in one group,
+    # identify as TV Series.
 
     for (p in videos) {
         n = split(p, words, /[0-9]+/, nums)
         for (i = 1; i < n; i++) {
             gsub(/.*\/|\s+/, "", words[i])
-            groups[words[i] == "" ? i : words[i]][int(nums[i])] = p
+            groups[i, words[i]][int(nums[i])]
         }
     }
     for (p in groups) {
@@ -142,19 +145,11 @@ function series_match(videos,  p, n, i, j, words, nums, groups, connected)
             continue
         }
         n = asorti(groups[p], nums, "@ind_num_asc")
-        i = 1
+        i = 1        
         for (j = 2; j <= n; j++) {
             if (nums[j - 1] == nums[j] - 1) {
-                i++
-                if (i >= 3) {
-                    if (i == 3) {
-                        connected[groups[p][nums[j - 2]]]
-                        connected[groups[p][nums[j - 1]]]
-                    }
-                    connected[groups[p][nums[j]]]
-                    if (length(connected) >= 3) {
-                        output("tv")
-                    }
+                if (++i == 3) {
+                    output("tv")              
                 }
             } else {
                 i = 1
