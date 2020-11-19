@@ -15,11 +15,11 @@ case $1 in
     ;;
   r)
     printf '%s\n' "Testing Regex against driver directory..."
-    grep -Eivf "${avRegexFile}" <(find '/volume1/driver' -type f -not -path '*/[.@#]*' -regextype 'posix-extended' -iregex '.*\.((bd|w)mv|3gp|asf|avi|flv|iso|m(2?ts|4p|[24kop]v|p([24]|e?g)|xf)|rm(vb)?|ts|vob|webm)' -printf '%P\n')
+    grep -Eivf "${regex_file}" <(find '/volume1/driver' -type f -not -path '*/[.@#]*' -regextype 'posix-extended' -iregex '.*\.((bd|w)mv|3gp|asf|avi|flv|iso|m(2?ts|4p|[24kop]v|p([24]|e?g)|xf)|rm(vb)?|ts|vob|webm)' -printf '%P\n')
     printf '%s\n' "Done. These are the unmatched items in driver directory."
 
     printf '%s\n' "Testing Regex against video directory..."
-    grep -Eif "${avRegexFile}" <(find '/volume1/video' -type f -not -path '*/[.@#]*' -printf '%P\n')
+    grep -Eif "${regex_file}" <(find '/volume1/video' -type f -not -path '*/[.@#]*' -printf '%P\n')
     printf '%s\n' "Done. This should show no match."
     exit
     ;;

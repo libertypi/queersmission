@@ -92,14 +92,6 @@ function pattern_match(file_to_size, files, videos,  i, n, s)
     # ...
 
     n = asorti(file_to_size, files, "@val_num_desc")
-
-    switch (files[1]) {
-    case /\y(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)\y/:
-        output("adobe")
-    case /\y((32|64)bit|mac(os)?|windows|microsoft|x64|x86)\y.*\.(7z|[di]mg|[rt]ar|exe|gz|iso|zip)$/:
-        output()
-    }
-
     for (i = 1; i <= n; i++) {
         s = files[i]
         if (s ~ /\.(3gp|asf|avi|bdmv|flv|iso|m(2?ts|4p|[24kop]v|p2|p4|pe?g|xf)|rm|rmvb|ts|vob|webm|wmv)$/) {
@@ -109,6 +101,14 @@ function pattern_match(file_to_size, files, videos,  i, n, s)
                 output("tv")
             }
             videos[s] 
+        }
+        if (i == 1) {
+            switch (s) {
+            case /\y(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)\y/:
+                output("adobe")
+            case /\y((32|64)bit|mac(os)?|windows|microsoft|x64|x86)\y.*\.(7z|[di]mg|[rt]ar|exe|gz|iso|zip)$/:
+                output()
+            }
         }
     }
 }
@@ -200,7 +200,7 @@ function output(type,  dest, display)
     }
 
     if (root_stat["type"] == "file") {
-        dest = (display "/" (gensub(/\.[^./]*$/, "", 1, TR_TORRENT_NAME)))
+        dest = (display "/" gensub(/\.[^./]*$/, "", 1, TR_TORRENT_NAME))
     } else {
         dest = display
     }
