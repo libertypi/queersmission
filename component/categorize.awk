@@ -82,7 +82,7 @@ function walkdir(dir, file_to_size,  fpath, fstat)
     close(dir)
 }
 
-function pattern_match(file_to_size, files, videos,  i, n, p)
+function pattern_match(file_to_size, files, videos,  i, n, s)
 {
     # set 2 arrays: files, videos
     # files[1]: path
@@ -92,21 +92,23 @@ function pattern_match(file_to_size, files, videos,  i, n, p)
     # ...
 
     n = asorti(file_to_size, files, "@val_num_desc")
+
+    switch (files[1]) {
+    case /\y(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)\y/:
+        output("adobe")
+    case /\y((32|64)bit|mac(os)?|windows|microsoft|x64|x86)\y.*\.(7z|[di]mg|[rt]ar|exe|gz|iso|zip)$/:
+        output()
+    }
+
     for (i = 1; i <= n; i++) {
-        p = files[i]
-        switch (p) {
-        case /\.(3gp|asf|avi|bdmv|flv|iso|m(2?ts|4p|[24kop]v|p2|p4|pe?g|xf)|rm|rmvb|ts|vob|webm|wmv)$/:
-            if (p ~ av_regex) {
+        s = files[i]
+        if (s ~ /\.(3gp|asf|avi|bdmv|flv|iso|m(2?ts|4p|[24kop]v|p2|p4|pe?g|xf)|rm|rmvb|ts|vob|webm|wmv)$/) {
+            if (s ~ av_regex) {
                 output("av")
-            } else if (p ~ /\y([es]|ep[ _-]?|s[0-9]{2}e)[0-9]{2}\y/) {
+            } else if (s ~ /\y([es]|ep[ _-]?|s[0-9]{2}e)[0-9]{2}\y/) {
                 output("tv")
             }
-            videos[p]
-            break
-        case /\y(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)\y/:
-            output("adobe")
-        case /\y((32|64)bit|mac(os)?|windows|x64|x86)\y/:
-            output()
+            videos[s] 
         }
     }
 }
