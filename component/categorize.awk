@@ -43,7 +43,7 @@ function read_regex(file,  line)
         }
     }
     close(file)
-    printf("[DEBUG] Awk: Reading regex failed: %s\n", file) > "/dev/stderr"
+    printf("[DEBUG] Awk: Reading failed: %s\n", file) > "/dev/stderr"
     return "^$"
 }
 
@@ -102,14 +102,12 @@ function pattern_match(file_to_size, files, videos,  i, n, s)
             }
             videos[s] 
         }
-        if (i == 1) {
-            switch (s) {
-            case /\y(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)\y/:
-                output("adobe")
-            case /\y((32|64)bit|mac(os)?|windows|microsoft|x64|x86)\y.*\.(7z|[di]mg|[rt]ar|exe|gz|iso|zip)$/:
-                output()
-            }
-        }
+    }
+    switch (files[1]) {
+    case /\y(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)\y/:
+        output("adobe")
+    case /\y((32|64)bit|mac(os)?|windows|microsoft|x64|x86)\y.*\.(7z|[di]mg|[rt]ar|exe|gz|iso|zip)$/:
+        output()
     }
 }
 
