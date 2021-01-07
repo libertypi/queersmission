@@ -97,7 +97,7 @@ function pattern_match(file_to_size, files, videos,  i, n, s)
         if (s ~ /\.(3gp|asf|avi|bdmv|flv|iso|m(2?ts|4p|[24kop]v|p2|p4|pe?g|xf)|rm|rmvb|ts|vob|webm|wmv)$/) {
             if (s ~ av_regex) {
                 output("av")
-            } else if (s ~ /\y([es]|ep[ _-]?|s[0-9]{2}e)[0-9]{2}\y/) {
+            } else if (s ~ /\y([es]|ep[ _-]?|s([1-9][0-9]|0?[1-9])e)([1-9][0-9]|0?[1-9])\y/) {
                 output("tv")
             }
             videos[s] 
