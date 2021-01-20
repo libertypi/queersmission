@@ -213,7 +213,7 @@ write_log() {
       [[ -s ${log_file} ]] && logBackup="$(tail -n +3 "${log_file}")"
       {
         printf '%-20s%-10s%-35s%s\n%s\n' \
-          'Date' 'Status' 'Destination' 'Name' \
+          'Date' 'Status' 'Location' 'Name' \
           '-------------------------------------------------------------------------------'
         for ((i = ${#logs[@]} - 1; i >= 0; i--)); do
           printf '%s\n' "${logs[i]}"

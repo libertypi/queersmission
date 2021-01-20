@@ -103,11 +103,13 @@ function pattern_match(file_to_size, files, videos,  i, n, s)
             videos[s] 
         }
     }
-    switch (files[1]) {
-    case /\y(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)\y/:
-        output("adobe")
-    case /\y((32|64)bit|mac(os)?|windows|microsoft|x64|x86)\y.*\.(7z|[di]mg|[rt]ar|exe|gz|iso|zip)$/:
-        output()
+    s = files[1]
+    if (s ~ /\.(7z|[di]mg|[rt]ar|exe|gz|iso|zip)$/) {
+        if (s ~ /(^|[^a-z0-9])(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)($|[^a-z0-9])/) {
+            output("adobe")
+        } else if (s ~ /(^|[^a-z0-9])((32|64)bit|mac(os)?|windows|microsoft|x64|x86)($|[^a-z0-9])/) {
+            output()
+        }
     }
 }
 
@@ -175,34 +177,34 @@ function ext_match(file_to_size, files, videos,  i, j, sum)
     output(sum[1])
 }
 
-function output(type,  dest, display)
+function output(type,  dest, root)
 {
     switch (type) {
     case "av":
-        display = "/volume1/driver/Temp"
+        root = "/volume1/driver/Temp"
         break
     case "film":
-        display = "/volume1/video/Films"
+        root = "/volume1/video/Films"
         break
     case "tv":
-        display = "/volume1/video/TV Series"
+        root = "/volume1/video/TV Series"
         break
     case "music":
-        display = "/volume1/music/Download"
+        root = "/volume1/music/Download"
         break
     case "adobe":
-        display = "/volume1/homes/admin/Download/Adobe"
+        root = "/volume1/homes/admin/Download/Adobe"
         break
     default:
-        display = "/volume1/homes/admin/Download"
+        root = "/volume1/homes/admin/Download"
     }
 
     if (root_stat["type"] == "file") {
-        dest = (display "/" gensub(/\.[^./]*$/, "", 1, TR_TORRENT_NAME))
+        dest = (root "/" gensub(/\.[^./]*$/, "", 1, TR_TORRENT_NAME))
     } else {
-        dest = display
+        dest = root
     }
 
-    printf "%s\000%s\000", dest, display
+    printf "%s\000%s\000", dest, root
     exit 0
 }
