@@ -210,7 +210,7 @@ write_log() {
       printf '%s\n' "${logs[@]}" 1>&2
     else
       local logBackup
-      [[ -s ${log_file} ]] && logBackup="$(tail -n +3 "${log_file}")"
+      [[ -f ${log_file} ]] && logBackup="$(tail -n +3 "${log_file}")"
       {
         printf '%-20s%-10s%-35s%s\n%s\n' \
           'Date' 'Status' 'Location' 'Name' \
