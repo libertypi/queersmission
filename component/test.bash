@@ -85,17 +85,17 @@ for TR_TORRENT_NAME in "${names[@]}"; do
   )
 
   if [[ ${TR_TORRENT_DIR} != "${seed_dir}" && ${root} != "${TR_TORRENT_DIR}" ]]; then
-    error+=("${TR_TORRENT_NAME}: ${root}")
-    format='\033[31m%s\n%s\033[0m\n\n'
+    error+=("${TR_TORRENT_NAME} -> ${root}")
+    color='31'
   else
     case "${root}" in
-      "${tv_dir}") format='\033[32m%s\n%s\033[0m\n\n' ;;
-      "${film_dir}") format='\033[33m%s\n%s\033[0m\n\n' ;;
-      "${av_dir}") format='\033[34m%s\n%s\033[0m\n\n' ;;
-      *) format='%s\n%s\n\n' ;;
+      "${tv_dir}") color='32' ;;
+      "${film_dir}") color='33' ;;
+      "${av_dir}") color='34' ;;
+      *) color='0' ;;
     esac
   fi
-  printf "${format}" "Root: ${root}" "Dest: ${dest}"
+  printf "\033[${color}m%s\n%s\033[0m\n\n" "Root: ${root}" "Dest: ${dest}"
 
 done
 
