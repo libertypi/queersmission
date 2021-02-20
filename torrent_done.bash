@@ -50,16 +50,16 @@ handle_torrent_done() {
 
   if [[ ${TR_TORRENT_DIR} == "${seed_dir}" ]]; then
 
-    local dest dest_display
+    local dest root
 
-    for i in dest dest_display; do
+    for i in dest root; do
       IFS= read -r -d '' "$i"
     done < <(
       awk -v REGEX_FILE="${regex_file}" -v TR_TORRENT_DIR="${TR_TORRENT_DIR}" -v TR_TORRENT_NAME="${TR_TORRENT_NAME}" -f "${categorize}"
     )
 
     if [[ -d ${dest} ]] || mkdir -p "${dest}" && cp -rf "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" "${dest}/"; then
-      append_log "Finish" "${dest_display}" "${TR_TORRENT_NAME}"
+      append_log "Finish" "${root}" "${TR_TORRENT_NAME}"
     else
       append_log "Error" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
     fi

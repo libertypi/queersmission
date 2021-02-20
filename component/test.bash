@@ -4,10 +4,18 @@ export LC_ALL=C LANG=C
 
 test_regex() {
   printf '%s\n' "Testing '${regex_file}' on '${driver_dir}'..." "Unmatched items:"
-  grep -Eivf "${regex_file}" <(find "${driver_dir}" -type f -not -path '*/[.@#]*' -regextype 'posix-extended' -iregex '.*\.((bd|w)mv|3gp|asf|avi|flv|iso|m(2?ts|4p|[24kop]v|p([24]|e?g)|xf)|rm(vb)?|ts|vob|webm)' -printf '%P\n')
+  grep -Eivf "${regex_file}" <(
+    find "${driver_dir}" -type f -not -path '*/[.@#]*' -regextype 'posix-extended' \
+      -iregex '\.((bd|w)mv|3gp|asf|avi|flv|iso|m(2?ts|4p|[24kop]v|p([24]|e?g)|xf)|rm(vb)?|ts|vob|webm)$' \
+      -printf '%P\n'
+  )
 
   printf '%s' "Testing '${regex_file}' on '${video_dir}'..."
-  local result="$(grep -Eif "${regex_file}" <(find "${video_dir}" -type f -not -path '*/[.@#]*' -printf '%P\n'))"
+  local result="$(
+    grep -Eif "${regex_file}" <(
+      find "${video_dir}" -type f -not -path '*/[.@#]*' -printf '%P\n'
+    )
+  )"
   if [[ -n "${result}" ]]; then
     printf '%s\n' "Failed. Match:" "${result}"
   else
@@ -81,7 +89,10 @@ for TR_TORRENT_NAME in "${names[@]}"; do
   for i in dest root; do
     IFS= read -r -d '' "$i"
   done < <(
-    awk -v REGEX_FILE="${regex_file}" -v TR_TORRENT_DIR="${TR_TORRENT_DIR}" -v TR_TORRENT_NAME="${TR_TORRENT_NAME}" -f "${categorize}"
+    awk -v REGEX_FILE="${regex_file}" \
+      -v TR_TORRENT_DIR="${TR_TORRENT_DIR}" \
+      -v TR_TORRENT_NAME="${TR_TORRENT_NAME}" \
+      -f "${categorize}"
   )
 
   if [[ ${TR_TORRENT_DIR} != "${seed_dir}" && ${root} != "${TR_TORRENT_DIR}" ]]; then
