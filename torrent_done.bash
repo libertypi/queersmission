@@ -16,7 +16,7 @@ prepare() {
   while getopts dh i; do
     case "${i}" in
       d) debug=1 ;;
-      h | *)
+      *)
         printf '%s\n' "Options:" "-d  Debug" 1>&2
         exit 1
         ;;
