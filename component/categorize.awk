@@ -128,7 +128,7 @@ function series_match(videos,  p, n, i, j, words, nums, groups)
     #   groups[1, "string"][4] (parent/string_04string_05.mp4)
     #   groups[2, "string"][5] (parent/string_04string_05.mp4)
     #   ....
-    #   (same file would never appear in the same group)
+    #   (file would never appear twice in one group)
     # For each group, sort its subgroup by the digits:
     #   nums[1] = 4
     #   nums[2] = 5
