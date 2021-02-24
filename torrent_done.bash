@@ -72,7 +72,7 @@ handle_torrent_done() {
   else
 
     if cp -rf "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" "${seed_dir}/" && get_tr_session_header &&
-      query_tr_api "{\"arguments\":{\"ids\":[${TR_TORRENT_ID}],\"location\":\"${seed_dir}/\"},\"method\":\"torrent-set-location\"}"; then
+      request_tr "{\"arguments\":{\"ids\":[${TR_TORRENT_ID}],\"location\":\"${seed_dir}/\"},\"method\":\"torrent-set-location\"}"; then
       append_log "Finish" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
     else
       append_log "Error" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}, ${dest}"
@@ -88,7 +88,7 @@ get_tr_session_header() {
   fi
 }
 
-query_tr_api() {
+request_tr() {
   for i in {1..4}; do
     if curl -sf --header "${tr_session_header}" "${tr_api}" -d "$@"; then
       printf '[DEBUG] Querying API success: "%s"\n' "$*" 1>&2
@@ -103,14 +103,14 @@ query_tr_api() {
   done
 }
 
-get_tr_info() {
+query_tr_data() {
   if ! hash jq 1>/dev/null 2>&1; then
     printf '[DEBUG] %s\n' "Jq not found, will not proceed." 1>&2
     exit 1
   fi
-  [[ -z ${tr_session_header} ]] && get_tr_session_header
+  [[ -z "${tr_session_header}" ]] && get_tr_session_header
   local result
-  if tr_json="$(query_tr_api '{"arguments":{"fields":["activityDate","id","name","percentDone","sizeWhenDone","status","trackerStats"]},"method":"torrent-get"}')" &&
+  if tr_json="$(request_tr '{"arguments":{"fields":["activityDate","id","name","percentDone","sizeWhenDone","status","trackerStats"]},"method":"torrent-get"}')" &&
     IFS='/' read -r result totalTorrentSize errorTorrents < <(jq -r '"\(.result)/\([.arguments.torrents[].sizeWhenDone]|add)/\([.arguments.torrents[]|select(.status<=0)]|length)"' <<<"${tr_json}") &&
     [[ ${result} == 'success' ]]; then
 
@@ -187,7 +187,7 @@ clean_inactive_feed() {
     if (((target -= size) <= 0)); then
       printf '[DEBUG] %s\n' 'Remove torrents:' "${names[@]}" 1>&2
       ((debug)) || {
-        query_tr_api "{\"arguments\":{\"ids\":[${ids%,}],\"delete-local-data\":true},\"method\":\"torrent-remove\"}" >/dev/null
+        request_tr "{\"arguments\":{\"ids\":[${ids%,}],\"delete-local-data\":true},\"method\":\"torrent-remove\"}" >/dev/null
       } && {
         for name in "${names[@]}"; do
           append_log "Remove" "${seed_dir}" "${name}"
@@ -202,7 +202,7 @@ clean_inactive_feed() {
 
 resume_tr_torrent() {
   if ((errorTorrents)); then
-    query_tr_api '{"method":"torrent-start"}' >/dev/null
+    request_tr '{"method":"torrent-start"}' >/dev/null
   fi
 }
 
@@ -238,7 +238,7 @@ write_log() {
 init "$@"
 handle_torrent_done
 
-get_tr_info
+query_tr_data
 clean_local_disk
 clean_inactive_feed
 

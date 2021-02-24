@@ -39,11 +39,12 @@ function read_regex(file,  line)
     while ((getline line < file) > 0) {
         if (line ~ /\S/) {
             close(file)
+            gsub(/^\s+|\s+$/, "", line)
             return line
         }
     }
     close(file)
-    printf("[DEBUG] Awk: Reading failed: %s\n", file) > "/dev/stderr"
+    printf("[DEBUG] Awk: Reading regex from '%s' failed.\n", file) > "/dev/stderr"
     return "^$"
 }
 
@@ -144,16 +145,12 @@ function series_match(videos,  p, n, i, j, words, nums, groups)
         }
     }
     for (p in groups) {
-        if (length(groups[p]) < 3) {
-            continue
-        }
+        if (length(groups[p]) < 3) continue
         n = asorti(groups[p], nums, "@ind_num_asc")
         i = 1        
         for (j = 2; j <= n; j++) {
             if (nums[j - 1] == nums[j] - 1) {
-                if (++i == 3) {
-                    output("tv")              
-                }
+                if (++i == 3) output("tv")              
             } else {
                 i = 1
             }
