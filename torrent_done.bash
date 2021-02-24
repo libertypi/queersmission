@@ -2,25 +2,31 @@
 
 export LC_ALL=C LANG=C
 
+################################################################################
+#                                Configurations                                #
+################################################################################
+
 seed_dir='/volume2/@transmission'
 watch_dir='/volume1/video/Torrents'
 log_file='transmission.log'
 categorize='component/categorize.awk'
 regex_file="component/regex.txt"
 tr_api='http://localhost:9091/transmission/rpc'
-
 ((quota = 100 * 1024 ** 3)) # Disk space quota: 100 GiB
 
-prepare() {
+################################################################################
+#                                  Functions                                   #
+################################################################################
+
+init() {
   debug=0
   while getopts dh i; do
-    case "${i}" in
-      d) debug=1 ;;
-      *)
-        printf '%s\n' "Options:" "-d  Debug" 1>&2
-        exit 1
-        ;;
-    esac
+    if [[ $i == "d" ]]; then
+      debug=1
+    else
+      printf '%s\n' "options:" "  -d  debug" "  -h  help" 1>&2
+      exit 1
+    fi
   done
 
   printf '[DEBUG] %s' "Acquiring lock..." 1>&2
@@ -43,10 +49,6 @@ prepare() {
 
 handle_torrent_done() {
   ((trDoneScript)) || return
-  [[ -e "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" ]] || {
-    append_log "Missing" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
-    return
-  }
 
   if [[ ${TR_TORRENT_DIR} == "${seed_dir}" ]]; then
 
@@ -55,10 +57,13 @@ handle_torrent_done() {
     for i in dest root; do
       IFS= read -r -d '' "$i"
     done < <(
-      awk -v REGEX_FILE="${regex_file}" -v TR_TORRENT_DIR="${TR_TORRENT_DIR}" -v TR_TORRENT_NAME="${TR_TORRENT_NAME}" -f "${categorize}"
+      awk -v REGEX_FILE="${regex_file}" \
+        -v TR_TORRENT_DIR="${TR_TORRENT_DIR}" \
+        -v TR_TORRENT_NAME="${TR_TORRENT_NAME}" \
+        -f "${categorize}"
     )
 
-    if [[ -d ${dest} ]] || mkdir -p "${dest}" && cp -rf "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" "${dest}/"; then
+    if [[ -d "${dest}" ]] || mkdir -p "${dest}" && cp -rf "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" "${dest}/"; then
       append_log "Finish" "${root}" "${TR_TORRENT_NAME}"
     else
       append_log "Error" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
@@ -77,7 +82,7 @@ handle_torrent_done() {
 }
 
 get_tr_session_header() {
-  if [[ "$(curl -sI "${tr_api}")" =~ 'X-Transmission-Session-Id:'[[:space:]]*[A-Za-z0-9]+ ]]; then
+  if [[ "$(curl -sI "${tr_api}")" =~ X-Transmission-Session-Id:[[:space:]]*[A-Za-z0-9]+ ]]; then
     tr_session_header="${BASH_REMATCH[0]}"
     printf '[DEBUG] API Header: "%s"\n' "${tr_session_header}" 1>&2
   fi
@@ -190,7 +195,9 @@ clean_inactive_feed() {
       }
       break
     fi
-  done < <(jq -j '.arguments.torrents|sort_by(([.trackerStats[].leecherCount]|add),.activityDate)[]|select(.percentDone==1)|"\(.id)/\(.sizeWhenDone)/\(.name)\u0000"' <<<"${tr_json}")
+  done < <(
+    jq -j '.arguments.torrents|sort_by(([.trackerStats[].leecherCount]|add),.activityDate)[]|select(.percentDone==1)|"\(.id)/\(.sizeWhenDone)/\(.name)\u0000"' <<<"${tr_json}"
+  )
 }
 
 resume_tr_torrent() {
@@ -224,8 +231,11 @@ write_log() {
   fi
 }
 
-# Main
-prepare "$@"
+################################################################################
+#                                     Main                                     #
+################################################################################
+
+init "$@"
 handle_torrent_done
 
 get_tr_info
