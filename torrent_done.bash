@@ -19,8 +19,9 @@ tr_api='http://localhost:9091/transmission/rpc'
 ################################################################################
 
 init() {
+  local i
   debug=0
-  unset 'tr_done_path' 'tr_header' 'tr_json'
+  unset 'torrent_path' 'tr_header' 'tr_json'
 
   while getopts dh i; do
     if [[ $i == "d" ]]; then
@@ -36,9 +37,9 @@ init() {
   exec {i}<"${BASH_SOURCE[0]##*/}"
 
   if [[ -n ${TR_TORRENT_DIR} && -n ${TR_TORRENT_NAME} ]]; then
-    flock -x "${i}"
-    tr_done_path="${TR_TORRENT_DIR}/${TR_TORRENT_NAME}"
-  elif ! flock -xn "${i}"; then
+    flock -x "$i"
+    torrent_path="${TR_TORRENT_DIR}/${TR_TORRENT_NAME}"
+  elif ! flock -xn "$i"; then
     printf '%s\n' 'Failed.' 1>&2
     exit 1
   fi
@@ -47,13 +48,11 @@ init() {
   trap 'write_log' EXIT
 }
 
-handle_torrent_done() {
-  [[ -z "${tr_done_path}" ]] && return
+copy_finished() {
+  [[ -z "${torrent_path}" ]] && return
 
   if [[ ${TR_TORRENT_DIR} == "${seed_dir}" ]]; then
-
-    local dest root
-
+    local i dest root
     for i in dest root; do
       IFS= read -r -d '' "$i"
     done < <(
@@ -61,24 +60,20 @@ handle_torrent_done() {
         -v TR_TORRENT_DIR="${TR_TORRENT_DIR}" \
         -v TR_TORRENT_NAME="${TR_TORRENT_NAME}" \
         -f "${categorize}"
-    )
-
-    if [[ -d "${dest}" ]] || mkdir -p "${dest}" && cp -rf "${tr_done_path}" "${dest}/"; then
-      append_log "Finish" "${root}" "${TR_TORRENT_NAME}"
-    else
-      append_log "Error" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
-    fi
-
-  else
-
-    if cp -rf "${tr_done_path}" "${seed_dir}/" && get_tr_header &&
-      request_tr "{\"arguments\":{\"ids\":[${TR_TORRENT_ID}],\"location\":\"${seed_dir}/\"},\"method\":\"torrent-set-location\"}"; then
-      append_log "Finish" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
-    else
-      append_log "Error" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}, ${dest}"
-    fi
-
+    ) && {
+      if [[ -d "${dest}" ]] || mkdir -p "${dest}" && cp -rf "${torrent_path}" "${dest}/"; then
+        append_log "Finish" "${root}" "${TR_TORRENT_NAME}"
+        return 0
+      fi
+    }
+  elif cp -rf "${torrent_path}" "${seed_dir}/" && get_tr_header &&
+    request_tr "{\"arguments\":{\"ids\":[${TR_TORRENT_ID}],\"location\":\"${seed_dir}/\"},\"method\":\"torrent-set-location\"}"; then
+    append_log "Finish" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
+    return 0
   fi
+
+  append_log "Error" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
+  return 1
 }
 
 get_tr_header() {
@@ -89,6 +84,7 @@ get_tr_header() {
 }
 
 request_tr() {
+  local i
   for i in {1..4}; do
     if curl -sf --header "${tr_header}" "${tr_api}" -d "$@"; then
       printf '[DEBUG] Querying API success: "%s"\n' "$*" 1>&2
@@ -103,13 +99,13 @@ request_tr() {
   done
 }
 
-query_tr_data() {
+query_torrent() {
+  local result
   if ! hash jq 1>/dev/null 2>&1; then
     printf '[DEBUG] %s\n' "Jq not found, will not proceed." 1>&2
     exit 1
   fi
   [[ -z "${tr_header}" ]] && get_tr_header
-  local result
   if tr_json="$(request_tr '{"arguments":{"fields":["activityDate","id","name","percentDone","sizeWhenDone","status","trackerStats"]},"method":"torrent-get"}')" &&
     IFS='/' read -r result totalTorrentSize errorTorrents < <(jq -r '"\(.result)/\([.arguments.torrents[].sizeWhenDone]|add)/\([.arguments.torrents[]|select(.status<=0)]|length)"' <<<"${tr_json}") &&
     [[ ${result} == 'success' ]]; then
@@ -123,22 +119,24 @@ query_tr_data() {
   fi
 }
 
-clean_local_disk() {
-  local obsolete
+clean_disk() {
+  local obsolete i
   shopt -s nullglob dotglob globstar
 
   if pushd "${seed_dir}" >/dev/null; then
     declare -A names
     while IFS= read -r -d '' i; do
       names["${i}"]=1
-    done < <(jq -j '.arguments.torrents[]|"\(.name)\u0000"' <<<"${tr_json}")
-
-    for i in [^.\#@]*; do
-      [[ -z "${names[${i}]}" && -z "${names[${i%.part}]}" ]] && {
-        append_log 'Cleanup' "${seed_dir}" "${i}"
-        obsolete+=("${seed_dir}/${i}")
-      }
-    done
+    done < <(
+      jq -j '.arguments.torrents[]|"\(.name)\u0000"' <<<"${tr_json}"
+    ) && {
+      for i in [^.\#@]*; do
+        if [[ -z "${names[${i}]}" && -z "${names[${i%.part}]}" ]]; then
+          append_log 'Cleanup' "${seed_dir}" "${i}"
+          obsolete+=("${seed_dir}/${i}")
+        fi
+      done
+    }
     popd >/dev/null
   else
     printf '[DEBUG] Unable to enter: %s\n' "${seed_dir}" 1>&2
@@ -161,7 +159,7 @@ clean_local_disk() {
   shopt -u nullglob dotglob globstar
 }
 
-clean_inactive_feed() {
+remove_inactive() {
   local diskSize freeSpace target m n id size name ids names
 
   {
@@ -200,8 +198,8 @@ clean_inactive_feed() {
   )
 }
 
-resume_tr_torrent() {
-  if ((errorTorrents)); then
+resume_paused() {
+  if ((errorTorrents > 0)); then
     request_tr '{"method":"torrent-start"}' >/dev/null
   fi
 }
@@ -216,12 +214,12 @@ write_log() {
       printf '[DEBUG] Logs: (%s entries)\n' "${#logs[@]}" 1>&2
       printf '%s\n' "${logs[@]}" 1>&2
     else
-      local logBackup
+      local i logBackup
       [[ -f ${log_file} ]] && logBackup="$(tail -n +3 "${log_file}")"
       {
         printf '%-20s%-10s%-35s%s\n%s\n' \
           'Date' 'Status' 'Location' 'Name' \
-          '-------------------------------------------------------------------------------'
+          '--------------------------------------------------------------------------------'
         for ((i = ${#logs[@]} - 1; i >= 0; i--)); do
           printf '%s\n' "${logs[i]}"
         done
@@ -236,11 +234,11 @@ write_log() {
 ################################################################################
 
 init "$@"
-handle_torrent_done
+copy_finished
 
-query_tr_data
-clean_local_disk
-clean_inactive_feed
+query_torrent
+clean_disk
+remove_inactive
 
-resume_tr_torrent
+resume_paused
 exit 0

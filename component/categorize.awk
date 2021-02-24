@@ -4,7 +4,7 @@
 BEGIN {
     if (REGEX_FILE == "" || TR_TORRENT_DIR == "" || TR_TORRENT_NAME == "") {
         print("[DEBUG] Awk: Invalid parameter.") > "/dev/stderr"
-        output()
+        exit 1
     }
 
     FS = "/"
