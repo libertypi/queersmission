@@ -20,6 +20,8 @@ tr_api='http://localhost:9091/transmission/rpc'
 
 init() {
   debug=0
+  unset 'tr_done_path' 'tr_header' 'tr_json'
+
   while getopts dh i; do
     if [[ $i == "d" ]]; then
       debug=1
@@ -35,10 +37,8 @@ init() {
 
   if [[ -n ${TR_TORRENT_DIR} && -n ${TR_TORRENT_NAME} ]]; then
     flock -x "${i}"
-    trDoneScript=1
-  elif flock -xn "${i}"; then
-    trDoneScript=0
-  else
+    tr_done_path="${TR_TORRENT_DIR}/${TR_TORRENT_NAME}"
+  elif ! flock -xn "${i}"; then
     printf '%s\n' 'Failed.' 1>&2
     exit 1
   fi
@@ -48,7 +48,7 @@ init() {
 }
 
 handle_torrent_done() {
-  ((trDoneScript)) || return
+  [[ -z "${tr_done_path}" ]] && return
 
   if [[ ${TR_TORRENT_DIR} == "${seed_dir}" ]]; then
 
@@ -63,7 +63,7 @@ handle_torrent_done() {
         -f "${categorize}"
     )
 
-    if [[ -d "${dest}" ]] || mkdir -p "${dest}" && cp -rf "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" "${dest}/"; then
+    if [[ -d "${dest}" ]] || mkdir -p "${dest}" && cp -rf "${tr_done_path}" "${dest}/"; then
       append_log "Finish" "${root}" "${TR_TORRENT_NAME}"
     else
       append_log "Error" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
@@ -71,7 +71,7 @@ handle_torrent_done() {
 
   else
 
-    if cp -rf "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" "${seed_dir}/" && get_tr_session_header &&
+    if cp -rf "${tr_done_path}" "${seed_dir}/" && get_tr_header &&
       request_tr "{\"arguments\":{\"ids\":[${TR_TORRENT_ID}],\"location\":\"${seed_dir}/\"},\"method\":\"torrent-set-location\"}"; then
       append_log "Finish" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
     else
@@ -81,21 +81,21 @@ handle_torrent_done() {
   fi
 }
 
-get_tr_session_header() {
+get_tr_header() {
   if [[ "$(curl -sI "${tr_api}")" =~ X-Transmission-Session-Id:[[:space:]]*[A-Za-z0-9]+ ]]; then
-    tr_session_header="${BASH_REMATCH[0]}"
-    printf '[DEBUG] API Header: "%s"\n' "${tr_session_header}" 1>&2
+    tr_header="${BASH_REMATCH[0]}"
+    printf '[DEBUG] API Header: "%s"\n' "${tr_header}" 1>&2
   fi
 }
 
 request_tr() {
   for i in {1..4}; do
-    if curl -sf --header "${tr_session_header}" "${tr_api}" -d "$@"; then
+    if curl -sf --header "${tr_header}" "${tr_api}" -d "$@"; then
       printf '[DEBUG] Querying API success: "%s"\n' "$*" 1>&2
       return 0
     elif ((i < 4)); then
       printf '[DEBUG] Querying API failed. Retries: %s\n' "${i}" 1>&2
-      get_tr_session_header
+      get_tr_header
     else
       printf '[DEBUG] Querying API failed: "%s"\n' "$*" 1>&2
       return 1
@@ -108,14 +108,14 @@ query_tr_data() {
     printf '[DEBUG] %s\n' "Jq not found, will not proceed." 1>&2
     exit 1
   fi
-  [[ -z "${tr_session_header}" ]] && get_tr_session_header
+  [[ -z "${tr_header}" ]] && get_tr_header
   local result
   if tr_json="$(request_tr '{"arguments":{"fields":["activityDate","id","name","percentDone","sizeWhenDone","status","trackerStats"]},"method":"torrent-get"}')" &&
     IFS='/' read -r result totalTorrentSize errorTorrents < <(jq -r '"\(.result)/\([.arguments.torrents[].sizeWhenDone]|add)/\([.arguments.torrents[]|select(.status<=0)]|length)"' <<<"${tr_json}") &&
     [[ ${result} == 'success' ]]; then
 
     printf '[DEBUG] Getting torrents info success, total size: %d GiB, stopped torrents: %d.\n' "$((totalTorrentSize / 1024 ** 3))" "${errorTorrents}" 1>&2
-    ((debug)) && jq '.' <<<"${tr_json}" >'debug.json'
+    # ((debug)) && jq '.' <<<"${tr_json}" >'debug.json'
     return 0
   else
     printf '[DEBUG] Getting torrents info failed. Response: "%s"\n' "${tr_json}" 1>&2
@@ -134,7 +134,7 @@ clean_local_disk() {
     done < <(jq -j '.arguments.torrents[]|"\(.name)\u0000"' <<<"${tr_json}")
 
     for i in [^.\#@]*; do
-      [[ -z ${names["${i}"]} && -z ${names["${i%.part}"]} ]] && {
+      [[ -z "${names[${i}]}" && -z "${names[${i%.part}]}" ]] && {
         append_log 'Cleanup' "${seed_dir}" "${i}"
         obsolete+=("${seed_dir}/${i}")
       }
