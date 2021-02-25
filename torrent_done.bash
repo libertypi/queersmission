@@ -34,8 +34,8 @@ init() {
     shift
   done
 
-  printf '[DEBUG] Acquiring lock...' 1>&2
   cd "${BASH_SOURCE[0]%/*}" || exit 1
+  printf '[DEBUG] Acquiring lock...' 1>&2
   exec {i}<"${BASH_SOURCE[0]##*/}"
 
   if [[ -n ${TR_TORRENT_DIR} && -n ${TR_TORRENT_NAME} ]]; then

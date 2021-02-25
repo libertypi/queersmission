@@ -2,6 +2,15 @@
 
 export LC_ALL=C LANG=C
 
+categorize='categorize.awk'
+regex_file='regex.txt'
+video_dir='/volume1/video'
+tv_dir="${video_dir}/TV Series"
+film_dir="${video_dir}/Films"
+driver_dir='/volume1/driver'
+av_dir="${driver_dir}/Temp"
+seed_dir='/volume2/@transmission'
+
 test_regex() {
   printf '%s\n' "Testing '${regex_file}' on '${driver_dir}'..." "Unmatched items:"
   grep -Eivf "${regex_file}" <(
@@ -28,7 +37,7 @@ print_help() {
 usage: ${BASH_SOURCE[0]} [-h] [-t] [-f] [-d DIR] [-r]
 
 Test ${categorize}.
-If no arguments was passed, test '${seed_dir}'.
+If no argument was passed, test '${seed_dir}'.
 
 optional arguments:
   -h            display this help text and exit
@@ -40,16 +49,6 @@ EOF
 }
 
 cd "${BASH_SOURCE[0]%/*}" || exit 1
-categorize="categorize.awk"
-regex_file="regex.txt"
-
-video_dir='/volume1/video'
-tv_dir="${video_dir}/TV Series"
-film_dir="${video_dir}/Films"
-driver_dir='/volume1/driver'
-av_dir="${driver_dir}/Temp"
-seed_dir='/volume2/@transmission'
-
 TR_TORRENT_DIR="${seed_dir}"
 unset names error
 
