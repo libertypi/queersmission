@@ -7,17 +7,17 @@ BEGIN {
             REGEX_FILE, TR_TORRENT_DIR, TR_TORRENT_NAME) > "/dev/stderr"
         exit 1
     }
-
-    FS = "/"
     split("", file_to_size)
     split("", files)
     split("", videos)
+    FS = "/"
 
     av_regex = read_regex(REGEX_FILE)
     tr_path = (TR_TORRENT_DIR "/" TR_TORRENT_NAME)
     stat(tr_path, tr_stat)
+    tr_isdir = (tr_stat["type"] == "directory")
 
-    if (tr_stat["type"] == "directory") {
+    if (tr_isdir) {
         path_offset = (length(TR_TORRENT_DIR) + 2)
         size_reached = 0
         size_thresh = (80 * 1024 ^ 2)
@@ -97,7 +97,7 @@ function pattern_match(file_to_size, files, videos,  i, n, s)
             } else if (s ~ /\y([es]|ep[ _-]?|s([1-9][0-9]|0?[1-9])e)([1-9][0-9]|0?[1-9])\y/) {
                 output("tv")
             }
-            videos[s] 
+            videos[s]
         }
     }
     s = files[1]
@@ -142,10 +142,10 @@ function series_match(videos,  m, n, i, j, words, nums, groups)
     for (m in groups) {
         if (length(groups[m]) < 3) continue
         n = asorti(groups[m], nums, "@ind_num_asc")
-        i = 1        
+        i = 1
         for (j = 2; j <= n; j++) {
             if (nums[j - 1] == nums[j] - 1) {
-                if (++i == 3) output("tv")              
+                if (++i == 3) output("tv")
             } else {
                 i = 1
             }
@@ -190,10 +190,10 @@ function output(type,  dest, root)
     default:
         root = "/volume1/homes/admin/Download"
     }
-    if (tr_stat["type"] == "file") {
-        dest = (root "/" gensub(/^(.+)\.[^./]+$/, "\\1", 1, TR_TORRENT_NAME))
-    } else {
+    if (tr_isdir) {
         dest = root
+    } else {
+        dest = (root "/" gensub(/^(.+)\.[^./]+$/, "\\1", 1, TR_TORRENT_NAME))
     }
     printf "%s\000%s\000", dest, root
     exit 0
