@@ -21,7 +21,7 @@ tr_api='http://localhost:9091/transmission/rpc'
 init() {
   local i
   debug=0
-  unset 'torrent_path' 'tr_header' 'tr_json' 'logs'
+  unset IFS torrent_path tr_header tr_json tr_names tr_totalsize tr_paused logs
 
   while (($#)); do
     case "$1" in
@@ -102,47 +102,52 @@ request_tr() {
 }
 
 query_torrent() {
-  local result
-  if ! hash jq 1>/dev/null 2>&1; then
-    printf '[DEBUG] Jq not found, will not proceed.\n' 1>&2
-    exit 1
-  fi
-  [[ -z "${tr_header}" ]] && get_tr_header
-  if tr_json="$(request_tr '{"arguments":{"fields":["activityDate","id","name","percentDone","sizeWhenDone","status","trackerStats"]},"method":"torrent-get"}')" &&
-    IFS='/' read -r result totalTorrentSize errorTorrents < <(jq -r '"\(.result)/\([.arguments.torrents[].sizeWhenDone]|add)/\([.arguments.torrents[]|select(.status<=0)]|length)"' <<<"${tr_json}") &&
-    [[ ${result} == 'success' ]]; then
+  local i result
+  declare -Ag tr_names
 
-    printf '[DEBUG] Getting torrents info success, total size: %d GiB, paused torrents: %d.\n' \
-      "$((totalTorrentSize / 1024 ** 3))" "${errorTorrents}" 1>&2
-    # ((debug)) && jq '.' <<<"${tr_json}" >'debug.json'
-    return 0
-  else
-    printf '[DEBUG] Getting torrents info failed. Response:\n%s\n' "${tr_json}" 1>&2
+  [[ -z "${tr_header}" ]] && get_tr_header
+  tr_json="$(
+    request_tr '{"arguments":{"fields":["activityDate","id","name","percentDone","sizeWhenDone","status","trackerStats"]},"method":"torrent-get"}'
+  )" || exit 1
+  {
+    for i in result tr_totalsize tr_paused; do
+      read -r -d '' "$i"
+    done
+    while IFS= read -r -d '' i; do
+      tr_names["${i}"]=1
+    done
+  } < <(
+    printf '%s' "${tr_json}" | jq -j '
+      "\(.result)\u0000",
+      "\([.arguments.torrents[].sizeWhenDone]|add)\u0000",
+      "\([.arguments.torrents[]|select(.status<=0)]|length)\u0000",
+      (.arguments.torrents[]|"\(.name)\u0000")'
+  ) && [[ ${result} == 'success' ]] || {
+    printf '[DEBUG] Parsing json failed. Content:\n%s\n' "${tr_json}" 1>&2
     exit 1
-  fi
+  }
+
+  # ((debug)) && jq '.' <<<"${tr_json}" >'debug.json'
+  printf '[DEBUG] Torrent info: total: %d, size: %d GiB, paused: %d\n' \
+    "${#tr_names[@]}" "$((tr_totalsize / 1024 ** 3))" "${tr_paused}" 1>&2
+  return 0
 }
 
 clean_disk() {
   local obsolete i
   shopt -s nullglob dotglob globstar
 
-  if pushd "${seed_dir}" >/dev/null; then
-    declare -A names
-    while IFS= read -r -d '' i; do
-      names["${i}"]=1
-    done < <(
-      jq -j '.arguments.torrents[]|"\(.name)\u0000"' <<<"${tr_json}"
-    ) && {
-      for i in [^.\#@]*; do
-        if [[ -z "${names[${i}]}" && -z "${names[${i%.part}]}" ]]; then
-          append_log 'Cleanup' "${seed_dir}" "${i}"
-          obsolete+=("${seed_dir}/${i}")
-        fi
-      done
-    }
+  if ((${#tr_names[@]})) && pushd "${seed_dir}" >/dev/null; then
+    for i in [^.\#@]*; do
+      [[ -z "${tr_names[${i}]}" && -z "${tr_names[${i%.part}]}" ]] && {
+        append_log 'Cleanup' "${seed_dir}" "${i}"
+        obsolete+=("${seed_dir}/${i}")
+      }
+    done
+    unset tr_names
     popd >/dev/null
   else
-    printf '[DEBUG] Unable to enter: %s\n' "${seed_dir}" 1>&2
+    printf '[DEBUG] Skip cleaning: %s\n' "${seed_dir}" 1>&2
   fi
 
   if pushd "${watch_dir}" >/dev/null; then
@@ -169,11 +174,11 @@ remove_inactive() {
   {
     read _
     read -r diskSize freeSpace
-  } < <(df --block-size=1 --output='size,avail' -- "${seed_dir}") && [[ ${diskSize} =~ ^[0-9]+$ && ${freeSpace} =~ ^[0-9]+$ ]] || {
+  } < <(df --block-size=1 --output=size,avail -- "${seed_dir}") && [[ ${diskSize} =~ ^[0-9]+$ && ${freeSpace} =~ ^[0-9]+$ ]] || {
     printf '[DEBUG] Reading disk stats failed.\n' 1>&2
     return 1
   }
-  if ((m = quota - diskSize + totalTorrentSize, n = quota - freeSpace, (target = m > n ? m : n) > 0)); then
+  if ((m = quota - diskSize + tr_totalsize, n = quota - freeSpace, (target = m > n ? m : n) > 0)); then
     printf '[DEBUG] Free space: %d GiB, Space to free: %d GiB. Removing inactive feeds.\n' \
       "$((freeSpace / 1024 ** 3))" "$((target / 1024 ** 3))" 1>&2
   else
@@ -199,12 +204,16 @@ remove_inactive() {
       break
     fi
   done < <(
-    jq -j '.arguments.torrents|sort_by(([.trackerStats[].leecherCount]|add),.activityDate)[]|select(.percentDone==1)|"\(.id)/\(.sizeWhenDone)/\(.name)\u0000"' <<<"${tr_json}"
+    printf '%s' "${tr_json}" | jq -j '
+      .arguments.torrents|
+      sort_by(([.trackerStats[].leecherCount]|add),.activityDate)[]|
+      select(.percentDone==1)|
+      "\(.id)/\(.sizeWhenDone)/\(.name)\u0000"'
   )
 }
 
 resume_paused() {
-  if ((errorTorrents > 0)); then
+  if ((tr_paused > 0)); then
     request_tr '{"method":"torrent-start"}' >/dev/null
   fi
 }
