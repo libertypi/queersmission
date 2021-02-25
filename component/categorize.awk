@@ -14,16 +14,16 @@ BEGIN {
     split("", videos)
 
     av_regex = read_regex(REGEX_FILE)
-    torrent_path = (TR_TORRENT_DIR "/" TR_TORRENT_NAME)
-    stat(torrent_path, torrent_stat)
+    tr_path = (TR_TORRENT_DIR "/" TR_TORRENT_NAME)
+    stat(tr_path, tr_stat)
 
-    if (torrent_stat["type"] == "directory") {
+    if (tr_stat["type"] == "directory") {
         path_offset = (length(TR_TORRENT_DIR) + 2)
         size_reached = 0
         size_thresh = (80 * 1024 ^ 2)
-        walkdir(torrent_path, file_to_size)
+        walkdir(tr_path, file_to_size)
     } else {
-        file_to_size[tolower(TR_TORRENT_NAME)] = torrent_stat["size"]
+        file_to_size[tolower(TR_TORRENT_NAME)] = tr_stat["size"]
     }
 
     pattern_match(file_to_size, files, videos)
@@ -190,13 +190,11 @@ function output(type,  dest, root)
     default:
         root = "/volume1/homes/admin/Download"
     }
-
-    if (torrent_stat["type"] == "file") {
-        dest = (root "/" gensub(/\.[^./]*$/, "", 1, TR_TORRENT_NAME))
+    if (tr_stat["type"] == "file") {
+        dest = (root "/" gensub(/^(.+)\.[^./]+$/, "\\1", 1, TR_TORRENT_NAME))
     } else {
         dest = root
     }
-
     printf "%s\000%s\000", dest, root
     exit 0
 }
