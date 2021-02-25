@@ -21,7 +21,7 @@ tr_api='http://localhost:9091/transmission/rpc'
 init() {
   local i
   debug=0
-  unset 'torrent_path' 'tr_header' 'tr_json'
+  unset 'torrent_path' 'tr_header' 'tr_json' 'logs'
 
   while getopts dh i; do
     if [[ $i == "d" ]]; then
