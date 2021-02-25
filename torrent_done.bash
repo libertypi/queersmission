@@ -214,8 +214,8 @@ write_log() {
       printf '[DEBUG] Logs: (%s entries)\n' "${#logs[@]}" 1>&2
       printf '%s\n' "${logs[@]}" 1>&2
     else
-      local i logBackup
-      [[ -f ${log_file} ]] && logBackup="$(tail -n +3 "${log_file}")"
+      local i log_backup
+      [[ -f ${log_file} ]] && log_backup="$(tail -n +3 "${log_file}")"
       {
         printf '%-20s%-10s%-35s%s\n%s\n' \
           'Date' 'Status' 'Location' 'Name' \
@@ -223,7 +223,7 @@ write_log() {
         for ((i = ${#logs[@]} - 1; i >= 0; i--)); do
           printf '%s\n' "${logs[i]}"
         done
-        [[ -n ${logBackup} ]] && printf '%s\n' "${logBackup}"
+        [[ -n ${log_backup} ]] && printf '%s\n' "${log_backup}"
       } >"${log_file}"
     fi
   fi
