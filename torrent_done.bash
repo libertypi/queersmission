@@ -193,7 +193,7 @@ remove_inactive() {
     read _
     read -r diskSize freeSpace
   } < <(df --block-size=1 --output=size,avail -- "${seed_dir}") && [[ ${diskSize} =~ ^[0-9]+$ && ${freeSpace} =~ ^[0-9]+$ ]] || {
-    printf '[DEBUG] Reading disk stats failed.\n' 1>&2
+    printf '[DEBUG] Reading disk stat failed.\n' 1>&2
     return 1
   }
   if ((m = quota - diskSize + tr_totalsize, n = quota - freeSpace, (target = m > n ? m : n) > 0)); then
