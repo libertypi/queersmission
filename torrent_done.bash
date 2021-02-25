@@ -12,26 +12,41 @@ log_file='transmission.log'
 categorize='component/categorize.awk'
 regex_file='component/regex.txt'
 tr_api='http://localhost:9091/transmission/rpc'
-((quota = 100 * 1024 ** 3)) # Disk space quota: 100 GiB
+((GiB = 1024 ** 3, quota = 100 * GiB)) # Disk space quota: 100 GiB
 
 ################################################################################
 #                                  Functions                                   #
 ################################################################################
 
+print_help() {
+  cat <<EOF 1>&2
+usage: ${BASH_SOURCE[0]} [OPTION]...
+
+Transmission Maintenance Tool.
+Author: David Pi
+
+optional arguments:
+  -h        show this message and exit
+  -d        dryrun mode
+  -s        save json to query.json
+  -q NUM    set disk quota to NUM GiB (default: $((quota / GiB)))
+EOF
+  exit 1
+}
+
 init() {
   local i
-  debug=0
   unset IFS torrent_path tr_header tr_json tr_names tr_totalsize tr_paused logs
+  dryrun=0
+  savejson=0
 
-  while (($#)); do
-    case "$1" in
-      '-d' | '--debug') debug=1 ;;
-      *)
-        printf '%s\n' 'options:' '  -d, --debug    debug (dryrun)' 1>&2
-        exit 1
-        ;;
+  while getopts 'hdsq:' i; do
+    case "$i" in
+      d) dryrun=1 ;;
+      s) savejson=1 ;;
+      q) [[ ${OPTARG} =~ ^[0-9]+$ ]] || print_help && ((quota = OPTARG * GiB)) ;;
+      *) print_help ;;
     esac
-    shift
   done
 
   cd "${BASH_SOURCE[0]%/*}" || exit 1
@@ -109,8 +124,12 @@ query_torrent() {
   tr_json="$(
     request_tr '{"arguments":{"fields":["activityDate","id","name","percentDone","sizeWhenDone","status","trackerStats"]},"method":"torrent-get"}'
   )" || exit 1
+  if ((savejson)); then
+    printf '[DEBUG] Saving json to query.json\n' 1>&2
+    printf '%s' "${tr_json}" | jq '.' >'query.json'
+  fi
   {
-    for i in result tr_totalsize tr_paused; do
+    for i in 'result' 'tr_totalsize' 'tr_paused'; do
       read -r -d '' "$i"
     done
     while IFS= read -r -d '' i; do
@@ -127,9 +146,8 @@ query_torrent() {
     exit 1
   }
 
-  # ((debug)) && jq '.' <<<"${tr_json}" >'debug.json'
   printf '[DEBUG] Torrent info: total: %d, size: %d GiB, paused: %d\n' \
-    "${#tr_names[@]}" "$((tr_totalsize / 1024 ** 3))" "${tr_paused}" 1>&2
+    "${#tr_names[@]}" "$((tr_totalsize / GiB))" "${tr_paused}" 1>&2
   return 0
 }
 
@@ -162,7 +180,7 @@ clean_disk() {
   if ((${#obsolete[@]})); then
     printf '[DEBUG] Remove redundant files:\n' 1>&2
     printf '%s\n' "${obsolete[@]}" 1>&2
-    ((debug)) || rm -rf -- "${obsolete[@]}"
+    ((dryrun)) || rm -rf -- "${obsolete[@]}"
   fi
 
   shopt -u nullglob dotglob globstar
@@ -180,9 +198,9 @@ remove_inactive() {
   }
   if ((m = quota - diskSize + tr_totalsize, n = quota - freeSpace, (target = m > n ? m : n) > 0)); then
     printf '[DEBUG] Free space: %d GiB, Space to free: %d GiB. Removing inactive feeds.\n' \
-      "$((freeSpace / 1024 ** 3))" "$((target / 1024 ** 3))" 1>&2
+      "$((freeSpace / GiB))" "$((target / GiB))" 1>&2
   else
-    printf '[DEBUG] Free space: %d GiB. System is healthy.\n' "$((freeSpace / 1024 ** 3))" 1>&2
+    printf '[DEBUG] Free space: %d GiB. System is healthy.\n' "$((freeSpace / GiB))" 1>&2
     return 0
   fi
 
@@ -194,7 +212,7 @@ remove_inactive() {
     if (((target -= size) <= 0)); then
       printf '[DEBUG] Remove torrents:\n' 1>&2
       printf '%s\n' "${names[@]}" 1>&2
-      ((debug)) || {
+      ((dryrun)) || {
         request_tr "{\"arguments\":{\"ids\":[${ids%,}],\"delete-local-data\":true},\"method\":\"torrent-remove\"}" >/dev/null
       } && {
         for name in "${names[@]}"; do
@@ -224,7 +242,7 @@ append_log() {
 
 write_log() {
   if ((${#logs[@]})); then
-    if ((debug)); then
+    if ((dryrun)); then
       printf '[DEBUG] Logs: (%s entries)\n' "${#logs[@]}" 1>&2
       printf '%s\n' "${logs[@]}" 1>&2
     else
