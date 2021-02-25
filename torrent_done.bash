@@ -23,16 +23,18 @@ init() {
   debug=0
   unset 'torrent_path' 'tr_header' 'tr_json' 'logs'
 
-  while getopts dh i; do
-    if [[ $i == "d" ]]; then
-      debug=1
-    else
-      printf '%s\n' "options:" "  -d  debug" "  -h  help" 1>&2
-      exit 1
-    fi
+  while (($#)); do
+    case "$1" in
+      '-d' | '--debug') debug=1 ;;
+      *)
+        printf '%s\n' 'options:' '  -d, --debug    debug (dryrun)' 1>&2
+        exit 1
+        ;;
+    esac
+    shift
   done
 
-  printf '[DEBUG] %s' "Acquiring lock..." 1>&2
+  printf '[DEBUG] Acquiring lock...' 1>&2
   cd "${BASH_SOURCE[0]%/*}" || exit 1
   exec {i}<"${BASH_SOURCE[0]##*/}"
 
@@ -40,11 +42,11 @@ init() {
     flock -x "$i"
     torrent_path="${TR_TORRENT_DIR}/${TR_TORRENT_NAME}"
   elif ! flock -xn "$i"; then
-    printf '%s\n' 'Failed.' 1>&2
+    printf 'Failed.\n' 1>&2
     exit 1
   fi
 
-  printf '%s\n' 'Done.' 1>&2
+  printf 'Done.\n' 1>&2
   trap 'write_log' EXIT
 }
 
@@ -62,17 +64,17 @@ copy_finished() {
         -f "${categorize}"
     ) && {
       if [[ -d "${dest}" ]] || mkdir -p "${dest}" && cp -rf "${torrent_path}" "${dest}/"; then
-        append_log "Finish" "${root}" "${TR_TORRENT_NAME}"
+        append_log 'Finish' "${root}" "${TR_TORRENT_NAME}"
         return 0
       fi
     }
   elif cp -rf "${torrent_path}" "${seed_dir}/" && get_tr_header &&
     request_tr "{\"arguments\":{\"ids\":[${TR_TORRENT_ID}],\"location\":\"${seed_dir}/\"},\"method\":\"torrent-set-location\"}"; then
-    append_log "Finish" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
+    append_log 'Finish' "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
     return 0
   fi
 
-  append_log "Error" "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
+  append_log 'Error' "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
   return 1
 }
 
@@ -86,7 +88,7 @@ get_tr_header() {
 request_tr() {
   local i
   for i in {1..4}; do
-    if curl -sf --header "${tr_header}" "${tr_api}" -d "$@"; then
+    if curl -sf --header "${tr_header}" -d "$@" -- "${tr_api}"; then
       printf '[DEBUG] Querying API success: "%s"\n' "$*" 1>&2
       return 0
     elif ((i < 4)); then
@@ -102,7 +104,7 @@ request_tr() {
 query_torrent() {
   local result
   if ! hash jq 1>/dev/null 2>&1; then
-    printf '[DEBUG] %s\n' "Jq not found, will not proceed." 1>&2
+    printf '[DEBUG] Jq not found, will not proceed.\n' 1>&2
     exit 1
   fi
   [[ -z "${tr_header}" ]] && get_tr_header
@@ -110,11 +112,12 @@ query_torrent() {
     IFS='/' read -r result totalTorrentSize errorTorrents < <(jq -r '"\(.result)/\([.arguments.torrents[].sizeWhenDone]|add)/\([.arguments.torrents[]|select(.status<=0)]|length)"' <<<"${tr_json}") &&
     [[ ${result} == 'success' ]]; then
 
-    printf '[DEBUG] Getting torrents info success, total size: %d GiB, stopped torrents: %d.\n' "$((totalTorrentSize / 1024 ** 3))" "${errorTorrents}" 1>&2
+    printf '[DEBUG] Getting torrents info success, total size: %d GiB, paused torrents: %d.\n' \
+      "$((totalTorrentSize / 1024 ** 3))" "${errorTorrents}" 1>&2
     # ((debug)) && jq '.' <<<"${tr_json}" >'debug.json'
     return 0
   else
-    printf '[DEBUG] Getting torrents info failed. Response: "%s"\n' "${tr_json}" 1>&2
+    printf '[DEBUG] Getting torrents info failed. Response:\n%s\n' "${tr_json}" 1>&2
     exit 1
   fi
 }
@@ -152,7 +155,8 @@ clean_disk() {
   fi
 
   if ((${#obsolete[@]})); then
-    printf '[DEBUG] %s\n' 'Cleanup redundant files:' "${obsolete[@]}" 1>&2
+    printf '[DEBUG] Remove redundant files:\n' 1>&2
+    printf '%s\n' "${obsolete[@]}" 1>&2
     ((debug)) || rm -rf -- "${obsolete[@]}"
   fi
 
@@ -165,16 +169,16 @@ remove_inactive() {
   {
     read _
     read -r diskSize freeSpace
-  } < <(df --block-size=1 --output=size,avail "${seed_dir}") && [[ ${diskSize} =~ ^[0-9]+$ && ${freeSpace} =~ ^[0-9]+$ ]] || {
-    printf '[DEBUG] %s\n' 'Reading disk stats failed.' 1>&2
-    return
+  } < <(df --block-size=1 --output='size,avail' -- "${seed_dir}") && [[ ${diskSize} =~ ^[0-9]+$ && ${freeSpace} =~ ^[0-9]+$ ]] || {
+    printf '[DEBUG] Reading disk stats failed.\n' 1>&2
+    return 1
   }
-
   if ((m = quota - diskSize + totalTorrentSize, n = quota - freeSpace, (target = m > n ? m : n) > 0)); then
-    printf '[DEBUG] Disk free space: %d GiB, Space to free: %d GiB. Cleanup inactive feeds.\n' "$((freeSpace / 1024 ** 3))" "$((target / 1024 ** 3))" 1>&2
+    printf '[DEBUG] Free space: %d GiB, Space to free: %d GiB. Removing inactive feeds.\n' \
+      "$((freeSpace / 1024 ** 3))" "$((target / 1024 ** 3))" 1>&2
   else
-    printf '[DEBUG] Disk free space: %d GiB. Skip action.\n' "$((freeSpace / 1024 ** 3))" 1>&2
-    return
+    printf '[DEBUG] Free space: %d GiB. System is healthy.\n' "$((freeSpace / 1024 ** 3))" 1>&2
+    return 0
   fi
 
   while IFS='/' read -r -d '' id size name; do
@@ -183,12 +187,13 @@ remove_inactive() {
     names+=("${name}")
 
     if (((target -= size) <= 0)); then
-      printf '[DEBUG] %s\n' 'Remove torrents:' "${names[@]}" 1>&2
+      printf '[DEBUG] Remove torrents:\n' 1>&2
+      printf '%s\n' "${names[@]}" 1>&2
       ((debug)) || {
         request_tr "{\"arguments\":{\"ids\":[${ids%,}],\"delete-local-data\":true},\"method\":\"torrent-remove\"}" >/dev/null
       } && {
         for name in "${names[@]}"; do
-          append_log "Remove" "${seed_dir}" "${name}"
+          append_log 'Remove' "${seed_dir}" "${name}"
         done
       }
       break

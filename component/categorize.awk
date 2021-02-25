@@ -3,7 +3,9 @@
 
 BEGIN {
     if (REGEX_FILE == "" || TR_TORRENT_DIR == "" || TR_TORRENT_NAME == "") {
-        print("[DEBUG] Awk: Invalid parameter.") > "/dev/stderr"
+        printf("%s (REGEX_FILE: '%s', TR_TORRENT_DIR: '%s', TR_TORRENT_NAME: '%s')\n",
+            "[DEBUG] Awk: Invalid values",
+            REGEX_FILE, TR_TORRENT_DIR, TR_TORRENT_NAME) > "/dev/stderr"
         exit 1
     }
 
@@ -51,9 +53,7 @@ function read_regex(file,  line)
 function walkdir(dir, file_to_size,  fpath, fstat)
 {
     while ((getline < dir) > 0) {
-        if ($2 ~ /^[.#@]/) {
-            continue
-        }
+        if ($2 ~ /^[.#@]/) continue
         fpath = (dir "/" $2)
         switch ($3) {
         case "f":
@@ -66,14 +66,12 @@ function walkdir(dir, file_to_size,  fpath, fstat)
             } else if (size_reached) {
                 continue
             }
-
             fpath = tolower(substr(fpath, path_offset))
             if (match(fpath, /\/bdmv\/stream\/[^/]+\.m2ts$/)) {
                 fpath = (substr(fpath, 1, RSTART) "bdmv/index.bdmv")
             } else if (match(fpath, /\/video_ts\/[^/]+\.vob$/)) {
                 fpath = (substr(fpath, 1, RSTART) "video_ts/video_ts.vob")
             }
-
             file_to_size[fpath] += fstat["size"]
             break
         case "d":
@@ -91,7 +89,6 @@ function pattern_match(file_to_size, files, videos,  i, n, s)
     # (sorted by filesize (largest first))
     # videos[path]
     # ...
-
     n = asorti(file_to_size, files, "@val_num_desc")
     for (i = 1; i <= n; i++) {
         s = files[i]
@@ -114,7 +111,7 @@ function pattern_match(file_to_size, files, videos,  i, n, s)
     }
 }
 
-function series_match(videos,  p, n, i, j, words, nums, groups)
+function series_match(videos,  m, n, i, j, words, nums, groups)
 {
     # Scan multiple videos to identify consecutive digits:
     # input:
@@ -136,17 +133,16 @@ function series_match(videos,  p, n, i, j, words, nums, groups)
     #   ....
     # If we found three consecutive digits in one group,
     # identify as TV Series.
-
-    for (p in videos) {
-        n = split(p, words, /[0-9]+/, nums)
+    for (m in videos) {
+        n = split(m, words, /[0-9]+/, nums)
         for (i = 1; i < n; i++) {
             gsub(/.*\/|\s+/, "", words[i])
             groups[i, words[i]][int(nums[i])]
         }
     }
-    for (p in groups) {
-        if (length(groups[p]) < 3) continue
-        n = asorti(groups[p], nums, "@ind_num_asc")
+    for (m in groups) {
+        if (length(groups[m]) < 3) continue
+        n = asorti(groups[m], nums, "@ind_num_asc")
         i = 1        
         for (j = 2; j <= n; j++) {
             if (nums[j - 1] == nums[j] - 1) {
@@ -158,7 +154,7 @@ function series_match(videos,  p, n, i, j, words, nums, groups)
     }
 }
 
-function ext_match(file_to_size, files, videos,  i, j, sum)
+function ext_match(file_to_size, files, videos,  i, j, size_sum)
 {
     for (i = 1; i in files && i <= 3; i++) {
         if (files[i] in videos) {
@@ -168,10 +164,10 @@ function ext_match(file_to_size, files, videos,  i, j, sum)
         } else {
             j = "default"
         }
-        sum[j] += file_to_size[files[i]]
+        size_sum[j] += file_to_size[files[i]]
     }
-    asorti(sum, sum, "@val_num_desc")
-    output(sum[1])
+    asorti(size_sum, size_sum, "@val_num_desc")
+    output(size_sum[1])
 }
 
 function output(type,  dest, root)

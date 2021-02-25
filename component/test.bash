@@ -6,7 +6,7 @@ test_regex() {
   printf '%s\n' "Testing '${regex_file}' on '${driver_dir}'..." "Unmatched items:"
   grep -Eivf "${regex_file}" <(
     find "${driver_dir}" -type f -not -path '*/[.@#]*' -regextype 'posix-extended' \
-      -iregex '\.((bd|w)mv|3gp|asf|avi|flv|iso|m(2?ts|4p|[24kop]v|p([24]|e?g)|xf)|rm(vb)?|ts|vob|webm)$' \
+      -iregex '.+\.((bd|w)mv|3gp|asf|avi|flv|iso|m(2?ts|4p|[24kop]v|p([24]|e?g)|xf)|rm(vb)?|ts|vob|webm)' \
       -printf '%P\n'
   )
 
@@ -25,16 +25,17 @@ test_regex() {
 
 print_help() {
   cat <<EOF 1>&2
-usage: ${BASH_SOURCE[0]} [OPTION]... [DIR]
+usage: ${BASH_SOURCE[0]} [-h] [-t] [-f] [-d DIR] [-r]
 
 Test ${categorize}.
+If no arguments was passed, test '${seed_dir}'.
 
 optional arguments:
   -h            display this help text and exit
   -t            test '${tv_dir}'
   -f            test '${film_dir}'
+  -d DIR        test DIR
   -r            test '${regex_file}' on '${driver_dir}'
-  DIR           test DIR (default: '${seed_dir}')
 EOF
 }
 
@@ -48,12 +49,18 @@ film_dir="${video_dir}/Films"
 driver_dir='/volume1/driver'
 av_dir="${driver_dir}/Temp"
 seed_dir='/volume2/@transmission'
-unset 'TR_TORRENT_DIR' 'names'
 
-while getopts 'tfrh' a; do
+TR_TORRENT_DIR="${seed_dir}"
+unset names error
+
+while getopts 'htfd:r' a; do
   case "$a" in
     t) TR_TORRENT_DIR="${tv_dir}" ;;
     f) TR_TORRENT_DIR="${film_dir}" ;;
+    d)
+      TR_TORRENT_DIR="${OPTARG%/*}"
+      names=("${OPTARG##*/}")
+      ;;
     r)
       test_regex
       exit 0
@@ -66,19 +73,10 @@ while getopts 'tfrh' a; do
   esac
 done
 
-if [[ -z "${TR_TORRENT_DIR+x}" ]]; then
-  shift "$((OPTIND - 1))"
-  if (($#)); then
-    TR_TORRENT_DIR="${1%/*}"
-    names=("${1##*/}")
-  else
-    TR_TORRENT_DIR="${seed_dir}"
-  fi
-fi
-if [[ -z "${names+x}" ]]; then
+((${#names[@]})) || {
   pushd "${TR_TORRENT_DIR}" >/dev/null && names=([^@\#.]*) || exit 1
-  popd >'/dev/null'
-fi
+  popd >/dev/null
+}
 
 printf '%s\n\n' "Testing: ${TR_TORRENT_DIR}"
 
