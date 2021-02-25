@@ -3,8 +3,7 @@
 
 BEGIN {
     if (REGEX_FILE == "" || TR_TORRENT_DIR == "" || TR_TORRENT_NAME == "") {
-        printf("%s (REGEX_FILE: '%s', TR_TORRENT_DIR: '%s', TR_TORRENT_NAME: '%s')\n",
-            "[DEBUG] Awk: Invalid values",
+        printf("[DEBUG] Awk: Invalid argument values (REGEX_FILE: '%s', TR_TORRENT_DIR: '%s', TR_TORRENT_NAME: '%s')\n",
             REGEX_FILE, TR_TORRENT_DIR, TR_TORRENT_NAME) > "/dev/stderr"
         exit 1
     }
@@ -15,16 +14,16 @@ BEGIN {
     split("", videos)
 
     av_regex = read_regex(REGEX_FILE)
-    root_path = (TR_TORRENT_DIR "/" TR_TORRENT_NAME)
-    stat(root_path, root_stat)
+    torrent_path = (TR_TORRENT_DIR "/" TR_TORRENT_NAME)
+    stat(torrent_path, torrent_stat)
 
-    if (root_stat["type"] == "directory") {
+    if (torrent_stat["type"] == "directory") {
         path_offset = (length(TR_TORRENT_DIR) + 2)
         size_reached = 0
         size_thresh = (80 * 1024 ^ 2)
-        walkdir(root_path, file_to_size)
+        walkdir(torrent_path, file_to_size)
     } else {
-        file_to_size[tolower(TR_TORRENT_NAME)] = root_stat["size"]
+        file_to_size[tolower(TR_TORRENT_NAME)] = torrent_stat["size"]
     }
 
     pattern_match(file_to_size, files, videos)
@@ -192,7 +191,7 @@ function output(type,  dest, root)
         root = "/volume1/homes/admin/Download"
     }
 
-    if (root_stat["type"] == "file") {
+    if (torrent_stat["type"] == "file") {
         dest = (root "/" gensub(/\.[^./]*$/, "", 1, TR_TORRENT_NAME))
     } else {
         dest = root

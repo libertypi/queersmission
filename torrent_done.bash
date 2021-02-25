@@ -116,7 +116,7 @@ request_tr() {
   done
 }
 
-query_torrent() {
+query_json() {
   local i result
   declare -Ag tr_names
 
@@ -268,7 +268,7 @@ write_log() {
 init "$@"
 copy_finished
 
-query_torrent
+query_json
 clean_disk
 remove_inactive
 
