@@ -7,9 +7,9 @@ BEGIN {
             REGEX_FILE, TR_TORRENT_DIR, TR_TORRENT_NAME) > "/dev/stderr"
         exit 1
     }
-    split("", file_to_size)
-    split("", files)
-    split("", videos)
+    split("", sizedict)
+    split("", filelist)
+    split("", videoset)
     FS = "/"
 
     av_regex = read_regex(REGEX_FILE)
@@ -21,27 +21,27 @@ BEGIN {
         path_offset = (length(TR_TORRENT_DIR) + 2)
         size_reached = 0
         size_thresh = (80 * 1024 ^ 2)
-        walkdir(tr_path, file_to_size)
+        walkdir(tr_path, sizedict)
     } else {
-        file_to_size[tolower(TR_TORRENT_NAME)] = tr_stat["size"]
+        sizedict[tolower(TR_TORRENT_NAME)] = tr_stat["size"]
     }
 
-    pattern_match(file_to_size, files, videos)
+    pattern_match(sizedict, filelist, videoset)
 
-    if (length(videos) >= 3)
-        series_match(videos)
+    if (length(videoset) >= 3)
+        series_match(videoset)
 
-    ext_match(file_to_size, files, videos)
+    ext_match(sizedict, filelist, videoset)
 }
 
 
-function read_regex(file,  line)
+function read_regex(file,  s)
 {
-    while ((getline line < file) > 0) {
-        if (line ~ /\S/) {
+    while ((getline s < file) > 0) {
+        if (s ~ /\S/) {
             close(file)
-            gsub(/^\s+|\s+$/, "", line)
-            return line
+            gsub(/^\s+|\s+$/, "", s)
+            return s
         }
     }
     close(file)
@@ -49,7 +49,7 @@ function read_regex(file,  line)
     return "^$"
 }
 
-function walkdir(dir, file_to_size,  fpath, fstat)
+function walkdir(dir, sizedict,  fpath, fstat)
 {
     while ((getline < dir) > 0) {
         if ($2 ~ /^[.#@]/) continue
@@ -59,7 +59,7 @@ function walkdir(dir, file_to_size,  fpath, fstat)
             stat(fpath, fstat)
             if (fstat["size"] >= size_thresh) {
                 if (! size_reached) {
-                    delete file_to_size
+                    delete sizedict
                     size_reached = 1
                 }
             } else if (size_reached) {
@@ -71,36 +71,36 @@ function walkdir(dir, file_to_size,  fpath, fstat)
             } else if (match(fpath, /\/video_ts\/[^/]+\.vob$/)) {
                 fpath = (substr(fpath, 1, RSTART) "video_ts/video_ts.vob")
             }
-            file_to_size[fpath] += fstat["size"]
+            sizedict[fpath] += fstat["size"]
             break
         case "d":
-            walkdir(fpath, file_to_size)
+            walkdir(fpath, sizedict)
         }
     }
     close(dir)
 }
 
-function pattern_match(file_to_size, files, videos,  i, n, s)
+function pattern_match(sizedict, filelist, videoset,  i, n, s)
 {
-    # set 2 arrays: files, videos
-    # files[1]: path
+    # set 2 arrays: filelist, videoset
+    # filelist[1]: path
     # ...
     # (sorted by filesize (largest first))
-    # videos[path]
+    # videoset[path]
     # ...
-    n = asorti(file_to_size, files, "@val_num_desc")
+    n = asorti(sizedict, filelist, "@val_num_desc")
     for (i = 1; i <= n; i++) {
-        s = files[i]
+        s = filelist[i]
         if (s ~ /\.(3gp|asf|avi|bdmv|flv|iso|m(2?ts|4p|[24kop]v|p2|p4|pe?g|xf)|rm|rmvb|ts|vob|webm|wmv)$/) {
             if (s ~ av_regex) {
                 output("av")
             } else if (s ~ /\y([es]|ep[ _-]?|s([1-9][0-9]|0?[1-9])e)([1-9][0-9]|0?[1-9])\y/) {
                 output("tv")
             }
-            videos[s]
+            videoset[s]
         }
     }
-    s = files[1]
+    s = filelist[1]
     if (s ~ /\.(7z|[di]mg|[rt]ar|exe|gz|iso|zip)$/) {
         if (s ~ /(^|[^a-z0-9])(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)($|[^a-z0-9])/) {
             output("adobe")
@@ -110,13 +110,13 @@ function pattern_match(file_to_size, files, videos,  i, n, s)
     }
 }
 
-function series_match(videos,  m, n, i, j, words, nums, groups)
+function series_match(videoset,  m, n, i, j, words, nums, groups)
 {
-    # Scan multiple videos to identify consecutive digits:
+    # Scan multiple videoset to identify consecutive digits:
     # input:
-    #   videos[parent/string_05.mp4]
-    #   videos[parent/string_06.mp4]
-    #   videos[parent/string_04string_05.mp4]
+    #   videoset[parent/string_05.mp4]
+    #   videoset[parent/string_06.mp4]
+    #   videoset[parent/string_04string_05.mp4]
     #   ....
     # After split, grouped as:
     #   groups[1, "string"][5] (parent/string_05.mp4)
@@ -132,7 +132,7 @@ function series_match(videos,  m, n, i, j, words, nums, groups)
     #   ....
     # If we found three consecutive digits in one group,
     # identify as TV Series.
-    for (m in videos) {
+    for (m in videoset) {
         n = split(m, words, /[0-9]+/, nums)
         for (i = 1; i < n; i++) {
             gsub(/.*\/|\s+/, "", words[i])
@@ -153,20 +153,20 @@ function series_match(videos,  m, n, i, j, words, nums, groups)
     }
 }
 
-function ext_match(file_to_size, files, videos,  i, j, size_sum)
+function ext_match(sizedict, filelist, videoset,  i, j, groups)
 {
-    for (i = 1; i in files && i <= 3; i++) {
-        if (files[i] in videos) {
+    for (i = 1; i in filelist && i <= 3; i++) {
+        if (filelist[i] in videoset) {
             j = "film"
-        } else if (files[i] ~ /\.((al?|fl)ac|ape|m4a|mp3|ogg|wav|wma)$/) {
+        } else if (filelist[i] ~ /\.((al?|fl)ac|ape|m4a|mp3|ogg|wav|wma)$/) {
             j = "music"
         } else {
             j = "default"
         }
-        size_sum[j] += file_to_size[files[i]]
+        groups[j] += sizedict[filelist[i]]
     }
-    asorti(size_sum, size_sum, "@val_num_desc")
-    output(size_sum[1])
+    asorti(groups, groups, "@val_num_desc")
+    output(groups[1])
 }
 
 function output(type,  dest, root)
