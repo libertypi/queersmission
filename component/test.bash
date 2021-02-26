@@ -101,7 +101,7 @@ for TR_TORRENT_NAME in "${names[@]}"; do
       -f "${categorize}"
   )
 
-  if [[ ${check} == 1 && ${root} != "${TR_TORRENT_DIR}" ]]; then
+  if [[ $? != 0 ]] || [[ ${check} == 1 && ${root} != "${TR_TORRENT_DIR}" ]]; then
     error+=("${TR_TORRENT_NAME} -> ${root}")
     color=31
   else
