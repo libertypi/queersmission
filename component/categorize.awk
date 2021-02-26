@@ -35,17 +35,17 @@ BEGIN {
 }
 
 
-function read_regex(file,  s)
+function read_regex(fpath,  s)
 {
-    while ((getline s < file) > 0) {
+    while ((getline s < fpath) > 0) {
         if (s ~ /\S/) {
-            close(file)
+            close(fpath)
             gsub(/^\s+|\s+$/, "", s)
             return s
         }
     }
-    close(file)
-    printf("[DEBUG] Awk: Reading regex from '%s' failed.\n", file) > "/dev/stderr"
+    close(fpath)
+    printf("[DEBUG] Awk: Reading regex from '%s' failed.\n", fpath) > "/dev/stderr"
     return "^$"
 }
 
