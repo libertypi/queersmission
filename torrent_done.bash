@@ -134,8 +134,6 @@ query_json() {
   )" || exit 1
   if [[ ${savejson} ]]; then
     printf '[DEBUG] Save json to %s\n' "${savejson}" 1>&2
-    i="${savejson%/*}"
-    [[ ${savejson} == "${i}" || -d ${i} ]] || mkdir -p "${i}"
     printf '%s' "${tr_json}" | jq '.' >"${savejson}"
   fi
   {
