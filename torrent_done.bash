@@ -12,7 +12,7 @@ categorize='component/categorize.awk'
 regexfile='component/regex.txt'
 ((GiB = 1024 ** 3, quota = 100 * GiB)) # Disk space quota: 100 GiB
 
-# ------------------------- That's all, stop editing! ------------------------ #
+#------------------------- That's all, stop editing! --------------------------#
 ################################################################################
 #                                  Functions                                   #
 ################################################################################
@@ -34,12 +34,11 @@ EOF
 }
 
 init() {
-  unset 'IFS'
-  export LC_ALL=C LANG=C
-  tr_path='' tr_header='' tr_json='' tr_totalsize='' tr_paused='' logs=()
-  dryrun=0 savejson=0
-  declare -Ag 'tr_names'
   local i
+  export LC_ALL=C LANG=C
+  unset IFS tr_path tr_header tr_json tr_totalsize tr_paused logs
+  declare -Ag tr_names
+  dryrun=0 savejson=0
 
   while getopts 'hdsq:' i; do
     case "$i" in
@@ -73,7 +72,7 @@ init() {
 }
 
 copy_finished() {
-  [[ -z "${tr_path}" ]] && return
+  [[ -n "${tr_path}" ]] || return
 
   if [[ ${TR_TORRENT_DIR} == "${seed_dir}" ]]; then
     local i dest root
@@ -103,7 +102,7 @@ copy_finished() {
 get_tr_header() {
   if [[ "$(curl -sI -- "${tr_api}")" =~ X-Transmission-Session-Id:[[:space:]]*[A-Za-z0-9]+ ]]; then
     tr_header="${BASH_REMATCH[0]}"
-    printf '[DEBUG] API Header: "%s"\n' "${tr_header}" 1>&2
+    printf '[DEBUG] API header: "%s"\n' "${tr_header}" 1>&2
   fi
 }
 
