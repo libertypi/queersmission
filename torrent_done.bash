@@ -12,7 +12,7 @@ categorize='component/categorize.awk'
 regexfile='component/regex.txt'
 ((GiB = 1024 ** 3, quota = 100 * GiB)) # Disk space quota: 100 GiB
 
-#------------------------- That's all, stop editing! --------------------------#
+# ------------------------ That's all, stop editing! ------------------------- #
 ################################################################################
 #                                  Functions                                   #
 ################################################################################
@@ -27,7 +27,7 @@ Author: David Pi
 optional arguments:
   -h        show this message and exit
   -d        dryrun mode
-  -s        save json to query.json
+  -s FILE   save parsed json to FILE
   -q NUM    set disk quota to NUM GiB (default: $((quota / GiB)))
 EOF
   exit 1
@@ -36,24 +36,27 @@ EOF
 init() {
   local i
   export LC_ALL=C LANG=C
-  unset IFS tr_path tr_header tr_json tr_totalsize tr_paused logs
+  unset IFS savejson tr_path tr_header tr_json tr_totalsize tr_paused logs
   declare -Ag tr_names
-  dryrun=0 savejson=0
+  dryrun=0
 
-  while getopts 'hdsq:' i; do
+  while getopts 'hds:q:' i; do
     case "$i" in
       d) dryrun=1 ;;
-      s) savejson=1 ;;
+      s) [[ ${OPTARG} ]] || print_help && savejson="${OPTARG}" ;;
       q) [[ ${OPTARG} =~ ^[0-9]+$ ]] || print_help && ((quota = OPTARG * GiB)) ;;
       *) print_help ;;
     esac
   done
 
-  [[ "${seed_dir}" && "${logfile}" && "${categorize}" && "${regexfile}" && "${tr_api}" && "${quota}" -ge 0 ]] || {
-    printf '[DEBUG] Error: Invalid configuration values.\n' 1>&2
+  [[ ${seed_dir} && ${logfile} && ${categorize} && ${regexfile} && ${tr_api} && ${quota} -ge 0 ]] || {
+    printf '[DEBUG] Error: Invalid configurations.\n' 1>&2
     exit 1
   }
-  hash curl jq || printf '[DEBUG] Warning: This program requires curl and jq. Most functionality will be limited.\n' 1>&2
+  hash curl jq || {
+    printf '[DEBUG] Error: This program requires curl and jq executables.\n' 1>&2
+    exit 1
+  }
 
   cd "${BASH_SOURCE[0]%/*}" || exit 1
   printf '[DEBUG] Acquiring lock...' 1>&2
@@ -72,7 +75,7 @@ init() {
 }
 
 copy_finished() {
-  [[ -n "${tr_path}" ]] || return
+  [[ ${tr_path} ]] || return
 
   if [[ ${TR_TORRENT_DIR} == "${seed_dir}" ]]; then
     local i dest root
@@ -129,9 +132,11 @@ query_json() {
   tr_json="$(
     request_tr '{"arguments":{"fields":["activityDate","id","name","percentDone","sizeWhenDone","status","trackerStats"]},"method":"torrent-get"}'
   )" || exit 1
-  if ((savejson)); then
-    printf '[DEBUG] Save json to query.json\n' 1>&2
-    printf '%s' "${tr_json}" | jq '.' >'query.json'
+  if [[ ${savejson} ]]; then
+    printf '[DEBUG] Save json to %s\n' "${savejson}" 1>&2
+    i="${savejson%/*}"
+    [[ ${savejson} == "${i}" || -d ${i} ]] || mkdir -p "${i}"
+    printf '%s' "${tr_json}" | jq '.' >"${savejson}"
   fi
   {
     for i in 'result' 'tr_totalsize' 'tr_paused'; do
@@ -150,7 +155,6 @@ query_json() {
     printf '[DEBUG] Parsing json failed. Content:\n%s\n' "${tr_json}" 1>&2
     exit 1
   }
-
   printf '[DEBUG] Total torrents: %d, size: %d GiB, paused: %d\n' \
     "${#tr_names[@]}" "$((tr_totalsize / GiB))" "${tr_paused}" 1>&2
   return 0
@@ -173,7 +177,7 @@ clean_disk() {
     printf '[DEBUG] Skip cleaning seed_dir (%s)\n' "${seed_dir}" 1>&2
   fi
 
-  if [[ -n "${watch_dir}" ]] && pushd "${watch_dir}" >'/dev/null'; then
+  if [[ -n ${watch_dir} ]] && pushd "${watch_dir}" >'/dev/null'; then
     for i in **; do
       [[ -s ${i} ]] || obsolete+=("${watch_dir}/${i}")
     done
@@ -210,7 +214,7 @@ remove_inactive() {
   fi
 
   while IFS='/' read -r -d '' id size name; do
-    [[ "${id}" && "${size}" && "${name}" ]] || continue
+    [[ ${name} ]] || continue
     ids+="${id},"
     names+=("${name}")
     if (((target -= size) <= 0)); then
