@@ -130,7 +130,7 @@ query_json() {
     request_tr '{"arguments":{"fields":["activityDate","id","name","percentDone","sizeWhenDone","status","trackerStats"]},"method":"torrent-get"}'
   )" || exit 1
   if ((savejson)); then
-    printf '[DEBUG] Saving json to query.json\n' 1>&2
+    printf '[DEBUG] Save json to query.json\n' 1>&2
     printf '%s' "${tr_json}" | jq '.' >'query.json'
   fi
   {
@@ -167,7 +167,7 @@ clean_disk() {
         obsolete+=("${seed_dir}/${i}")
       fi
     done
-    unset 'tr_names'
+    unset tr_names
     popd >'/dev/null'
   else
     printf '[DEBUG] Skip cleaning seed_dir (%s)\n' "${seed_dir}" 1>&2
