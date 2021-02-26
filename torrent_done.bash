@@ -210,10 +210,9 @@ remove_inactive() {
   fi
 
   while IFS='/' read -r -d '' id size name; do
-    [[ -z ${name} ]] && continue
+    [[ "${id}" && "${size}" && "${name}" ]] || continue
     ids+="${id},"
     names+=("${name}")
-
     if (((target -= size) <= 0)); then
       printf '[DEBUG] Remove %d torrents.\n' "${#names[@]}" 1>&2
       ((dryrun)) || {
