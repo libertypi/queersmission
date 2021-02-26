@@ -2,8 +2,8 @@
 
 export LC_ALL=C LANG=C
 
-categorize='categorize.awk'
-regex_file='regex.txt'
+categorize="${BASH_SOURCE[0]%/*}/categorize.awk"
+regex_file="${BASH_SOURCE[0]%/*}/regex.txt"
 video_dir='/volume1/video'
 tv_dir="${video_dir}/TV Series"
 film_dir="${video_dir}/Films"
@@ -49,7 +49,6 @@ EOF
   exit 1
 }
 
-cd "${BASH_SOURCE[0]%/*}" || exit 1
 TR_TORRENT_DIR="${seed_dir}"
 check=0
 unset names error
