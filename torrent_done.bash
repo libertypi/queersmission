@@ -63,7 +63,7 @@ init() {
   printf '[DEBUG] Acquiring lock...' 1>&2
   exec {i}<"${BASH_SOURCE[0]##*/}"
 
-  if [[ -n ${TR_TORRENT_DIR} && -n ${TR_TORRENT_NAME} ]]; then
+  if [[ ${TR_TORRENT_DIR} && ${TR_TORRENT_NAME} ]]; then
     flock -x "$i"
     tr_path="${TR_TORRENT_DIR}/${TR_TORRENT_NAME}"
   elif ! flock -xn "$i"; then
@@ -79,8 +79,8 @@ copy_finished() {
   [[ ${tr_path} ]] || return
 
   if [[ ${TR_TORRENT_DIR} == "${seed_dir}" ]]; then
-    local i dest root
-    for i in 'dest' 'root'; do
+    local i root path
+    for i in 'root' 'path'; do
       IFS= read -r -d '' "$i"
     done < <(
       awk -v REGEX_FILE="${regexfile}" \
@@ -88,7 +88,7 @@ copy_finished() {
         -v TR_TORRENT_NAME="${TR_TORRENT_NAME}" \
         -f "${categorize}"
     ) && {
-      if [[ -d ${dest} ]] || mkdir -p -- "${dest}" && cp -rf -- "${tr_path}" "${dest}/"; then
+      if [[ -d ${path} ]] || mkdir -p -- "${path}" && cp -rf -- "${tr_path}" "${path}/"; then
         append_log 'Finish' "${root}" "${TR_TORRENT_NAME}"
         return 0
       fi
@@ -256,7 +256,7 @@ write_log() {
         for ((i = ${#logs[@]} - 1; i >= 0; i--)); do
           printf '%s\n' "${logs[i]}"
         done
-        [[ -n ${backup} ]] && printf '%s\n' "${backup}"
+        [[ ${backup} ]] && printf '%s\n' "${backup}"
       } >"${logfile}"
     fi
   fi

@@ -93,8 +93,8 @@ for TR_TORRENT_NAME in "${names[@]}"; do
   printf '%s\n' "${TR_TORRENT_NAME}"
 
   {
-    IFS= read -r -d '' dest
     IFS= read -r -d '' root
+    IFS= read -r -d '' path
   } < <(
     awk -v REGEX_FILE="${regex_file}" \
       -v TR_TORRENT_DIR="${TR_TORRENT_DIR}" \
@@ -113,7 +113,7 @@ for TR_TORRENT_NAME in "${names[@]}"; do
       *) color=0 ;;
     esac
   fi
-  printf "\033[${color}m%s\n%s\033[0m\n\n" "Root: ${root}" "Dest: ${dest}"
+  printf "\033[${color}m%s\n%s\033[0m\n\n" "Root: ${root}" "Path: ${path}"
 
 done
 

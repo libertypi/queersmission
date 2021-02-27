@@ -51,7 +51,8 @@ function read_regex(fpath,  s)
 
 function walkdir(dir, sizedict,  fpath, fstat)
 {
-    # array sizedict: sizedict[path] = size
+    # array sizedict:
+    # sizedict[path] = size
     while ((getline < dir) > 0) {
         if ($2 ~ /^[.#@]/) continue
         fpath = (dir "/" $2)
@@ -81,16 +82,14 @@ function walkdir(dir, sizedict,  fpath, fstat)
     close(dir)
 }
 
-function pattern_match(sizedict, filelist, videoset,  i, n, s)
+function pattern_match(sizedict, filelist, videoset,  i, j, s)
 {
     # set 2 arrays: filelist, videoset
     # filelist[1]: path
-    # ...
     # (sorted by filesize (largest first))
     # videoset[path]
-    # ...
-    n = asorti(sizedict, filelist, "@val_num_desc")
-    for (i = 1; i <= n; i++) {
+    j = asorti(sizedict, filelist, "@val_num_desc")
+    for (i = 1; i <= j; i++) {
         s = filelist[i]
         if (s ~ /\.(3gp|asf|avi|bdmv|flv|iso|m(2?ts|4p|[24kop]v|p2|p4|pe?g|xf)|rm|rmvb|ts|vob|webm|wmv)$/) {
             if (s ~ av_regex) {
@@ -118,19 +117,16 @@ function series_match(videoset,  m, n, i, j, words, nums, groups)
     #   videoset[parent/string_05.mp4]
     #   videoset[parent/string_06.mp4]
     #   videoset[parent/string_04string_05.mp4]
-    #   ....
     # After split, grouped as:
     #   groups[1, "string"][5] (parent/string_05.mp4)
     #   groups[1, "string"][6] (parent/string_06.mp4)
     #   groups[1, "string"][4] (parent/string_04string_05.mp4)
     #   groups[2, "string"][5] (parent/string_04string_05.mp4)
-    #   ....
-    #   (file would never appear twice in one group)
+    #   (file would never appear in one group twice)
     # For each group, sort its subgroup by the digits:
     #   nums[1] = 4
     #   nums[2] = 5
     #   nums[3] = 6
-    #   ....
     # If we found three consecutive digits in one group,
     # identify as TV Series.
     for (m in videoset) {
@@ -170,7 +166,7 @@ function ext_match(sizedict, filelist, videoset,  i, j, groups)
     output(groups[1])
 }
 
-function output(type,  dest, root)
+function output(type,  root, path)
 {
     switch (type) {
     case "av":
@@ -192,10 +188,10 @@ function output(type,  dest, root)
         root = "/volume1/homes/admin/Download"
     }
     if (tr_isdir) {
-        dest = root
+        path = root
     } else {
-        dest = (root "/" gensub(/^(.+)\.[^./]+$/, "\\1", 1, TR_TORRENT_NAME))
+        path = (root "/" gensub(/^(.+)\.[^./]+$/, "\\1", 1, TR_TORRENT_NAME))
     }
-    printf "%s\000%s\000", dest, root
+    printf "%s\000%s\000", root, path
     exit 0
 }
