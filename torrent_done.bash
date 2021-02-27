@@ -238,7 +238,13 @@ resume_paused() {
 }
 
 append_log() {
-  printf -v "logs[${#logs[@]}]" '%-20(%D %T)T%-10s%-35s%s' '-1' "$1" "${2:0:33}" "$3"
+  #  0: mm/dd/yy hh:mm:ss (17)
+  # $1: Finish/Remove/Error (6)
+  # $2: location (30)
+  # $3: name
+  local l
+  if ((${#2} > 30)); then l="${2::27}..."; else l="$2"; fi
+  printf -v "logs[${#logs[@]}]" '%-17(%D %T)T    %-6s    %-30s    %s\n' '-1' "$1" "$l" "$3"
 }
 
 write_log() {
@@ -250,11 +256,11 @@ write_log() {
       local i backup
       [[ -f "${logfile}" ]] && backup="$(tail -n +3 -- "${logfile}")"
       {
-        printf '%-20s%-10s%-35s%s\n%s\n' \
+        printf '%-17s    %-6s    %-30s    %s\n%s\n' \
           'Date' 'Status' 'Location' 'Name' \
           '--------------------------------------------------------------------------------'
         for ((i = ${#logs[@]} - 1; i >= 0; i--)); do
-          printf '%s\n' "${logs[i]}"
+          printf '%s' "${logs[i]}"
         done
         [[ ${backup} ]] && printf '%s\n' "${backup}"
       } >"${logfile}"
