@@ -51,6 +51,7 @@ function read_regex(fpath,  s)
 
 function walkdir(dir, sizedict,  fpath, fstat)
 {
+    # array sizedict: sizedict[path] = size
     while ((getline < dir) > 0) {
         if ($2 ~ /^[.#@]/) continue
         fpath = (dir "/" $2)
@@ -102,7 +103,7 @@ function pattern_match(sizedict, filelist, videoset,  i, n, s)
     }
     s = filelist[1]
     if (s ~ /\.(7z|[di]mg|[rt]ar|exe|gz|iso|zip)$/) {
-        if (s ~ /(^|[^a-z0-9])(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)($|[^a-z0-9])/) {
+        if (s ~ /(^|[^a-z])(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)($|[^a-z])/) {
             output("adobe")
         } else if (s ~ /(^|[^a-z0-9])((32|64)bit|mac(os)?|windows|microsoft|x64|x86)($|[^a-z0-9])/) {
             output()

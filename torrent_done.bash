@@ -175,7 +175,7 @@ clean_disk() {
     printf '[DEBUG] Skip cleaning seed_dir (%s)\n' "${seed_dir}" 1>&2
   fi
 
-  if [[ -n ${watch_dir} ]] && pushd "${watch_dir}" >'/dev/null'; then
+  if [[ ${watch_dir} ]] && pushd "${watch_dir}" >'/dev/null'; then
     for i in **; do
       [[ -s ${i} ]] || obsolete+=("${watch_dir}/${i}")
     done
