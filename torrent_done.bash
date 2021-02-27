@@ -36,8 +36,9 @@ EOF
 init() {
   local i
   export LC_ALL=C LANG=C
-  unset IFS savejson tr_path tr_header tr_json tr_totalsize tr_paused logs
+  unset IFS
   declare -Ag tr_names
+  tr_path= tr_header= tr_json= tr_totalsize= tr_paused= savejson= logs=()
   dryrun=0
 
   while getopts 'hds:q:' i; do
@@ -87,7 +88,7 @@ copy_finished() {
         -v TR_TORRENT_NAME="${TR_TORRENT_NAME}" \
         -f "${categorize}"
     ) && {
-      if [[ -d "${dest}" ]] || mkdir -p -- "${dest}" && cp -rf -- "${tr_path}" "${dest}/"; then
+      if [[ -d ${dest} ]] || mkdir -p -- "${dest}" && cp -rf -- "${tr_path}" "${dest}/"; then
         append_log 'Finish' "${root}" "${TR_TORRENT_NAME}"
         return 0
       fi
@@ -128,7 +129,7 @@ request_tr() {
 query_json() {
   local i result
 
-  [[ -z "${tr_header}" ]] && get_tr_header
+  [[ ${tr_header} ]] || get_tr_header
   tr_json="$(
     request_tr '{"arguments":{"fields":["activityDate","id","name","percentDone","sizeWhenDone","status","trackerStats"]},"method":"torrent-get"}'
   )" || exit 1
@@ -150,7 +151,7 @@ query_json() {
       "\([.arguments.torrents[]|select(.status<=0)]|length)\u0000",
       (.arguments.torrents[]|"\(.name)\u0000")'
   ) && [[ ${result} == 'success' ]] || {
-    printf '[DEBUG] Parsing json failed. Content:\n%s\n' "${tr_json}" 1>&2
+    printf '[DEBUG] Parsing json failed. Status: "%s"\n' "${result}" 1>&2
     exit 1
   }
   printf '[DEBUG] Total torrents: %d, size: %d GiB, paused: %d\n' \
@@ -158,40 +159,33 @@ query_json() {
   return 0
 }
 
-clean_disk() {
-  local i obsolete
+clean_disk() (
+  # this function runs in a subshell
   shopt -s nullglob dotglob globstar
+  obsolete=()
 
-  if ((${#tr_names[@]})) && pushd "${seed_dir}" >'/dev/null'; then
+  if ((${#tr_names[@]})) && cd "${seed_dir}"; then
     for i in [^.\#@]*; do
       if [[ -z "${tr_names[${i}]}" && -z "${tr_names[${i%.part}]}" ]]; then
-        append_log 'Cleanup' "${seed_dir}" "${i}"
         obsolete+=("${seed_dir}/${i}")
       fi
     done
-    unset tr_names
-    popd >'/dev/null'
   else
     printf '[DEBUG] Skip cleaning seed_dir (%s)\n' "${seed_dir}" 1>&2
   fi
-
-  if [[ ${watch_dir} ]] && pushd "${watch_dir}" >'/dev/null'; then
+  if [[ ${watch_dir} ]] && cd "${watch_dir}"; then
     for i in **; do
       [[ -s ${i} ]] || obsolete+=("${watch_dir}/${i}")
     done
-    popd >'/dev/null'
   else
     printf '[DEBUG] Skip cleaning watch_dir (%s)\n' "${watch_dir}" 1>&2
   fi
-
   if ((${#obsolete[@]})); then
     printf '[DEBUG] Delete %d files:\n' "${#obsolete[@]}" 1>&2
     printf '%s\n' "${obsolete[@]}" 1>&2
     ((dryrun)) || rm -rf -- "${obsolete[@]}"
   fi
-
-  shopt -u nullglob dotglob globstar
-}
+)
 
 remove_inactive() {
   local disksize freespace target m n id size name ids names
@@ -203,11 +197,13 @@ remove_inactive() {
     printf '[DEBUG] Reading disk stat failed.\n' 1>&2
     return 1
   }
-  if ((m = quota - disksize + tr_totalsize, n = quota - freespace, (target = m > n ? m : n) > 0)); then
-    printf '[DEBUG] Free space: %d GiB, Space to free: %d GiB.\n' \
+
+  if ((m = quota + tr_totalsize - disksize, n = quota - freespace, (target = m > n ? m : n) > 0)); then
+    printf '[DEBUG] Free space: %d GiB, free up size: %d GiB.\n' \
       "$((freespace / GiB))" "$((target / GiB))" 1>&2
   else
-    printf '[DEBUG] Free space: %d GiB. System is healthy.\n' "$((freespace / GiB))" 1>&2
+    printf '[DEBUG] Free space: %d GiB, avail space: %d GiB. System is healthy.\n' \
+      "$((freespace / GiB))" "$((-target / GiB))" 1>&2
     return 0
   fi
 

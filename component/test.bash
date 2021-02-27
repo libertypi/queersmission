@@ -49,9 +49,9 @@ EOF
   exit 1
 }
 
-TR_TORRENT_DIR="${seed_dir}"
+unset IFS names error
 check=0
-unset names error
+TR_TORRENT_DIR="${seed_dir}"
 
 while getopts 'htfd:r' a; do
   case "$a" in
@@ -92,9 +92,10 @@ for TR_TORRENT_NAME in "${names[@]}"; do
 
   printf '%s\n' "${TR_TORRENT_NAME}"
 
-  for i in dest root; do
-    IFS= read -r -d '' "$i"
-  done < <(
+  {
+    IFS= read -r -d '' dest
+    IFS= read -r -d '' root
+  } < <(
     awk -v REGEX_FILE="${regex_file}" \
       -v TR_TORRENT_DIR="${TR_TORRENT_DIR}" \
       -v TR_TORRENT_NAME="${TR_TORRENT_NAME}" \
