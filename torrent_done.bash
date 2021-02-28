@@ -238,13 +238,13 @@ resume_paused() {
 }
 
 append_log() {
-  #  0: mm/dd/yy hh:mm:ss (17)
-  # $1: Finish/Remove/Error (6)
-  # $2: location (30)
+  #  0: mm/dd/yy hh:mm:ss     (17)
+  # $1: Finish/Remove/Error   (6)
+  # $2: location              (30)
   # $3: name
-  local l
-  if ((${#2} > 30)); then l="${2::27}..."; else l="$2"; fi
-  printf -v "logs[${#logs[@]}]" '%-17(%D %T)T    %-6s    %-30s    %s\n' '-1' "$1" "$l" "$3"
+  local loc
+  if ((${#2} > 30)); then loc="${2::27}..."; else loc="$2"; fi
+  printf -v "logs[${#logs[@]}]" '%-17(%D %T)T    %-6s    %-30s    %s\n' '-1' "$1" "$loc" "$3"
 }
 
 write_log() {
