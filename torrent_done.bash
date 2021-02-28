@@ -4,15 +4,25 @@
 #                                Configurations                                #
 ################################################################################
 
+# Transmission rpc-url with authentication disabled:
 tr_api='http://localhost:9091/transmission/rpc'
+
+# Directory storing files for seeding, without trailing slash:
 seed_dir='/volume2/@transmission'
+
+# Directory where transmission monitors for new torrents, set an empty value to
+# disable watch_dir cleanup:
 watch_dir='/volume1/video/Torrents'
+
+# Disk space quota (minimum free space on disk):
+((GiB = 1024 ** 3, quota = 100 * GiB))
+
+# ------------------------ That's all, stop editing! ------------------------- #
+
 logfile='transmission.log'
 categorize='component/categorize.awk'
 regexfile='component/regex.txt'
-((GiB = 1024 ** 3, quota = 100 * GiB)) # Disk space quota: 100 GiB
 
-# ------------------------ That's all, stop editing! ------------------------- #
 ################################################################################
 #                                  Functions                                   #
 ################################################################################
@@ -41,6 +51,10 @@ init() {
   tr_path= tr_header= tr_json= tr_totalsize= tr_paused= savejson= logs=()
   dryrun=0
 
+  [[ ${tr_api} == http* && ${seed_dir} == /*[^/] && ${quota} -ge 0 ]] || {
+    printf '[DEBUG] Error: Invalid configurations.\n' 1>&2
+    exit 1
+  }
   while getopts 'hds:q:' i; do
     case "$i" in
       d) dryrun=1 ;;
@@ -49,11 +63,6 @@ init() {
       *) print_help ;;
     esac
   done
-
-  [[ ${seed_dir} && ${logfile} && ${categorize} && ${regexfile} && ${tr_api} && ${quota} -ge 0 ]] || {
-    printf '[DEBUG] Error: Invalid configurations.\n' 1>&2
-    exit 1
-  }
   hash curl jq || {
     printf '[DEBUG] Error: This program requires curl and jq executables.\n' 1>&2
     exit 1
