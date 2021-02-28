@@ -163,7 +163,7 @@ query_json() {
     printf '[DEBUG] Parsing json failed. Status: "%s"\n' "${result}" 1>&2
     exit 1
   }
-  printf '[DEBUG] Total torrents: %d, size: %d GiB, paused: %d\n' \
+  printf '[DEBUG] Torrents: %d, size: %d GiB, paused: %d\n' \
     "${#tr_names[@]}" "$((tr_totalsize / GiB))" "${tr_paused}" 1>&2
   return 0
 }
