@@ -166,9 +166,7 @@ clean_disk() (
 
   if ((${#tr_names[@]})) && cd "${seed_dir}"; then
     for i in [^.\#@]*; do
-      if [[ -z "${tr_names[${i}]}" && -z "${tr_names[${i%.part}]}" ]]; then
-        obsolete+=("${seed_dir}/${i}")
-      fi
+      [[ ${tr_names[${i}]} || ${tr_names[${i%.part}]} ]] || obsolete+=("${seed_dir}/${i}")
     done
   else
     printf '[DEBUG] Skip cleaning seed_dir (%s)\n' "${seed_dir}" 1>&2
