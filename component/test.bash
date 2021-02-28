@@ -25,10 +25,10 @@ test_regex() {
       find "${video_dir}" -type f -not -path '*/[.@#]*' -printf '%P\n'
     )
   )"
-  if [[ -n "${result}" ]]; then
-    printf '%s\n' "Failed. Matched items:" "${result}" 1>&2
+  if [[ ${result} ]]; then
+    printf '%s\n' "failed. Matched items:" "${result}" 1>&2
   else
-    printf '%s\n' "Passed." 1>&2
+    printf '%s\n' "passed." 1>&2
   fi
 }
 
@@ -37,14 +37,14 @@ print_help() {
 usage: ${BASH_SOURCE[0]} [-h] [-t] [-f] [-d DIR] [-r]
 
 Test ${categorize}.
-If no argument was passed, test '${seed_dir}'.
+If no argument was passed, scan '${seed_dir}'.
 
 optional arguments:
   -h            display this help text and exit
-  -t            test '${tv_dir}'
-  -f            test '${film_dir}'
-  -d DIR        test DIR
-  -r            test '${regex_file}' on '${driver_dir}'
+  -t            scan '${tv_dir}'
+  -f            scan '${film_dir}'
+  -d DIR        scan DIR
+  -r            test '${regex_file}' with '${driver_dir}'
 EOF
   exit 1
 }
@@ -64,6 +64,7 @@ while getopts 'htfd:r' a; do
       check=1
       ;;
     d)
+      OPTARG="${OPTARG%/}"
       names=("${OPTARG##*/}")
       if [[ ${names[0]} == "${OPTARG}" ]]; then
         TR_TORRENT_DIR="${PWD}"
