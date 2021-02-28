@@ -37,7 +37,7 @@ Author: David Pi
 optional arguments:
   -h        show this message and exit
   -d        dryrun mode
-  -s FILE   save parsed json to FILE
+  -s FILE   save formated json to FILE
   -q NUM    set disk quota to NUM GiB (default: $((quota / GiB)))
 EOF
   exit 1
@@ -206,7 +206,7 @@ remove_inactive() {
   }
 
   if ((m = quota + tr_totalsize - disksize, n = quota - freespace, (target = m > n ? m : n) > 0)); then
-    printf '[DEBUG] Free space: %d GiB, free up size: %d GiB.\n' \
+    printf '[DEBUG] Free space: %d GiB, free up: %d GiB\n' \
       "$((freespace / GiB))" "$((target / GiB))" 1>&2
   else
     printf '[DEBUG] Free space: %d GiB, avail space: %d GiB. System is healthy.\n' \
@@ -232,8 +232,8 @@ remove_inactive() {
   done < <(
     printf '%s' "${tr_json}" | jq -j '
       .arguments.torrents|
-      map(select(.percentDone==1))|
       sort_by(([.trackerStats[].leecherCount]|add),.activityDate)[]|
+      select(.percentDone==1)|
       "\(.id)/\(.sizeWhenDone)/\(.name)\u0000"'
   )
 }

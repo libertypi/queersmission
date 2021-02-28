@@ -83,7 +83,7 @@ while getopts 'htfd:r' a; do
 done
 
 ((${#names[@]})) || {
-  pushd "${TR_TORRENT_DIR}" >/dev/null && names=([^@\#.]*) || exit 1
+  pushd "${TR_TORRENT_DIR}" >/dev/null && names=([^.\#@]*) || exit 1
   popd >/dev/null
 }
 
@@ -103,7 +103,7 @@ for TR_TORRENT_NAME in "${names[@]}"; do
       -f "${categorize}"
   )
 
-  if [[ $? != 0 ]] || [[ ${check} == 1 && ${root} != "${TR_TORRENT_DIR}" ]]; then
+  if [[ $? != 0 || (${check} == 1 && ${root} != "${TR_TORRENT_DIR}") ]]; then
     error+=("${TR_TORRENT_NAME} -> ${root}")
     color=31
   else
