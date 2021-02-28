@@ -158,7 +158,7 @@ query_json() {
       "\(.result)\u0000",
       "\([.arguments.torrents[].sizeWhenDone]|add)\u0000",
       "\([.arguments.torrents[]|select(.status<=0)]|length)\u0000",
-      (.arguments.torrents[]|"\(.name)\u0000")'
+      "\(.arguments.torrents[].name)\u0000"'
   ) && [[ ${result} == 'success' ]] || {
     printf '[DEBUG] Parsing json failed. Status: "%s"\n' "${result}" 1>&2
     exit 1
