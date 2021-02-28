@@ -126,7 +126,7 @@ request_tr() {
       printf '[DEBUG] Querying API success: "%s"\n' "$*" 1>&2
       return 0
     elif ((i < 4)); then
-      printf '[DEBUG] Querying API failed. Retries: %s\n' "${i}" 1>&2
+      printf '[DEBUG] Querying API failed. Retries: %d\n' "${i}" 1>&2
       get_tr_header
     else
       printf '[DEBUG] Querying API failed: "%s"\n' "$*" 1>&2
@@ -232,8 +232,8 @@ remove_inactive() {
   done < <(
     printf '%s' "${tr_json}" | jq -j '
       .arguments.torrents|
+      map(select(.percentDone==1))|
       sort_by(([.trackerStats[].leecherCount]|add),.activityDate)[]|
-      select(.percentDone==1)|
       "\(.id)/\(.sizeWhenDone)/\(.name)\u0000"'
   )
 }
@@ -250,25 +250,30 @@ append_log() {
   # $2: location              (30)
   # $3: name
   local loc
-  if ((${#2} > 30)); then loc="${2::27}..."; else loc="$2"; fi
-  printf -v "logs[${#logs[@]}]" '%-17(%D %T)T    %-6s    %-30s    %s\n' '-1' "$1" "$loc" "$3"
+  if ((${#2} <= 30)); then loc="$2"; else loc="${2::27}..."; fi
+  printf -v "logs[${#logs[@]}]" '%(%D %T)T    %-6s    %-30s    %s\n' '-1' "$1" "$loc" "$3"
+}
+
+print_log() {
+  local i
+  printf '%-17s    %-6s    %-30s    %s\n%s\n' \
+    'Date' 'Status' 'Location' 'Name' \
+    '--------------------------------------------------------------------------------'
+  for ((i = ${#logs[@]} - 1; i >= 0; i--)); do
+    printf '%s' "${logs[i]}"
+  done
 }
 
 write_log() {
   if ((${#logs[@]})); then
     if ((dryrun)); then
       printf '[DEBUG] Logs (%d entries):\n' "${#logs[@]}" 1>&2
-      printf '%s\n' "${logs[@]}" 1>&2
+      print_log 1>&2
     else
-      local i backup
+      local backup
       [[ -f "${logfile}" ]] && backup="$(tail -n +3 -- "${logfile}")"
       {
-        printf '%-17s    %-6s    %-30s    %s\n%s\n' \
-          'Date' 'Status' 'Location' 'Name' \
-          '--------------------------------------------------------------------------------'
-        for ((i = ${#logs[@]} - 1; i >= 0; i--)); do
-          printf '%s' "${logs[i]}"
-        done
+        print_log
         [[ ${backup} ]] && printf '%s\n' "${backup}"
       } >"${logfile}"
     fi
