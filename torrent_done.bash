@@ -85,9 +85,9 @@ init() {
 
 copy_finished() {
   [[ ${tr_path} ]] || return
+  local i root path
 
   if [[ ${TR_TORRENT_DIR} == "${seed_dir}" ]]; then
-    local i root path
     for i in 'root' 'path'; do
       IFS= read -r -d '' "$i"
     done < <(
@@ -95,19 +95,20 @@ copy_finished() {
         -v TR_TORRENT_DIR="${TR_TORRENT_DIR}" \
         -v TR_TORRENT_NAME="${TR_TORRENT_NAME}" \
         -f "${categorize}"
-    ) && {
-      if [[ -d ${path} ]] || mkdir -p -- "${path}" && cp -rf -- "${tr_path}" "${path}/"; then
-        append_log 'Finish' "${root}" "${TR_TORRENT_NAME}"
-        return 0
-      fi
-    }
-  elif cp -rf -- "${tr_path}" "${seed_dir}/" && get_tr_header &&
+    ) && if [[ -d ${path} ]] || mkdir -p -- "${path}" && cp -rf -- "${tr_path}" "${path}/"; then
+      append_log 'Finish' "${root}" "${TR_TORRENT_NAME}"
+      return 0
+    fi
+
+  elif [[ -d ${seed_dir} ]] || mkdir -p -- "${seed_dir}" &&
+    cp -rf -- "${tr_path}" "${seed_dir}/" &&
+    get_tr_header &&
     request_tr "{\"arguments\":{\"ids\":[${TR_TORRENT_ID}],\"location\":\"${seed_dir}/\"},\"method\":\"torrent-set-location\"}" >/dev/null; then
     append_log 'Finish' "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
     return 0
   fi
 
-  append_log 'Error' "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
+  append_log 'Error' "${root:-${TR_TORRENT_DIR}}" "${TR_TORRENT_NAME}"
   return 1
 }
 
@@ -223,11 +224,9 @@ remove_inactive() {
       printf '[DEBUG] Remove %d torrents.\n' "${#names[@]}" 1>&2
       ((dryrun)) || {
         request_tr "{\"arguments\":{\"ids\":[${ids%,}],\"delete-local-data\":true},\"method\":\"torrent-remove\"}" >/dev/null
-      } && {
-        for name in "${names[@]}"; do
-          append_log 'Remove' "${seed_dir}" "${name}"
-        done
-      }
+      } && for name in "${names[@]}"; do
+        append_log 'Remove' "${seed_dir}" "${name}"
+      done
       break
     fi
   done < <(
