@@ -4,17 +4,17 @@
 #                                Configurations                                #
 ################################################################################
 
-# Transmission rpc-url with authentication disabled:
+# Transmission rpc-url with authentication disabled.
 tr_api='http://localhost:9091/transmission/rpc'
 
-# Directory storing files for seeding, without trailing slash:
+# Directory storing files for seeding, without trailing slash.
 seed_dir='/volume2/@transmission'
 
 # Directory where transmission monitors for new torrents, set an empty value to
-# disable watch_dir cleanup:
+# disable watch_dir cleanup.
 watch_dir='/volume1/video/Torrents'
 
-# Disk space quota (minimum free space on disk):
+# Disk space quota (minimum free space on disk)
 ((GiB = 1024 ** 3, quota = 100 * GiB))
 
 # ------------------------ That's all, stop editing! ------------------------- #
@@ -44,9 +44,9 @@ EOF
 }
 
 init() {
-  local i
-  export LC_ALL=C LANG=C
   unset IFS
+  export LC_ALL=C LANG=C
+  local i
   declare -Ag tr_names
   tr_path= tr_header= tr_json= tr_totalsize= tr_paused= savejson= logs=()
   dryrun=0
@@ -136,6 +136,9 @@ request_tr() {
 }
 
 query_json() {
+  # transmission status number:
+  # https://github.com/transmission/transmission/blob/master/libtransmission/transmission.h#L1658
+
   local i result
 
   [[ ${tr_header} ]] || get_tr_header
@@ -157,7 +160,7 @@ query_json() {
     printf '%s' "${tr_json}" | jq -j '
       "\(.result)\u0000",
       "\([.arguments.torrents[].sizeWhenDone]|add)\u0000",
-      "\([.arguments.torrents[]|select(.status<=0)]|length)\u0000",
+      "\([.arguments.torrents[]|select(.status == 0)]|length)\u0000",
       "\(.arguments.torrents[].name)\u0000"'
   ) && [[ ${result} == 'success' ]] || {
     printf '[DEBUG] Parsing json failed. Status: "%s"\n' "${result}" 1>&2
@@ -170,6 +173,7 @@ query_json() {
 
 clean_disk() (
   # this function runs in a subshell
+
   shopt -s nullglob dotglob globstar
   obsolete=()
 
@@ -232,8 +236,8 @@ remove_inactive() {
   done < <(
     printf '%s' "${tr_json}" | jq -j '
       .arguments.torrents|
-      sort_by(([.trackerStats[].leecherCount]|add),.activityDate)[]|
-      select(.percentDone==1)|
+      sort_by(.activityDate, ([.trackerStats[].leecherCount]|add))[]|
+      select(.percentDone == 1)|
       "\(.id)/\(.sizeWhenDone)/\(.name)\u0000"'
   )
 }
