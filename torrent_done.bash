@@ -14,7 +14,7 @@ seed_dir='/volume2/@transmission'
 # disable watch_dir cleanup.
 watch_dir='/volume1/video/Torrents'
 
-# Disk space quota (minimum free space on disk)
+# Disk quota (minimum space to keep free on disk)
 ((GiB = 1024 ** 3, quota = 100 * GiB))
 
 # ------------------------ That's all, stop editing! ------------------------- #
@@ -215,7 +215,7 @@ remove_inactive() {
     return 0
   fi
 
-  while IFS='/' read -r -d '' id size name; do
+  while IFS=/ read -r -d '' id size name; do
     [[ ${name} ]] || continue
     ids+="${id},"
     names+=("${name}")
