@@ -55,6 +55,10 @@ init() {
     printf '[DEBUG] Error: Invalid configurations.\n' 1>&2
     exit 1
   }
+  hash curl jq || {
+    printf '[DEBUG] Error: This program requires curl and jq executables.\n' 1>&2
+    exit 1
+  }
   while getopts 'hds:q:' i; do
     case "$i" in
       d) dryrun=1 ;;
@@ -63,10 +67,6 @@ init() {
       *) print_help ;;
     esac
   done
-  hash curl jq || {
-    printf '[DEBUG] Error: This program requires curl and jq executables.\n' 1>&2
-    exit 1
-  }
 
   cd "${BASH_SOURCE[0]%/*}" || exit 1
   printf '[DEBUG] Acquiring lock...' 1>&2
