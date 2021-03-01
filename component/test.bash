@@ -64,9 +64,11 @@ while getopts 'htfd:r' a; do
       check=1
       ;;
     d)
-      OPTARG="${OPTARG%/}"
+      while [[ ${OPTARG} == */ ]]; do OPTARG="${OPTARG%/}"; done
       names=("${OPTARG##*/}")
-      if [[ ${names[0]} == "${OPTARG}" ]]; then
+      if [[ -z ${names[0]} ]]; then
+        print_help
+      elif [[ ${names[0]} == "${OPTARG}" ]]; then
         TR_TORRENT_DIR="${PWD}"
       else
         TR_TORRENT_DIR="${OPTARG%/*}"
