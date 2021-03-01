@@ -47,6 +47,7 @@ EOF
   exit 1
 }
 
+# Dependencies check, parse arguments and acquire lock.
 init() {
   local i
 
@@ -83,6 +84,8 @@ init() {
   trap 'write_log' EXIT
 }
 
+# Copy finished downloads. Only run when this script was invoked by transmission
+# as "script-torrent-done".
 copy_finished() {
   [[ ${tr_path} ]] || return
   local i root path
@@ -113,31 +116,35 @@ copy_finished() {
 }
 
 get_tr_header() {
-  if [[ "$(curl -sI -- "${tr_api}")" =~ X-Transmission-Session-Id:[[:space:]]*[A-Za-z0-9]+ ]]; then
+  if [[ "$(curl -s -I -- "${tr_api}")" =~ X-Transmission-Session-Id:[[:space:]]*[A-Za-z0-9]+ ]]; then
     tr_header="${BASH_REMATCH[0]}"
     printf '[DEBUG] API header: "%s"\n' "${tr_header}" 1>&2
   fi
 }
 
+# Send an API request.
+# Arguments:
+#   $1: data to send
 request_tr() {
   local i
   for i in {1..4}; do
-    if curl -sf --header "${tr_header}" -d "$@" -- "${tr_api}"; then
-      printf '[DEBUG] Querying API success: "%s"\n' "$*" 1>&2
+    if curl -s -f --header "${tr_header}" -d "$1" -- "${tr_api}"; then
+      printf '[DEBUG] Querying API success: "%s"\n' "$1" 1>&2
       return 0
     elif ((i < 4)); then
       printf '[DEBUG] Querying API failed. Retries: %d\n' "${i}" 1>&2
       get_tr_header
     else
-      printf '[DEBUG] Querying API failed: "%s"\n' "$*" 1>&2
+      printf '[DEBUG] Querying API failed: "%s"\n' "$1" 1>&2
       return 1
     fi
   done
 }
 
+# Query and parse transmission json.
+# torrent status number:
+# https://github.com/transmission/transmission/blob/master/libtransmission/transmission.h#L1658
 query_json() {
-  # transmission status number:
-  # https://github.com/transmission/transmission/blob/master/libtransmission/transmission.h#L1658
   local i result
 
   [[ ${tr_header} ]] || get_tr_header
@@ -148,6 +155,7 @@ query_json() {
     printf '[DEBUG] Save json to %s\n' "${savejson}" 1>&2
     printf '%s' "${tr_json}" | jq '.' >"${savejson}"
   fi
+
   {
     for i in 'result' 'tr_totalsize' 'tr_paused'; do
       read -r -d '' "$i"
@@ -165,13 +173,14 @@ query_json() {
     printf '[DEBUG] Parsing json failed. Status: "%s"\n' "${result}" 1>&2
     exit 1
   }
+
   printf '[DEBUG] Torrents: %d, size: %d GiB, paused: %d\n' \
     "${#tr_names[@]}" "$((tr_totalsize / GiB))" "${tr_paused}" 1>&2
   return 0
 }
 
+# Cleanup files in seed_dir and watch_dir. This function runs in a subshell.
 clean_disk() (
-  # this function runs in a subshell
   shopt -s nullglob dotglob globstar
   obsolete=()
 
@@ -182,6 +191,7 @@ clean_disk() (
   else
     printf '[DEBUG] Skip cleaning seed_dir (%s)\n' "${seed_dir}" 1>&2
   fi
+
   if [[ ${watch_dir} ]] && cd "${watch_dir}"; then
     for i in **; do
       [[ -s ${i} ]] || obsolete+=("${watch_dir}/${i}")
@@ -189,6 +199,7 @@ clean_disk() (
   else
     printf '[DEBUG] Skip cleaning watch_dir (%s)\n' "${watch_dir}" 1>&2
   fi
+
   if ((${#obsolete[@]})); then
     printf '[DEBUG] Delete %d files:\n' "${#obsolete[@]}" 1>&2
     printf '%s\n' "${obsolete[@]}" 1>&2
@@ -196,6 +207,7 @@ clean_disk() (
   fi
 )
 
+# Remove inactive torrents if disk space was bellow $quota.
 remove_inactive() {
   local disksize freespace target m n id size name ids names
 
@@ -208,7 +220,7 @@ remove_inactive() {
   }
 
   if ((m = quota + tr_totalsize - disksize, n = quota - freespace, (target = m > n ? m : n) > 0)); then
-    printf '[DEBUG] Free space: %d GiB, free up: %d GiB\n' \
+    printf '[DEBUG] Free space: %d GiB, will free up: %d GiB\n' \
       "$((freespace / GiB))" "$((target / GiB))" 1>&2
   else
     printf '[DEBUG] Free space: %d GiB, avail space: %d GiB. System is healthy.\n' \
@@ -238,22 +250,26 @@ remove_inactive() {
   )
 }
 
+# Restart paused torrents, if any.
 resume_paused() {
   if ((tr_paused > 0 && !dryrun)); then
     request_tr '{"method":"torrent-start"}' >/dev/null
   fi
 }
 
+# Record one line of log.
+# columns & arguments, width:
+#   --: mm/dd/yy hh:mm:ss     (17)
+#   $1: Finish/Remove/Error   (6)
+#   $2: location              (30)
+#   $3: name
 append_log() {
-  #  0: mm/dd/yy hh:mm:ss     (17)
-  # $1: Finish/Remove/Error   (6)
-  # $2: location              (30)
-  # $3: name
   local loc
   if ((${#2} <= 30)); then loc="$2"; else loc="${2::27}..."; fi
   printf -v "logs[${#logs[@]}]" '%(%D %T)T    %-6s    %-30s    %s\n' '-1' "$1" "$loc" "$3"
 }
 
+# Print logs in reversed order.
 print_log() {
   local i
   printf '%-17s    %-6s    %-30s    %s\n%s\n' \
@@ -264,6 +280,7 @@ print_log() {
   done
 }
 
+# Insert logs to the beginning of $logfile.
 write_log() {
   if ((${#logs[@]})); then
     if ((dryrun)); then
