@@ -272,7 +272,7 @@ write_log() {
       print_log 1>&2
     else
       local backup
-      [[ -f "${logfile}" ]] && backup="$(tail -n +3 -- "${logfile}")"
+      [[ -f ${logfile} ]] && backup="$(tail -n +3 -- "${logfile}")"
       {
         print_log
         [[ ${backup} ]] && printf '%s\n' "${backup}"

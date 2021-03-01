@@ -71,7 +71,7 @@ while getopts 'htfd:r' a; do
       else
         TR_TORRENT_DIR="${OPTARG%/*}"
       fi
-      [[ -e "${OPTARG}" ]] && check=1
+      [[ -e ${OPTARG} ]] && check=1
       ;;
     r)
       test_regex
