@@ -19,9 +19,13 @@ watch_dir='/volume1/video/Torrents'
 
 # ------------------------ That's all, stop editing! ------------------------- #
 
+unset IFS
+export LC_ALL=C LANG=C
 logfile='transmission.log'
 categorize='component/categorize.awk'
 regexfile='component/regex.txt'
+tr_path= tr_header= tr_json= tr_totalsize= tr_paused= savejson= dryrun=0 logs=()
+declare -A tr_names
 
 ################################################################################
 #                                  Functions                                   #
@@ -44,12 +48,7 @@ EOF
 }
 
 init() {
-  unset IFS
-  export LC_ALL=C LANG=C
   local i
-  declare -Ag tr_names
-  tr_path= tr_header= tr_json= tr_totalsize= tr_paused= savejson= logs=()
-  dryrun=0
 
   [[ ${tr_api} == http* && ${seed_dir} == /*[^/] && ${quota} -ge 0 ]] || {
     printf '[DEBUG] Error: Invalid configurations.\n' 1>&2
@@ -103,7 +102,7 @@ copy_finished() {
       fi
     }
   elif cp -rf -- "${tr_path}" "${seed_dir}/" && get_tr_header &&
-    request_tr "{\"arguments\":{\"ids\":[${TR_TORRENT_ID}],\"location\":\"${seed_dir}/\"},\"method\":\"torrent-set-location\"}" >'/dev/null'; then
+    request_tr "{\"arguments\":{\"ids\":[${TR_TORRENT_ID}],\"location\":\"${seed_dir}/\"},\"method\":\"torrent-set-location\"}" >/dev/null; then
     append_log 'Finish' "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
     return 0
   fi
@@ -138,7 +137,6 @@ request_tr() {
 query_json() {
   # transmission status number:
   # https://github.com/transmission/transmission/blob/master/libtransmission/transmission.h#L1658
-
   local i result
 
   [[ ${tr_header} ]] || get_tr_header
@@ -173,7 +171,6 @@ query_json() {
 
 clean_disk() (
   # this function runs in a subshell
-
   shopt -s nullglob dotglob globstar
   obsolete=()
 
@@ -225,7 +222,7 @@ remove_inactive() {
     if (((target -= size) <= 0)); then
       printf '[DEBUG] Remove %d torrents.\n' "${#names[@]}" 1>&2
       ((dryrun)) || {
-        request_tr "{\"arguments\":{\"ids\":[${ids%,}],\"delete-local-data\":true},\"method\":\"torrent-remove\"}" >'/dev/null'
+        request_tr "{\"arguments\":{\"ids\":[${ids%,}],\"delete-local-data\":true},\"method\":\"torrent-remove\"}" >/dev/null
       } && {
         for name in "${names[@]}"; do
           append_log 'Remove' "${seed_dir}" "${name}"
@@ -244,7 +241,7 @@ remove_inactive() {
 
 resume_paused() {
   if ((tr_paused > 0 && !dryrun)); then
-    request_tr '{"method":"torrent-start"}' >'/dev/null'
+    request_tr '{"method":"torrent-start"}' >/dev/null
   fi
 }
 
