@@ -141,7 +141,7 @@ request_tr() {
   done
 }
 
-# Query and parse transmission json.
+# Get and parse transmission json.
 # torrent status number:
 # https://github.com/transmission/transmission/blob/master/libtransmission/transmission.h#L1658
 query_json() {
