@@ -5,16 +5,15 @@
 #   TR_TORRENT_DIR, TR_TORRENT_NAME, regexfile, dir_default,
 #   dir_av, dir_film, dir_tv, dir_music, dir_adobe
 #
-# Output (null-terminated string):
+# Output (null-terminated):
 #   (root, path)
 
 @load "readdir"
 @load "filefuncs"
 
 BEGIN {
-    if (regexfile == "" || TR_TORRENT_DIR == "" || TR_TORRENT_NAME == "" || dir_default == "") {
-        printf("[AWK]: Invalid inputs (regexfile: '%s', TR_TORRENT_DIR: '%s', TR_TORRENT_NAME: '%s', dir_default: '%s')\n",
-            regexfile, TR_TORRENT_DIR, TR_TORRENT_NAME, dir_default) > "/dev/stderr"
+    if (TR_TORRENT_DIR == "" || TR_TORRENT_NAME == "" || regexfile == "" || dir_default == "") {
+        printf("[AWK]: Invalid inputs (TR_TORRENT_DIR: '%s', TR_TORRENT_NAME: '%s', regexfile: '%s', dir_default: '%s')\n", TR_TORRENT_DIR, TR_TORRENT_NAME, regexfile, dir_default) > "/dev/stderr"
         exit 1
     }
     split("", sizedict)

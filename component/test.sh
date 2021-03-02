@@ -97,12 +97,12 @@ for TR_TORRENT_NAME in "${names[@]}"; do
     IFS= read -r -d '' root
     IFS= read -r -d '' path
   } < <(
-    awk -f "${categorize}" \
-      -v TR_TORRENT_DIR="${TR_TORRENT_DIR}" \
+    awk -v TR_TORRENT_DIR="${TR_TORRENT_DIR}" \
       -v TR_TORRENT_NAME="${TR_TORRENT_NAME}" \
       -v regexfile="${regexfile}" \
       -v dir_default="${dir_default}" -v dir_av="${dir_av}" -v dir_film="${dir_film}" \
-      -v dir_tv="${dir_tv}" -v dir_music="${dir_music}" -v dir_adobe="${dir_adobe}"
+      -v dir_tv="${dir_tv}" -v dir_music="${dir_music}" -v dir_adobe="${dir_adobe}" \
+      -f "${categorize}"
   )
 
   if [[ $? -ne 0 || (${check} == 1 && ${root} != "${TR_TORRENT_DIR}") ]]; then

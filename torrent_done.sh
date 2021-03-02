@@ -41,15 +41,14 @@ init() {
   # read and varify configuration
   local i='/*[^/]'
   source ./config &&
-    [[ ${tr_api} == http* && \
-    ${seed_dir} == ${i} && (${watch_dir} == ${i} || -z ${watch_dir}) && \
+    [[ ${tr_api} == http* && ${seed_dir} == ${i} && \
     ${quota} -ge 0 && ${dir_default} == ${i} ]] ||
     die 'Invalid configuration.'
 
   logfile='logfile.log'
   categorize='component/categorize.awk'
   regexfile='component/regex.txt'
-  tr_path= tr_header= tr_json= tr_totalsize= tr_paused= savejson= dryrun=0 logs=()
+  tr_path='' tr_header='' tr_json='' tr_totalsize='' tr_paused='' savejson='' dryrun=0 logs=()
   declare -Ag tr_names
 
   # parse arguments
@@ -88,12 +87,12 @@ copy_finished() {
     for i in 'root' 'path'; do
       IFS= read -r -d '' "$i"
     done < <(
-      awk -f "${categorize}" \
-        -v TR_TORRENT_DIR="${TR_TORRENT_DIR}" \
+      awk -v TR_TORRENT_DIR="${TR_TORRENT_DIR}" \
         -v TR_TORRENT_NAME="${TR_TORRENT_NAME}" \
         -v regexfile="${regexfile}" \
         -v dir_default="${dir_default}" -v dir_av="${dir_av}" -v dir_film="${dir_film}" \
-        -v dir_tv="${dir_tv}" -v dir_music="${dir_music}" -v dir_adobe="${dir_adobe}"
+        -v dir_tv="${dir_tv}" -v dir_music="${dir_music}" -v dir_adobe="${dir_adobe}" \
+        -f "${categorize}"
     ) && if [[ -e ${path} ]] || mkdir -p -- "${path}" && cp -rf -- "${tr_path}" "${path}/"; then
       append_log 'Finish' "${root}" "${TR_TORRENT_NAME}"
       return 0
