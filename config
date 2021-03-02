@@ -5,11 +5,12 @@
 # Transmission rpc address with authentication disabled
 tr_api='http://localhost:9091/transmission/rpc'
 
-# Directory storing seeding files, without trailing slash
+# Directory storing seeding files, match "download-dir" in transmission
+# settings, without trailing slash
 seed_dir='/volume2/@transmission'
 
-# Directory where transmission monitors for new torrents, leave empty to disable
-# watch_dir cleanup
+# Directory where transmission monitors for new torrents, match "watch-dir" in
+# transmission settings, leave empty to disable watch_dir cleanup
 watch_dir='/volume1/video/Torrents'
 
 # Disk quota (minimum free space to keep on disk)

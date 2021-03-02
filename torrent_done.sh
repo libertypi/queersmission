@@ -54,7 +54,7 @@ init() {
   while getopts 'hds:q:' i; do
     case "$i" in
       d) dryrun=1 ;;
-      s) [[ ${OPTARG} ]] || die 'Empty json name.' && savejson="${OPTARG}" ;;
+      s) [[ ${OPTARG} ]] || die 'Empty json filename.' && savejson="${OPTARG}" ;;
       q) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'QUOTA should be integer >= 0.' && ((quota = OPTARG * GiB)) ;;
       *) print_help ;;
     esac
@@ -205,7 +205,8 @@ remove_inactive() {
   {
     read _
     read -r 'disksize' 'freespace'
-  } < <(df --block-size=1 --output='size,avail' -- "${seed_dir}") && [[ ${disksize} =~ ^[0-9]+$ && ${freespace} =~ ^[0-9]+$ ]] || {
+  } < <(df --block-size=1 --output='size,avail' -- "${seed_dir}") &&
+    [[ ${disksize} =~ ^[0-9]+$ && ${freespace} =~ ^[0-9]+$ ]] || {
     printf 'Reading disk stat failed.\n' 1>&2
     return 1
   }
@@ -223,15 +224,7 @@ remove_inactive() {
     [[ ${name} ]] || continue
     ids+="${id},"
     names+=("${name}")
-    if (((target -= size) <= 0)); then
-      printf 'Remove %d torrents.\n' "${#names[@]}" 1>&2
-      ((dryrun)) || {
-        request_tr "{\"arguments\":{\"ids\":[${ids%,}],\"delete-local-data\":true},\"method\":\"torrent-remove\"}" >/dev/null
-      } && for name in "${names[@]}"; do
-        append_log 'Remove' "${seed_dir}" "${name}"
-      done
-      break
-    fi
+    (((target -= size) <= 0)) && break
   done < <(
     printf '%s' "${tr_json}" | jq --arg d "${seed_dir}" -j '
       .arguments.torrents|
@@ -239,6 +232,15 @@ remove_inactive() {
       sort_by(.activityDate, ([.trackerStats[].leecherCount]|add))[]|      
       "\(.id)/\(.sizeWhenDone)/\(.name)\u0000"'
   )
+
+  if ((${#names[@]})); then
+    printf 'Remove %d torrents.\n' "${#names[@]}" 1>&2
+    ((dryrun)) || {
+      request_tr "{\"arguments\":{\"ids\":[${ids%,}],\"delete-local-data\":true},\"method\":\"torrent-remove\"}" >/dev/null
+    } && for name in "${names[@]}"; do
+      append_log 'Remove' "${seed_dir}" "${name}"
+    done
+  fi
 }
 
 # Restart paused torrents, if there is any.
