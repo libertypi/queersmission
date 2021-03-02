@@ -13,7 +13,8 @@
 
 BEGIN {
     if (TR_TORRENT_DIR == "" || TR_TORRENT_NAME == "" || regexfile == "" || dir_default == "") {
-        printf("[AWK]: Invalid inputs (TR_TORRENT_DIR: '%s', TR_TORRENT_NAME: '%s', regexfile: '%s', dir_default: '%s')\n", TR_TORRENT_DIR, TR_TORRENT_NAME, regexfile, dir_default) > "/dev/stderr"
+        printf("[AWK]: Invalid inputs (TR_TORRENT_DIR: '%s', TR_TORRENT_NAME: '%s', regexfile: '%s', dir_default: '%s')\n",
+            TR_TORRENT_DIR, TR_TORRENT_NAME, regexfile, dir_default) > "/dev/stderr"
         exit 1
     }
     split("", sizedict)

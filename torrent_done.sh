@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Bash program for transmission torrent management and maintenance.
+# Bash script for transmission torrent management and maintenance.
 # Author: David Pi
 
 ################################################################################
@@ -28,7 +28,6 @@ EOF
   exit 1
 }
 
-# Initialize script.
 init() {
   unset IFS
   export LC_ALL=C LANG=C
@@ -77,8 +76,9 @@ init() {
   trap 'write_log' EXIT
 }
 
-# Copy finished downloads. Only run when this script was invoked by transmission
-# as "script-torrent-done".
+# Copy finished downloads to destination.
+# This function only runs when the script was invoked by transmission as
+# "script-torrent-done".
 copy_finished() {
   [[ ${tr_path} ]] || return
   local i root path
@@ -169,7 +169,8 @@ query_json() {
   return 0
 }
 
-# Cleanup files in seed_dir and watch_dir. This function runs in a subshell.
+# Clean junk files in seed_dir and watch_dir.
+# This function runs in a subshell, so, no logs.
 clean_disk() (
   shopt -s nullglob dotglob globstar
   obsolete=()
@@ -240,7 +241,7 @@ remove_inactive() {
   )
 }
 
-# Restart paused torrents, if any.
+# Restart paused torrents, if there is any.
 resume_paused() {
   if ((tr_paused > 0 && !dryrun)); then
     request_tr '{"method":"torrent-start"}' >/dev/null
@@ -270,7 +271,7 @@ print_log() {
   done
 }
 
-# Insert logs to the beginning of $logfile.
+# Insert logs at the beginning of $logfile.
 write_log() {
   if ((${#logs[@]})); then
     if ((dryrun)); then

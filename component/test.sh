@@ -122,7 +122,9 @@ for TR_TORRENT_NAME in "${names[@]}"; do
 
 done
 
-if ((${#error})); then
+if ((!check)); then
+  printf '%s\n' 'Done.' 1>&2
+elif ((${#error})); then
   printf '%s\n' 'Errors:' "${error[@]}" 1>&2
 else
   printf '%s\n' 'Passed.' 1>&2
