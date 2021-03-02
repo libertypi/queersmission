@@ -3,7 +3,7 @@
 
 BEGIN {
     if (REGEX_FILE == "" || TR_TORRENT_DIR == "" || TR_TORRENT_NAME == "") {
-        printf("[DEBUG] Awk: Invalid argument values (REGEX_FILE: '%s', TR_TORRENT_DIR: '%s', TR_TORRENT_NAME: '%s')\n",
+        printf("[AWK]: Invalid argument values (REGEX_FILE: '%s', TR_TORRENT_DIR: '%s', TR_TORRENT_NAME: '%s')\n",
             REGEX_FILE, TR_TORRENT_DIR, TR_TORRENT_NAME) > "/dev/stderr"
         exit 1
     }
@@ -45,7 +45,7 @@ function read_regex(fpath,  s)
         }
     }
     close(fpath)
-    printf("[DEBUG] Awk: Reading regex from '%s' failed.\n", fpath) > "/dev/stderr"
+    printf("[AWK]: Reading regex from '%s' failed.\n", fpath) > "/dev/stderr"
     return "^$"
 }
 

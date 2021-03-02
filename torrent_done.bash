@@ -31,6 +31,11 @@ declare -A tr_names
 #                                  Functions                                   #
 ################################################################################
 
+die() {
+  printf 'Error: %s\n' "$1" 1>&2
+  exit 1
+}
+
 print_help() {
   cat <<EOF 1>&2
 usage: ${BASH_SOURCE[0]} [OPTION]...
@@ -49,27 +54,22 @@ EOF
 
 # Dependencies check, parse arguments and acquire lock.
 init() {
-  local i
+  [[ ${BASH_VERSINFO[0]} -ge 4 ]] || die 'Bash >=4 required.'
+  [[ ${tr_api} == http* && ${seed_dir} == /*[^/] && ${quota} -ge 0 ]] || die 'Invalid configurations.'
+  hash curl jq || die 'Curl and jq required.'
 
-  [[ ${tr_api} == http* && ${seed_dir} == /*[^/] && ${quota} -ge 0 ]] || {
-    printf '[DEBUG] Error: Invalid configurations.\n' 1>&2
-    exit 1
-  }
-  hash curl jq || {
-    printf '[DEBUG] Error: This program requires curl and jq executables.\n' 1>&2
-    exit 1
-  }
+  local i
   while getopts 'hds:q:' i; do
     case "$i" in
       d) dryrun=1 ;;
-      s) [[ ${OPTARG} ]] || print_help && savejson="${OPTARG}" ;;
-      q) [[ ${OPTARG} =~ ^[0-9]+$ ]] || print_help && ((quota = OPTARG * GiB)) ;;
+      s) [[ ${OPTARG} ]] || die 'Empty json name.' && savejson="${OPTARG}" ;;
+      q) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'QUOTA should be integer >= 0.' && ((quota = OPTARG * GiB)) ;;
       *) print_help ;;
     esac
   done
 
-  cd "${BASH_SOURCE[0]%/*}" || exit 1
-  printf '[DEBUG] Acquiring lock...' 1>&2
+  cd "${BASH_SOURCE[0]%/*}" || die 'Unable to enter script directory.'
+  printf 'Acquiring lock...' 1>&2
   exec {i}<"${BASH_SOURCE[0]##*/}"
 
   if [[ ${TR_TORRENT_DIR} && ${TR_TORRENT_NAME} ]]; then
@@ -118,7 +118,7 @@ copy_finished() {
 get_tr_header() {
   if [[ "$(curl -s -I -- "${tr_api}")" =~ X-Transmission-Session-Id:[[:space:]]*[A-Za-z0-9]+ ]]; then
     tr_header="${BASH_REMATCH[0]}"
-    printf '[DEBUG] API header: "%s"\n' "${tr_header}" 1>&2
+    printf 'API header: "%s"\n' "${tr_header}" 1>&2
   fi
 }
 
@@ -129,13 +129,13 @@ request_tr() {
   local i
   for i in {1..4}; do
     if curl -s -f --header "${tr_header}" -d "$1" -- "${tr_api}"; then
-      printf '[DEBUG] Querying API success: "%s"\n' "$1" 1>&2
+      printf 'Querying API success: %s\n' "$1" 1>&2
       return 0
     elif ((i < 4)); then
-      printf '[DEBUG] Querying API failed. Retries: %d\n' "${i}" 1>&2
+      printf 'Querying API failed. Retries: %d\n' "${i}" 1>&2
       get_tr_header
     else
-      printf '[DEBUG] Querying API failed: "%s"\n' "$1" 1>&2
+      printf 'Querying API failed: %s\n' "$1" 1>&2
       return 1
     fi
   done
@@ -152,7 +152,7 @@ query_json() {
     request_tr '{"arguments":{"fields":["activityDate","id","name","percentDone","sizeWhenDone","status","trackerStats"]},"method":"torrent-get"}'
   )" || exit 1
   if [[ ${savejson} ]]; then
-    printf '[DEBUG] Save json to %s\n' "${savejson}" 1>&2
+    printf 'Save json to %s\n' "${savejson}" 1>&2
     printf '%s' "${tr_json}" | jq '.' >"${savejson}"
   fi
 
@@ -169,12 +169,9 @@ query_json() {
       "\([.arguments.torrents[].sizeWhenDone]|add)\u0000",
       "\([.arguments.torrents[]|select(.status == 0)]|length)\u0000",
       "\(.arguments.torrents[].name)\u0000"'
-  ) && [[ ${result} == 'success' ]] || {
-    printf '[DEBUG] Parsing json failed. Status: "%s"\n' "${result}" 1>&2
-    exit 1
-  }
+  ) && [[ ${result} == 'success' ]] || die "Parsing json failed. Status: '${result}'"
 
-  printf '[DEBUG] Torrents: %d, size: %d GiB, paused: %d\n' \
+  printf 'Torrents: %d, size: %d GiB, paused: %d\n' \
     "${#tr_names[@]}" "$((tr_totalsize / GiB))" "${tr_paused}" 1>&2
   return 0
 }
@@ -189,7 +186,7 @@ clean_disk() (
       [[ ${tr_names["${i}"]} || ${tr_names["${i%.part}"]} ]] || obsolete+=("${seed_dir}/${i}")
     done
   else
-    printf '[DEBUG] Skip cleaning seed_dir (%s)\n' "${seed_dir}" 1>&2
+    printf 'Skip cleaning seed_dir (%s)\n' "${seed_dir}" 1>&2
   fi
 
   if [[ ${watch_dir} ]] && cd "${watch_dir}"; then
@@ -197,11 +194,11 @@ clean_disk() (
       [[ -s ${i} ]] || obsolete+=("${watch_dir}/${i}")
     done
   else
-    printf '[DEBUG] Skip cleaning watch_dir (%s)\n' "${watch_dir}" 1>&2
+    printf 'Skip cleaning watch_dir (%s)\n' "${watch_dir}" 1>&2
   fi
 
   if ((${#obsolete[@]})); then
-    printf '[DEBUG] Delete %d files:\n' "${#obsolete[@]}" 1>&2
+    printf 'Delete %d files:\n' "${#obsolete[@]}" 1>&2
     printf '%s\n' "${obsolete[@]}" 1>&2
     ((dryrun)) || rm -rf -- "${obsolete[@]}"
   fi
@@ -215,15 +212,15 @@ remove_inactive() {
     read _
     read -r 'disksize' 'freespace'
   } < <(df --block-size=1 --output='size,avail' -- "${seed_dir}") && [[ ${disksize} =~ ^[0-9]+$ && ${freespace} =~ ^[0-9]+$ ]] || {
-    printf '[DEBUG] Reading disk stat failed.\n' 1>&2
+    printf 'Reading disk stat failed.\n' 1>&2
     return 1
   }
 
   if ((m = quota + tr_totalsize - disksize, n = quota - freespace, (target = m > n ? m : n) > 0)); then
-    printf '[DEBUG] Free space: %d GiB, will free up: %d GiB\n' \
+    printf 'Free space: %d GiB, will free up: %d GiB\n' \
       "$((freespace / GiB))" "$((target / GiB))" 1>&2
   else
-    printf '[DEBUG] Free space: %d GiB, avail space: %d GiB. System is healthy.\n' \
+    printf 'Free space: %d GiB, avail space: %d GiB. System is healthy.\n' \
       "$((freespace / GiB))" "$((-target / GiB))" 1>&2
     return 0
   fi
@@ -233,7 +230,7 @@ remove_inactive() {
     ids+="${id},"
     names+=("${name}")
     if (((target -= size) <= 0)); then
-      printf '[DEBUG] Remove %d torrents.\n' "${#names[@]}" 1>&2
+      printf 'Remove %d torrents.\n' "${#names[@]}" 1>&2
       ((dryrun)) || {
         request_tr "{\"arguments\":{\"ids\":[${ids%,}],\"delete-local-data\":true},\"method\":\"torrent-remove\"}" >/dev/null
       } && for name in "${names[@]}"; do
@@ -284,7 +281,7 @@ print_log() {
 write_log() {
   if ((${#logs[@]})); then
     if ((dryrun)); then
-      printf '[DEBUG] Logs (%d entries):\n' "${#logs[@]}" 1>&2
+      printf 'Logs (%d entries):\n' "${#logs[@]}" 1>&2
       print_log 1>&2
     else
       local backup
