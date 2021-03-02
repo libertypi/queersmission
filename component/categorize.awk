@@ -1,10 +1,20 @@
+# AWK program for torrent categorization.
+# Author: David Pi
+#
+# Input variables (passed via "-v" arguments):
+#   TR_TORRENT_DIR, TR_TORRENT_NAME, regexfile, dir_default,
+#   dir_av, dir_film, dir_tv, dir_music, dir_adobe
+#
+# Output (null-terminated string):
+#   (root, path)
+
 @load "readdir"
 @load "filefuncs"
 
 BEGIN {
-    if (REGEX_FILE == "" || TR_TORRENT_DIR == "" || TR_TORRENT_NAME == "") {
-        printf("[AWK]: Invalid argument values (REGEX_FILE: '%s', TR_TORRENT_DIR: '%s', TR_TORRENT_NAME: '%s')\n",
-            REGEX_FILE, TR_TORRENT_DIR, TR_TORRENT_NAME) > "/dev/stderr"
+    if (regexfile == "" || TR_TORRENT_DIR == "" || TR_TORRENT_NAME == "" || dir_default == "") {
+        printf("[AWK]: Invalid inputs (regexfile: '%s', TR_TORRENT_DIR: '%s', TR_TORRENT_NAME: '%s', dir_default: '%s')\n",
+            regexfile, TR_TORRENT_DIR, TR_TORRENT_NAME, dir_default) > "/dev/stderr"
         exit 1
     }
     split("", sizedict)
@@ -12,7 +22,7 @@ BEGIN {
     split("", videoset)
     FS = "/"
 
-    av_regex = read_regex(REGEX_FILE)
+    av_regex = read_regex(regexfile)
     tr_path = (TR_TORRENT_DIR "/" TR_TORRENT_NAME)
     stat(tr_path, tr_stat)
     tr_isdir = (tr_stat["type"] == "directory")
@@ -166,27 +176,29 @@ function ext_match(sizedict, filelist, videoset,  i, j, groups)
     output(groups[1])
 }
 
-function output(type,  root, path)
+function output(type,  root, path, groups)
 {
     switch (type) {
     case "av":
-        root = "/volume1/driver/Temp"
+        root = dir_av
         break
     case "film":
-        root = "/volume1/video/Films"
+        root = dir_film
         break
     case "tv":
-        root = "/volume1/video/TV Series"
+        root = dir_tv
         break
     case "music":
-        root = "/volume1/music/Download"
+        root = dir_music
         break
     case "adobe":
-        root = "/volume1/homes/admin/Download/Adobe"
+        root = dir_adobe
         break
     default:
-        root = "/volume1/homes/admin/Download"
+        root = dir_default
     }
+    if (root == "")
+        root = dir_default
     if (tr_isdir) {
         path = root
     } else {

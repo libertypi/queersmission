@@ -1,31 +1,7 @@
 #!/usr/bin/env bash
 
-################################################################################
-#                                Configurations                                #
-################################################################################
-
-# Transmission rpc-url with authentication disabled.
-tr_api='http://localhost:9091/transmission/rpc'
-
-# Directory storing files for seeding, without trailing slash.
-seed_dir='/volume2/@transmission'
-
-# Directory where transmission monitors for new torrents, set an empty value to
-# disable watch_dir cleanup.
-watch_dir='/volume1/video/Torrents'
-
-# Disk quota (minimum space to keep free on disk)
-((GiB = 1024 ** 3, quota = 100 * GiB))
-
-# ------------------------ That's all, stop editing! ------------------------- #
-
-unset IFS
-export LC_ALL=C LANG=C
-logfile='transmission.log'
-categorize='component/categorize.awk'
-regexfile='component/regex.txt'
-tr_path= tr_header= tr_json= tr_totalsize= tr_paused= savejson= dryrun=0 logs=()
-declare -A tr_names
+# Bash program for transmission torrent management and maintenance.
+# Author: David Pi
 
 ################################################################################
 #                                  Functions                                   #
@@ -52,13 +28,31 @@ EOF
   exit 1
 }
 
-# Dependencies check, parse arguments and acquire lock.
+# Initialize script.
 init() {
-  [[ ${BASH_VERSINFO[0]} -ge 4 ]] || die 'Bash >=4 required.'
-  [[ ${tr_api} == http* && ${seed_dir} == /*[^/] && ${quota} -ge 0 ]] || die 'Invalid configurations.'
-  hash curl jq || die 'Curl and jq required.'
+  unset IFS
+  export LC_ALL=C LANG=C
 
-  local i
+  # dependencies check
+  [[ ${BASH_VERSINFO[0]} -ge 4 ]] || die 'Bash >=4 required.'
+  hash curl jq || die 'Curl and jq required.'
+  cd "${BASH_SOURCE[0]%/*}" || die 'Unable to enter script directory.'
+
+  # read and varify configuration
+  local i='/*[^/]'
+  source ./config &&
+    [[ ${tr_api} == http* && \
+    ${seed_dir} == ${i} && (${watch_dir} == ${i} || -z ${watch_dir}) && \
+    ${quota} -ge 0 && ${dir_default} == ${i} ]] ||
+    die 'Invalid configuration.'
+
+  logfile='logfile.log'
+  categorize='component/categorize.awk'
+  regexfile='component/regex.txt'
+  tr_path= tr_header= tr_json= tr_totalsize= tr_paused= savejson= dryrun=0 logs=()
+  declare -Ag tr_names
+
+  # parse arguments
   while getopts 'hds:q:' i; do
     case "$i" in
       d) dryrun=1 ;;
@@ -68,7 +62,7 @@ init() {
     esac
   done
 
-  cd "${BASH_SOURCE[0]%/*}" || die 'Unable to enter script directory.'
+  # acquire lock
   printf 'Acquiring lock...' 1>&2
   exec {i}<"${BASH_SOURCE[0]##*/}"
 
@@ -94,16 +88,17 @@ copy_finished() {
     for i in 'root' 'path'; do
       IFS= read -r -d '' "$i"
     done < <(
-      awk -v REGEX_FILE="${regexfile}" \
+      awk -f "${categorize}" \
         -v TR_TORRENT_DIR="${TR_TORRENT_DIR}" \
         -v TR_TORRENT_NAME="${TR_TORRENT_NAME}" \
-        -f "${categorize}"
-    ) && if [[ -d ${path} ]] || mkdir -p -- "${path}" && cp -rf -- "${tr_path}" "${path}/"; then
+        -v regexfile="${regexfile}" \
+        -v dir_default="${dir_default}" -v dir_av="${dir_av}" -v dir_film="${dir_film}" \
+        -v dir_tv="${dir_tv}" -v dir_music="${dir_music}" -v dir_adobe="${dir_adobe}"
+    ) && if [[ -e ${path} ]] || mkdir -p -- "${path}" && cp -rf -- "${tr_path}" "${path}/"; then
       append_log 'Finish' "${root}" "${TR_TORRENT_NAME}"
       return 0
     fi
-
-  elif [[ -d ${seed_dir} ]] || mkdir -p -- "${seed_dir}" &&
+  elif [[ -e ${seed_dir} ]] || mkdir -p -- "${seed_dir}" &&
     cp -rf -- "${tr_path}" "${seed_dir}/" &&
     get_tr_header &&
     request_tr "{\"arguments\":{\"ids\":[${TR_TORRENT_ID}],\"location\":\"${seed_dir}/\"},\"method\":\"torrent-set-location\"}" >/dev/null; then
@@ -149,7 +144,7 @@ query_json() {
 
   [[ ${tr_header} ]] || get_tr_header
   tr_json="$(
-    request_tr '{"arguments":{"fields":["activityDate","id","name","percentDone","sizeWhenDone","status","trackerStats"]},"method":"torrent-get"}'
+    request_tr '{"arguments":{"fields":["activityDate","downloadDir","id","name","percentDone","sizeWhenDone","status","trackerStats"]},"method":"torrent-get"}'
   )" || exit 1
   if [[ ${savejson} ]]; then
     printf 'Save json to %s\n' "${savejson}" 1>&2
@@ -157,18 +152,17 @@ query_json() {
   fi
 
   {
-    for i in 'result' 'tr_totalsize' 'tr_paused'; do
+    for i in 'result' 'tr_paused' 'tr_totalsize'; do
       read -r -d '' "$i"
-    done
-    while IFS= read -r -d '' i; do
+    done && while IFS= read -r -d '' i; do
       tr_names["${i}"]=1
     done
   } < <(
-    printf '%s' "${tr_json}" | jq -j '
+    printf '%s' "${tr_json}" | jq --arg d "${seed_dir}" -j '
       "\(.result)\u0000",
-      "\([.arguments.torrents[].sizeWhenDone]|add)\u0000",
-      "\([.arguments.torrents[]|select(.status == 0)]|length)\u0000",
-      "\(.arguments.torrents[].name)\u0000"'
+      "\(.arguments.torrents|map(select(.status == 0))|length)\u0000",
+      (.arguments.torrents|map(select(.downloadDir == $d))|
+      "\([.[].sizeWhenDone]|add)\u0000", "\(.[].name)\u0000")'
   ) && [[ ${result} == 'success' ]] || die "Parsing json failed. Status: '${result}'"
 
   printf 'Torrents: %d, size: %d GiB, paused: %d\n' \
@@ -186,7 +180,7 @@ clean_disk() (
       [[ ${tr_names["${i}"]} || ${tr_names["${i%.part}"]} ]] || obsolete+=("${seed_dir}/${i}")
     done
   else
-    printf 'Skip cleaning seed_dir (%s)\n' "${seed_dir}" 1>&2
+    printf 'Skip cleaning seed_dir "%s"\n' "${seed_dir}" 1>&2
   fi
 
   if [[ ${watch_dir} ]] && cd "${watch_dir}"; then
@@ -194,7 +188,7 @@ clean_disk() (
       [[ -s ${i} ]] || obsolete+=("${watch_dir}/${i}")
     done
   else
-    printf 'Skip cleaning watch_dir (%s)\n' "${watch_dir}" 1>&2
+    printf 'Skip cleaning watch_dir "%s"\n' "${watch_dir}" 1>&2
   fi
 
   if ((${#obsolete[@]})); then
@@ -239,10 +233,10 @@ remove_inactive() {
       break
     fi
   done < <(
-    printf '%s' "${tr_json}" | jq -j '
+    printf '%s' "${tr_json}" | jq --arg d "${seed_dir}" -j '
       .arguments.torrents|
-      sort_by(.activityDate, ([.trackerStats[].leecherCount]|add))[]|
-      select(.percentDone == 1)|
+      map(select(.downloadDir == $d and .percentDone == 1))|
+      sort_by(.activityDate, ([.trackerStats[].leecherCount]|add))[]|      
       "\(.id)/\(.sizeWhenDone)/\(.name)\u0000"'
   )
 }

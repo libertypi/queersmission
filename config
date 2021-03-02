@@ -1,0 +1,24 @@
+################################################################################
+#                                Configurations                                #
+################################################################################
+
+# Transmission rpc address with authentication disabled
+tr_api='http://localhost:9091/transmission/rpc'
+
+# Directory storing files for seeding, without trailing slash
+seed_dir='/volume2/@transmission'
+
+# Directory where transmission monitors for new torrents, leave empty to disable
+# watch_dir cleanup
+watch_dir='/volume1/video/Torrents'
+
+# Disk quota (minimum space to keep free on disk)
+((GiB = 1024 ** 3, quota = 50 * GiB))
+
+# Download save locations, without trailing slashs
+dir_default='/volume1/homes/admin/Download'
+dir_av='/volume1/driver/Temp'
+dir_film='/volume1/video/Films'
+dir_tv='/volume1/video/TV Series'
+dir_music='/volume1/music/Download'
+dir_adobe='/volume1/homes/admin/Download/Adobe'

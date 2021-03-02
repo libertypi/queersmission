@@ -1,28 +1,17 @@
 #!/usr/bin/env bash
 
-export LC_ALL=C LANG=C
-
-categorize="${BASH_SOURCE[0]%/*}/categorize.awk"
-regex_file="${BASH_SOURCE[0]%/*}/regex.txt"
-video_dir='/volume1/video'
-tv_dir="${video_dir}/TV Series"
-film_dir="${video_dir}/Films"
-driver_dir='/volume1/driver'
-av_dir="${driver_dir}/Temp"
-seed_dir='/volume2/@transmission'
-
 test_regex() {
-  printf 'Testing "%s" on "%s"...\nUmatched items:\n' "${regex_file}" "${driver_dir}" 1>&2
-  grep -Eivf "${regex_file}" <(
-    find "${driver_dir}" -type f -not -path '*/[.@#]*' -regextype 'posix-extended' \
+  printf 'Testing "%s" on "%s"...\nUmatched items:\n' "${regexfile}" "${dir_driver}" 1>&2
+  grep -Eivf "${regexfile}" <(
+    find "${dir_driver}" -type f -not -path '*/[.@#]*' -regextype 'posix-extended' \
       -iregex '.+\.((bd|w)mv|3gp|asf|avi|flv|iso|m(2?ts|4p|[24kop]v|p([24]|e?g)|xf)|rm(vb)?|ts|vob|webm)' \
       -printf '%P\n'
   )
 
-  printf '\nTesting "%s" on "%s"...' "${regex_file}" "${video_dir}" 1>&2
+  printf '\nTesting "%s" on "%s"...' "${regexfile}" "${dir_video}" 1>&2
   local result="$(
-    grep -Eif "${regex_file}" <(
-      find "${video_dir}" -type f -not -path '*/[.@#]*' -printf '%P\n'
+    grep -Eif "${regexfile}" <(
+      find "${dir_video}" -type f -not -path '*/[.@#]*' -printf '%P\n'
     )
   )"
   if [[ ${result} ]]; then
@@ -41,26 +30,35 @@ If no argument was passed, scan '${seed_dir}'.
 
 optional arguments:
   -h            display this help text and exit
-  -t            scan '${tv_dir}'
-  -f            scan '${film_dir}'
+  -t            scan '${dir_tv}'
+  -f            scan '${dir_film}'
   -d DIR        scan DIR
-  -r            test '${regex_file}' with '${driver_dir}'
+  -r            test '${regexfile}' with '${dir_driver}'
 EOF
   exit 1
 }
 
 unset IFS names error
+export LC_ALL=C LANG=C
+cd "${BASH_SOURCE[0]%/*}/.." || exit 1
+
+source ./config
+dir_video="${dir_film%/*}"
+dir_driver="${dir_av%/*}"
+categorize='component/categorize.awk'
+regexfile='component/regex.txt'
+
 check=0
 TR_TORRENT_DIR="${seed_dir}"
 
 while getopts 'htfd:r' a; do
   case "$a" in
     t)
-      TR_TORRENT_DIR="${tv_dir}"
+      TR_TORRENT_DIR="${dir_tv}"
       check=1
       ;;
     f)
-      TR_TORRENT_DIR="${film_dir}"
+      TR_TORRENT_DIR="${dir_film}"
       check=1
       ;;
     d)
@@ -99,20 +97,24 @@ for TR_TORRENT_NAME in "${names[@]}"; do
     IFS= read -r -d '' root
     IFS= read -r -d '' path
   } < <(
-    awk -v REGEX_FILE="${regex_file}" \
+    awk -f "${categorize}" \
       -v TR_TORRENT_DIR="${TR_TORRENT_DIR}" \
       -v TR_TORRENT_NAME="${TR_TORRENT_NAME}" \
-      -f "${categorize}"
+      -v regexfile="${regexfile}" \
+      -v dir_default="${dir_default}" -v dir_av="${dir_av}" -v dir_film="${dir_film}" \
+      -v dir_tv="${dir_tv}" -v dir_music="${dir_music}" -v dir_adobe="${dir_adobe}"
   )
 
-  if [[ $? != 0 || (${check} == 1 && ${root} != "${TR_TORRENT_DIR}") ]]; then
+  if [[ $? -ne 0 || (${check} == 1 && ${root} != "${TR_TORRENT_DIR}") ]]; then
     error+=("${TR_TORRENT_NAME} -> ${root}")
     color=31
   else
     case "${root}" in
-      "${tv_dir}") color=32 ;;
-      "${film_dir}") color=33 ;;
-      "${av_dir}") color=34 ;;
+      "${dir_av}") color=32 ;;
+      "${dir_film}") color=33 ;;
+      "${dir_tv}") color=34 ;;
+      "${dir_music}") color=35 ;;
+      "${dir_adobe}") color=36 ;;
       *) color=0 ;;
     esac
   fi
