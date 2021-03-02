@@ -17,7 +17,7 @@ watch_dir='/volume1/video/Torrents'
 ((GiB = 1024 ** 3, quota = 50 * GiB))
 
 # Download save locations, without trailing slashs
-declare -A locations=(
+declare -Ar locations=(
   ['default']='/volume1/homes/admin/Download'
   ['av']='/volume1/driver/Temp'
   ['film']='/volume1/video/Films'

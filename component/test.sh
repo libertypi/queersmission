@@ -32,10 +32,10 @@ If no argument was passed, scan '${seed_dir}'.
 
 optional arguments:
   -h            display this help text and exit
-  -t            scan '${dir_tv}'
-  -f            scan '${dir_film}'
+  -t            scan '${locations[tv]}'
+  -f            scan '${locations[film]}'
   -d DIR        scan DIR
-  -r            test '${regexfile}' with '${dir_driver}'
+  -r            test '${regexfile}' with '${locations[av]}'
 EOF
   exit 1
 }
@@ -93,28 +93,31 @@ for TR_TORRENT_NAME in "${names[@]}"; do
 
   printf '%s\n' "${TR_TORRENT_NAME}"
 
+  path=''
   key="$(
     awk -v TR_TORRENT_DIR="${TR_TORRENT_DIR}" \
       -v TR_TORRENT_NAME="${TR_TORRENT_NAME}" \
       -v regexfile="${regexfile}" \
       -f "${categorize}"
-  )"
-  path="${locations[${key}]}"
+  )" && path="${locations[${key}]}"
 
-  if [[ $? -ne 0 || (${check} == 1 && ${path} != "${TR_TORRENT_DIR}") ]]; then
-    error+=("${TR_TORRENT_NAME} -> ${path} (${key})")
+  if [[ $? -ne 0 || -z ${key} || -z ${path} ]]; then
+    error+=("Runtime Error: '${TR_TORRENT_NAME}' -> '${path}' (${key})")
+    color=31
+  elif [[ ${check} -ne 0 && ${path} != "${TR_TORRENT_DIR}" ]]; then
+    error+=("Location differ: '${TR_TORRENT_NAME}' -> '${path}' (${key})")
     color=31
   else
     case "${key}" in
+      default) color=0 ;;
       av) color=32 ;;
       film) color=33 ;;
       tv) color=34 ;;
       music) color=35 ;;
       adobe) color=36 ;;
-      default) color=0 ;;
       *)
-        printf 'Error: Invalid type: "%s"' "${key}" 1>&2
-        exit 1
+        error+=("Invalid type: '${TR_TORRENT_NAME}' -> '${key}'")
+        color=31
         ;;
     esac
   fi
@@ -122,9 +125,7 @@ for TR_TORRENT_NAME in "${names[@]}"; do
 
 done
 
-if ((!check)); then
-  printf '%s\n' 'Done.' 1>&2
-elif ((${#error})); then
+if ((${#error})); then
   printf '%s\n' 'Errors:' "${error[@]}" 1>&2
 else
   printf '%s\n' 'Passed.' 1>&2

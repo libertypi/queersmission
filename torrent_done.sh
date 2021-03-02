@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Bash script for transmission torrent management and maintenance.
+# Bash script for transmission maintenance and torrent management.
 # Author: David Pi
 
 ################################################################################
@@ -44,13 +44,8 @@ init() {
     ${quota} -ge 0 && ${locations['default']} == ${i} ]] ||
     die 'Invalid configuration.'
 
-  logfile='logfile.log'
-  categorize='component/categorize.awk'
-  regexfile='component/regex.txt'
-  tr_path='' tr_header='' tr_json='' tr_totalsize='' tr_paused='' savejson='' dryrun=0 logs=()
-  declare -Ag tr_names
-
   # parse arguments
+  dryrun=0 savejson=''
   while getopts 'hds:q:' i; do
     case "$i" in
       d) dryrun=1 ;;
@@ -60,18 +55,26 @@ init() {
     esac
   done
 
+  # variables & constants
+  tr_header='' tr_json='' tr_totalsize='' tr_paused='' logs=()
+  declare -Ag tr_names
+  readonly tr_api seed_dir watch_dir GiB quota locations dryrun savejson \
+    logfile='logfile.log' \
+    categorize='component/categorize.awk' \
+    regexfile='component/regex.txt'
+
   # acquire lock
   printf 'Acquiring lock...' 1>&2
   exec {i}<"${BASH_SOURCE[0]##*/}"
-
   if [[ ${TR_TORRENT_DIR} && ${TR_TORRENT_NAME} ]]; then
     flock -x "$i"
-    tr_path="${TR_TORRENT_DIR}/${TR_TORRENT_NAME}"
-  elif ! flock -xn "$i"; then
+    readonly tr_path="${TR_TORRENT_DIR}/${TR_TORRENT_NAME}"
+  elif flock -xn "$i"; then
+    readonly tr_path=''
+  else
     printf 'Failed.\n' 1>&2
     exit 1
   fi
-
   printf 'Done.\n' 1>&2
   trap 'write_log' EXIT
 }
@@ -84,13 +87,13 @@ copy_finished() {
   local root dest
 
   if [[ ${TR_TORRENT_DIR} == "${seed_dir}" ]]; then
+    # fallback to default if the result is blank
     root="${locations[$(
       awk -v TR_TORRENT_DIR="${TR_TORRENT_DIR}" \
         -v TR_TORRENT_NAME="${TR_TORRENT_NAME}" \
         -v regexfile="${regexfile}" \
         -f "${categorize}"
-    )]}"
-    [[ ${root} ]] || root="${locations['default']}"
+    )]:-${locations['default']}}"
     if [[ -d ${tr_path} ]]; then
       dest="${root}"
     elif [[ ${TR_TORRENT_NAME} =~ ^(.+)\.[^./]+$ ]]; then
@@ -118,7 +121,9 @@ get_tr_header() {
   if [[ "$(curl -s -I -- "${tr_api}")" =~ X-Transmission-Session-Id:[[:space:]]*[A-Za-z0-9]+ ]]; then
     tr_header="${BASH_REMATCH[0]}"
     printf 'API header: "%s"\n' "${tr_header}" 1>&2
+    return 0
   fi
+  return 1
 }
 
 # Send an API request.
@@ -133,11 +138,10 @@ request_tr() {
     elif ((i < 4)); then
       printf 'Querying API failed. Retries: %d\n' "${i}" 1>&2
       get_tr_header
-    else
-      printf 'Querying API failed: %s\n' "$1" 1>&2
-      return 1
     fi
   done
+  printf 'Querying API failed: %s\n' "$1" 1>&2
+  return 1
 }
 
 # Get and parse transmission json.
@@ -175,7 +179,7 @@ query_json() {
 }
 
 # Clean junk files in seed_dir and watch_dir.
-# This function runs in a subshell, so, no logs.
+# This function runs in a subshell, no logs.
 clean_disk() (
   shopt -s nullglob dotglob globstar
   obsolete=()

@@ -1,13 +1,15 @@
-# AWK program for torrent categorization.
+# GNU Awk program for torrents categorization.
 # Author: David Pi
 #
-# Input variables (passed via "-v" arguments):
+# Input values (passed via "-v" arguments):
 #   TR_TORRENT_DIR, TR_TORRENT_NAME, regexfile
 # Output one of:
 #   default, av, film, tv, music, adobe
 
+
 @load "readdir"
 @load "filefuncs"
+
 
 BEGIN {
     if (TR_TORRENT_DIR == "" || TR_TORRENT_NAME == "" || regexfile == "") {
