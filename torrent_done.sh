@@ -34,8 +34,8 @@ init() {
 
   # dependencies check
   [[ ${BASH_VERSINFO[0]} -ge 4 ]] || die 'Bash >=4 required.'
-  hash curl jq || die 'Curl and jq required.'
   cd "${BASH_SOURCE[0]%/*}" || die 'Unable to enter script directory.'
+  hash curl jq || die 'Curl and jq required.'
 
   # read and varify configuration
   local i='/*[^/]'
