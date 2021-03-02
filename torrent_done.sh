@@ -41,7 +41,7 @@ init() {
   local i='/*[^/]'
   source ./config &&
     [[ ${tr_api} == http* && ${seed_dir} == ${i} && \
-    ${quota} -ge 0 && ${dir_default} == ${i} ]] ||
+    ${quota} -ge 0 && ${locations['default']} == ${i} ]] ||
     die 'Invalid configuration.'
 
   logfile='logfile.log'
@@ -81,19 +81,24 @@ init() {
 # "script-torrent-done".
 copy_finished() {
   [[ ${tr_path} ]] || return
-  local i root path
+  local root dest
 
   if [[ ${TR_TORRENT_DIR} == "${seed_dir}" ]]; then
-    for i in 'root' 'path'; do
-      IFS= read -r -d '' "$i"
-    done < <(
+    root="${locations[$(
       awk -v TR_TORRENT_DIR="${TR_TORRENT_DIR}" \
         -v TR_TORRENT_NAME="${TR_TORRENT_NAME}" \
         -v regexfile="${regexfile}" \
-        -v dir_default="${dir_default}" -v dir_av="${dir_av}" -v dir_film="${dir_film}" \
-        -v dir_tv="${dir_tv}" -v dir_music="${dir_music}" -v dir_adobe="${dir_adobe}" \
         -f "${categorize}"
-    ) && if [[ -e ${path} ]] || mkdir -p -- "${path}" && cp -rf -- "${tr_path}" "${path}/"; then
+    )]}"
+    [[ ${root} ]] || root="${locations['default']}"
+    if [[ -d ${tr_path} ]]; then
+      dest="${root}"
+    elif [[ ${TR_TORRENT_NAME} =~ ^(.+)\.[^./]+$ ]]; then
+      dest="${root}/${BASH_REMATCH[1]}"
+    else
+      dest="${root}/${TR_TORRENT_NAME}"
+    fi
+    if [[ -e ${dest} ]] || mkdir -p -- "${dest}" && cp -rf -- "${tr_path}" "${dest}/"; then
       append_log 'Finish' "${root}" "${TR_TORRENT_NAME}"
       return 0
     fi

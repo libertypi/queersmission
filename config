@@ -17,9 +17,11 @@ watch_dir='/volume1/video/Torrents'
 ((GiB = 1024 ** 3, quota = 50 * GiB))
 
 # Download save locations, without trailing slashs
-dir_default='/volume1/homes/admin/Download'
-dir_av='/volume1/driver/Temp'
-dir_film='/volume1/video/Films'
-dir_tv='/volume1/video/TV Series'
-dir_music='/volume1/music/Download'
-dir_adobe='/volume1/homes/admin/Download/Adobe'
+declare -A locations=(
+  ['default']='/volume1/homes/admin/Download'
+  ['av']='/volume1/driver/Temp'
+  ['film']='/volume1/video/Films'
+  ['tv']='/volume1/video/TV Series'
+  ['music']='/volume1/music/Download'
+  ['adobe']='/volume1/homes/admin/Download/Adobe'
+)

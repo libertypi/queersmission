@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
 test_regex() {
+  local result dir_video="${locations[film]%/*}" dir_driver="${locations[av]%/*}"
+
   printf 'Testing "%s" on "%s"...\nUmatched items:\n' "${regexfile}" "${dir_driver}" 1>&2
   grep -Eivf "${regexfile}" <(
     find "${dir_driver}" -type f -not -path '*/[.@#]*' -regextype 'posix-extended' \
@@ -9,7 +11,7 @@ test_regex() {
   )
 
   printf '\nTesting "%s" on "%s"...' "${regexfile}" "${dir_video}" 1>&2
-  local result="$(
+  result="$(
     grep -Eif "${regexfile}" <(
       find "${dir_video}" -type f -not -path '*/[.@#]*' -printf '%P\n'
     )
@@ -40,25 +42,23 @@ EOF
 
 unset IFS names error
 export LC_ALL=C LANG=C
-cd "${BASH_SOURCE[0]%/*}/.." || exit 1
 
+cd "${BASH_SOURCE[0]%/*}/.." || exit 1
 source ./config
-dir_video="${dir_film%/*}"
-dir_driver="${dir_av%/*}"
+
 categorize='component/categorize.awk'
 regexfile='component/regex.txt'
-
-check=0
 TR_TORRENT_DIR="${seed_dir}"
+check=0
 
 while getopts 'htfd:r' a; do
   case "$a" in
     t)
-      TR_TORRENT_DIR="${dir_tv}"
+      TR_TORRENT_DIR="${locations[tv]}"
       check=1
       ;;
     f)
-      TR_TORRENT_DIR="${dir_film}"
+      TR_TORRENT_DIR="${locations[film]}"
       check=1
       ;;
     d)
@@ -93,32 +93,32 @@ for TR_TORRENT_NAME in "${names[@]}"; do
 
   printf '%s\n' "${TR_TORRENT_NAME}"
 
-  {
-    IFS= read -r -d '' root
-    IFS= read -r -d '' path
-  } < <(
+  key="$(
     awk -v TR_TORRENT_DIR="${TR_TORRENT_DIR}" \
       -v TR_TORRENT_NAME="${TR_TORRENT_NAME}" \
       -v regexfile="${regexfile}" \
-      -v dir_default="${dir_default}" -v dir_av="${dir_av}" -v dir_film="${dir_film}" \
-      -v dir_tv="${dir_tv}" -v dir_music="${dir_music}" -v dir_adobe="${dir_adobe}" \
       -f "${categorize}"
-  )
+  )"
+  path="${locations[${key}]}"
 
-  if [[ $? -ne 0 || (${check} == 1 && ${root} != "${TR_TORRENT_DIR}") ]]; then
-    error+=("${TR_TORRENT_NAME} -> ${root}")
+  if [[ $? -ne 0 || (${check} == 1 && ${path} != "${TR_TORRENT_DIR}") ]]; then
+    error+=("${TR_TORRENT_NAME} -> ${path} (${key})")
     color=31
   else
-    case "${root}" in
-      "${dir_av}") color=32 ;;
-      "${dir_film}") color=33 ;;
-      "${dir_tv}") color=34 ;;
-      "${dir_music}") color=35 ;;
-      "${dir_adobe}") color=36 ;;
-      *) color=0 ;;
+    case "${key}" in
+      av) color=32 ;;
+      film) color=33 ;;
+      tv) color=34 ;;
+      music) color=35 ;;
+      adobe) color=36 ;;
+      default) color=0 ;;
+      *)
+        printf 'Error: Invalid type: "%s"' "${key}" 1>&2
+        exit 1
+        ;;
     esac
   fi
-  printf "\033[${color}m%s\n%s\033[0m\n\n" "Root: ${root}" "Path: ${path}"
+  printf "\033[${color}m%s\n%s\033[0m\n\n" "Type: ${key}" "Path: ${path}"
 
 done
 

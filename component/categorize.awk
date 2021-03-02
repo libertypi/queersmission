@@ -2,19 +2,17 @@
 # Author: David Pi
 #
 # Input variables (passed via "-v" arguments):
-#   TR_TORRENT_DIR, TR_TORRENT_NAME, regexfile, dir_default,
-#   dir_av, dir_film, dir_tv, dir_music, dir_adobe
-#
-# Output (null-terminated):
-#   (root, path)
+#   TR_TORRENT_DIR, TR_TORRENT_NAME, regexfile
+# Output one of:
+#   default, av, film, tv, music, adobe
 
 @load "readdir"
 @load "filefuncs"
 
 BEGIN {
-    if (TR_TORRENT_DIR == "" || TR_TORRENT_NAME == "" || regexfile == "" || dir_default == "") {
-        printf("[AWK]: Invalid inputs (TR_TORRENT_DIR: '%s', TR_TORRENT_NAME: '%s', regexfile: '%s', dir_default: '%s')\n",
-            TR_TORRENT_DIR, TR_TORRENT_NAME, regexfile, dir_default) > "/dev/stderr"
+    if (TR_TORRENT_DIR == "" || TR_TORRENT_NAME == "" || regexfile == "") {
+        printf("[AWK]: Invalid inputs (TR_TORRENT_DIR: '%s', TR_TORRENT_NAME: '%s', regexfile: '%s')\n",
+            TR_TORRENT_DIR, TR_TORRENT_NAME, regexfile) > "/dev/stderr"
         exit 1
     }
     split("", sizedict)
@@ -25,9 +23,8 @@ BEGIN {
     av_regex = read_regex(regexfile)
     tr_path = (TR_TORRENT_DIR "/" TR_TORRENT_NAME)
     stat(tr_path, tr_stat)
-    tr_isdir = (tr_stat["type"] == "directory")
 
-    if (tr_isdir) {
+    if (tr_stat["type"] == "directory") {
         path_offset = (length(TR_TORRENT_DIR) + 2)
         size_reached = 0
         size_thresh = (80 * 1024 ^ 2)
@@ -115,7 +112,7 @@ function pattern_match(sizedict, filelist, videoset,  i, j, s)
         if (s ~ /(^|[^a-z])(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)($|[^a-z])/) {
             output("adobe")
         } else if (s ~ /(^|[^a-z0-9])((32|64)bit|mac(os)?|windows|microsoft|x64|x86)($|[^a-z0-9])/) {
-            output()
+            output("default")
         }
     }
 }
@@ -176,34 +173,12 @@ function ext_match(sizedict, filelist, videoset,  i, j, groups)
     output(groups[1])
 }
 
-function output(type,  root, path, groups)
+function output(type)
 {
-    switch (type) {
-    case "av":
-        root = dir_av
-        break
-    case "film":
-        root = dir_film
-        break
-    case "tv":
-        root = dir_tv
-        break
-    case "music":
-        root = dir_music
-        break
-    case "adobe":
-        root = dir_adobe
-        break
-    default:
-        root = dir_default
+    if (type !~ /^(default|av|film|tv|music|adobe)$/) {
+        printf("[AWK]: Invalid type: '%s'\n", type) > "/dev/stderr"
+        type = "default"
     }
-    if (root == "")
-        root = dir_default
-    if (tr_isdir) {
-        path = root
-    } else {
-        path = (root "/" gensub(/^(.+)\.[^./]+$/, "\\1", 1, TR_TORRENT_NAME))
-    }
-    printf "%s\000%s\000", root, path
+    print type
     exit 0
 }
