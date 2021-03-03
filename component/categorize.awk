@@ -1,17 +1,19 @@
-# AWK program for torrent categorization.
+# GNU Awk program for torrents categorization.
 # Author: David Pi
 #
-# Input variables (passed via "-v" arguments):
+# Input values (passed via "-v" arguments):
 #   TR_TORRENT_DIR, TR_TORRENT_NAME, regexfile
 # Output one of:
 #   default, av, film, tv, music, adobe
 
+
 @load "readdir"
 @load "filefuncs"
 
+
 BEGIN {
     if (TR_TORRENT_DIR == "" || TR_TORRENT_NAME == "" || regexfile == "") {
-        printf("[AWK]: Invalid inputs (TR_TORRENT_DIR: '%s', TR_TORRENT_NAME: '%s', regexfile: '%s')\n",
+        printf("[AWK] Invalid inputs: TR_TORRENT_DIR='%s', TR_TORRENT_NAME='%s', regexfile='%s'\n",
             TR_TORRENT_DIR, TR_TORRENT_NAME, regexfile) > "/dev/stderr"
         exit 1
     }
@@ -52,8 +54,8 @@ function read_regex(fpath,  s)
         }
     }
     close(fpath)
-    printf("[AWK]: Reading regex from '%s' failed.\n", fpath) > "/dev/stderr"
-    return "^$"
+    printf("[AWK] Reading regex file failed: '%s'\n", fpath) > "/dev/stderr"
+    exit 1
 }
 
 function walkdir(dir, sizedict,  fpath, fstat)
@@ -175,10 +177,11 @@ function ext_match(sizedict, filelist, videoset,  i, j, groups)
 
 function output(type)
 {
-    if (type !~ /^(default|av|film|tv|music|adobe)$/) {
-        printf("[AWK]: Invalid type: '%s'\n", type) > "/dev/stderr"
-        type = "default"
+    if (type ~ /^(default|av|film|tv|music|adobe)$/) {
+        print type
+        exit 0
+    } else {
+        printf("[AWK] Invalid type: '%s'\n", type) > "/dev/stderr"
+        exit 1
     }
-    print type
-    exit 0
 }
