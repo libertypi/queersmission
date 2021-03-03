@@ -193,8 +193,7 @@ query_json() {
   return 0
 }
 
-# Clean junk files in seed_dir and watch_dir.
-# This function runs in a subshell, no logs.
+# Clean junk files in seed_dir and watch_dir. This function runs in a subshell.
 clean_disk() (
   shopt -s nullglob dotglob globstar
   obsolete=()
