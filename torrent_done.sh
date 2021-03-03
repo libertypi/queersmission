@@ -4,13 +4,30 @@
 # Author: David Pi
 
 ################################################################################
-#                                  Functions                                   #
+#                                 Environment                                  #
 ################################################################################
 
 die() {
   printf 'Error: %s\n' "$1" 1>&2
   exit 1
 }
+
+unset IFS
+export LC_ALL=C LANG=C
+
+[[ ${BASH_VERSINFO[0]} -ge 4 ]] || die 'Bash >=4 required.'
+cd "${BASH_SOURCE[0]%/*}" || die 'Unable to enter script directory.'
+source ./config || die "Reading config file failed."
+hash curl jq || die 'Curl and jq required.'
+
+tr_header='' tr_json='' tr_totalsize='' tr_paused='' logs=()
+declare -A tr_names
+readonly -- tr_api seed_dir watch_dir GiB locations logfile='logfile.log' \
+  categorize='component/categorize.awk' regexfile='component/regex.txt'
+
+################################################################################
+#                                  Functions                                   #
+################################################################################
 
 print_help() {
   cat <<EOF 1>&2
@@ -29,19 +46,10 @@ EOF
 }
 
 init() {
-  unset IFS
-  export LC_ALL=C LANG=C
-
-  # dependencies check
-  [[ ${BASH_VERSINFO[0]} -ge 4 ]] || die 'Bash >=4 required.'
-  cd "${BASH_SOURCE[0]%/*}" || die 'Unable to enter script directory.'
-  hash curl jq || die 'Curl and jq required.'
-
-  # read and varify configuration
+  # varify configuration
   local i='/*[^/]'
-  source ./config &&
-    [[ ${tr_api} == http* && ${seed_dir} == ${i} && \
-    ${quota} -ge 0 && ${locations['default']} == ${i} ]] ||
+  [[ ${tr_api} == http* && ${seed_dir} == ${i} && \
+  ${quota} -ge 0 && ${locations['default']} == ${i} ]] ||
     die 'Invalid configuration.'
 
   # parse arguments
@@ -50,18 +58,11 @@ init() {
     case "$i" in
       d) dryrun=1 ;;
       s) [[ ${OPTARG} ]] || die 'Empty json filename.' && savejson="${OPTARG}" ;;
-      q) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'QUOTA should be integer >= 0.' && ((quota = OPTARG * GiB)) ;;
+      q) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'QUOTA must be integer >= 0.' && ((quota = OPTARG * GiB)) ;;
       *) print_help ;;
     esac
   done
-
-  # variables & constants
-  tr_header='' tr_json='' tr_totalsize='' tr_paused='' logs=()
-  declare -Ag tr_names
-  readonly -- tr_api seed_dir watch_dir GiB quota locations dryrun savejson \
-    logfile='logfile.log' \
-    categorize='component/categorize.awk' \
-    regexfile='component/regex.txt'
+  readonly -- dryrun savejson quota
 
   # acquire lock
   printf 'Acquiring lock...' 1>&2
