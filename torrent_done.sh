@@ -15,7 +15,7 @@ die() {
 unset IFS
 export LC_ALL=C LANG=C
 
-[[ ${BASH_VERSINFO} -ge 4 ]] || die 'Bash >=4 required.'
+[[ ${BASH_VERSINFO} -ge 4 ]] 1>/dev/null 2>&1 || die 'Bash >=4 required.'
 cd "${BASH_SOURCE[0]%/*}" || die 'Unable to enter script directory.'
 source ./config || die "Reading config file failed."
 hash curl jq || die 'Curl and jq required.'
@@ -52,8 +52,9 @@ normpath() {
 init() {
   local i
   # varify configurations
-  [[ ${seed_dir} && ${locations['default']} && ${tr_api} == http* && ${quota} -ge 0 ]] &&
-    seed_dir="$(normpath "${seed_dir}")" || die 'Invalid configuration.'
+  [[ ${seed_dir} && ${locations['default']} && ${tr_api} == http* && ${quota} -ge 0 ]] ||
+    die 'Invalid configuration.'
+  seed_dir="$(normpath "${seed_dir}")" || die "seed_dir unreachable."
 
   # parse arguments
   dryrun=0 savejson=''
@@ -105,7 +106,7 @@ copy_finished() {
 
     # try to normalize the path
     dest="$(normpath "${root}")" && root="${dest}"
-    # append sub directory if needed
+    # append a sub-directory if needed
     if [[ -d ${tr_path} ]]; then
       dest="${root}"
     elif [[ ${TR_TORRENT_NAME} =~ ^(.+)\.[^./]+$ ]]; then
