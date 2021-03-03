@@ -45,6 +45,7 @@ EOF
   exit 1
 }
 
+# Normalize an existing path
 normpath() {
   cd "$1" && pwd
 } 2>/dev/null
@@ -141,8 +142,7 @@ get_tr_header() {
 }
 
 # Send an API request.
-# Arguments:
-#   $1: data to send
+# Arguments: $1: data to send
 request_tr() {
   local i
   for i in {1..4}; do
@@ -215,10 +215,12 @@ clean_disk() (
     printf 'Skip cleaning watch_dir "%s"\n' "${watch_dir}" 1>&2
   fi
 
-  if ((${#obsolete[@]})); then
-    printf 'Delete %d files:\n' "${#obsolete[@]}" 1>&2
+  if ((n = ${#obsolete[@]})); then
+    printf 'Delete %d files:\n' "$n" 1>&2
     printf '%s\n' "${obsolete[@]}" 1>&2
-    ((dryrun)) || rm -r -f -- "${obsolete[@]}"
+    ((dryrun)) || for ((i = 0; i < n; i += 100)); do
+      rm -r -f -- "${obsolete[@]:i:100}"
+    done
   fi
 )
 
@@ -227,7 +229,7 @@ remove_inactive() {
   local disksize freespace target m n id size name ids names
 
   {
-    read _
+    read -r _
     read -r 'disksize' 'freespace'
   } < <(df --block-size=1 --output='size,avail' -- "${seed_dir}") &&
     [[ ${disksize} =~ ^[0-9]+$ && ${freespace} =~ ^[0-9]+$ ]] || {
