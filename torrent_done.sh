@@ -15,15 +15,15 @@ die() {
 unset IFS
 export LC_ALL=C LANG=C
 
-[[ ${BASH_VERSINFO[0]} -ge 4 ]] || die 'Bash >=4 required.'
+[[ ${BASH_VERSINFO} -ge 4 ]] || die 'Bash >=4 required.'
 cd "${BASH_SOURCE[0]%/*}" || die 'Unable to enter script directory.'
 source ./config || die "Reading config file failed."
 hash curl jq || die 'Curl and jq required.'
 
-tr_header='' tr_json='' tr_totalsize='' tr_paused='' logs=()
-declare -A tr_names
-readonly -- tr_api seed_dir watch_dir GiB locations logfile='logfile.log' \
-  categorize='component/categorize.awk' regexfile='component/regex.txt'
+readonly -- \
+  logfile='logfile.log' \
+  categorize='component/categorize.awk' \
+  regexfile='component/regex.txt'
 
 ################################################################################
 #                                  Functions                                   #
@@ -45,12 +45,15 @@ EOF
   exit 1
 }
 
+normpath() {
+  cd "$1" && pwd
+} 2>/dev/null
+
 init() {
-  # varify configuration
-  local i='/*[^/]'
-  [[ ${tr_api} == http* && ${seed_dir} == ${i} && \
-  ${quota} -ge 0 && ${locations['default']} == ${i} ]] ||
-    die 'Invalid configuration.'
+  local i
+  # varify configurations
+  [[ ${seed_dir} && ${locations['default']} && ${tr_api} == http* && ${quota} -ge 0 ]] &&
+    seed_dir="$(normpath "${seed_dir}")" || die 'Invalid configuration.'
 
   # parse arguments
   dryrun=0 savejson=''
@@ -62,7 +65,11 @@ init() {
       *) print_help ;;
     esac
   done
-  readonly -- dryrun savejson quota
+
+  # variables & constants
+  tr_header='' tr_json='' tr_totalsize='' tr_paused='' logs=()
+  declare -Ag tr_names=()
+  readonly -- tr_api seed_dir watch_dir GiB quota locations dryrun savejson
 
   # acquire lock
   printf 'Acquiring lock...' 1>&2
@@ -96,6 +103,9 @@ copy_finished() {
         -f "${categorize}"
     )]:-${locations['default']}}"
 
+    # try to normalize the path
+    dest="$(normpath "${root}")" && root="${dest}"
+    # append sub directory if needed
     if [[ -d ${tr_path} ]]; then
       dest="${root}"
     elif [[ ${TR_TORRENT_NAME} =~ ^(.+)\.[^./]+$ ]]; then
@@ -104,15 +114,14 @@ copy_finished() {
       dest="${root}/${TR_TORRENT_NAME}"
     fi
 
-    if [[ -e ${dest} ]] || mkdir -p -- "${dest}" && cp -rf -- "${tr_path}" "${dest}/"; then
+    if [[ -e ${dest} ]] || mkdir -p -- "${dest}" &&
+      cp -r -f -- "${tr_path}" "${dest}/"; then
       append_log 'Finish' "${root}" "${TR_TORRENT_NAME}"
       return 0
     fi
-  elif [[ -e ${seed_dir} ]] || mkdir -p -- "${seed_dir}" &&
-    cp -rf -- "${tr_path}" "${seed_dir}/" &&
+  elif cp -r -f -- "${tr_path}" "${seed_dir}/" &&
     get_tr_header &&
     request_tr "{\"arguments\":{\"ids\":[${TR_TORRENT_ID}],\"location\":\"${seed_dir}/\"},\"method\":\"torrent-set-location\"}" >/dev/null; then
-
     append_log 'Finish' "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
     return 0
   fi
@@ -175,7 +184,8 @@ query_json() {
       "\(.arguments.torrents|map(select(.status == 0))|length)\u0000",
       (.arguments.torrents|map(select(.downloadDir == $d))|
       "\([.[].sizeWhenDone]|add)\u0000", "\(.[].name)\u0000")'
-  ) && [[ ${result} == 'success' ]] || die "Parsing json failed. Status: '${result}'"
+  ) && [[ ${result} == 'success' ]] ||
+    die "Parsing json failed. Status: '${result}'"
 
   printf 'Torrents: %d, size: %d GiB, paused: %d\n' \
     "${#tr_names[@]}" "$((tr_totalsize / GiB))" "${tr_paused}" 1>&2
@@ -190,7 +200,8 @@ clean_disk() (
 
   if ((${#tr_names[@]})) && cd "${seed_dir}"; then
     for i in [^.\#@]*; do
-      [[ ${tr_names["${i}"]} || ${tr_names["${i%.part}"]} ]] || obsolete+=("${seed_dir}/${i}")
+      [[ ${tr_names["${i}"]} || ${tr_names["${i%.part}"]} ]] ||
+        obsolete+=("${PWD}/${i}")
     done
   else
     printf 'Skip cleaning seed_dir "%s"\n' "${seed_dir}" 1>&2
@@ -198,7 +209,7 @@ clean_disk() (
 
   if [[ ${watch_dir} ]] && cd "${watch_dir}"; then
     for i in **; do
-      [[ -s ${i} ]] || obsolete+=("${watch_dir}/${i}")
+      [[ -s ${i} ]] || obsolete+=("${PWD}/${i}")
     done
   else
     printf 'Skip cleaning watch_dir "%s"\n' "${watch_dir}" 1>&2
@@ -207,7 +218,7 @@ clean_disk() (
   if ((${#obsolete[@]})); then
     printf 'Delete %d files:\n' "${#obsolete[@]}" 1>&2
     printf '%s\n' "${obsolete[@]}" 1>&2
-    ((dryrun)) || rm -rf -- "${obsolete[@]}"
+    ((dryrun)) || rm -r -f -- "${obsolete[@]}"
   fi
 )
 

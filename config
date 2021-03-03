@@ -5,8 +5,7 @@
 # Transmission rpc address with authentication disabled
 tr_api='http://localhost:9091/transmission/rpc'
 
-# Directory storing seeding files, match "download-dir" in transmission
-# settings, without trailing slash
+# Directory storing seeding files, match "download-dir" in transmission settings
 seed_dir='/volume2/@transmission'
 
 # Directory where transmission monitors for new torrents, match "watch-dir" in
@@ -16,8 +15,8 @@ watch_dir='/volume1/video/Torrents'
 # Disk quota (minimum free space to keep on disk)
 ((GiB = 1024 ** 3, quota = 50 * GiB))
 
-# Download save locations, without trailing slashs
-declare -Ar locations=(
+# Download save locations
+declare -A locations=(
   ['default']='/volume1/homes/admin/Download'
   ['av']='/volume1/driver/Temp'
   ['film']='/volume1/video/Films'

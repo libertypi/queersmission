@@ -17,6 +17,7 @@ BEGIN {
             TR_TORRENT_DIR, TR_TORRENT_NAME, regexfile) > "/dev/stderr"
         exit 1
     }
+
     split("", sizedict)
     split("", filelist)
     split("", videoset)
