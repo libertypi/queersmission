@@ -78,20 +78,20 @@ init() {
   # varify configurations
   [[ ${seed_dir} == /* && ${locations['default']} == /* && ${tr_api} == http* && ${quota} -ge 0 ]] ||
     die 'Invalid configuration.'
-  seed_dir="$(normpath "${seed_dir}")"
 
   # parse arguments
   dryrun=0 savejson=''
   while getopts 'hds:q:' i; do
     case "$i" in
       d) dryrun=1 ;;
-      s) [[ ${OPTARG} ]] || die 'Empty json filename.' && savejson="${OPTARG}" ;;
+      s) [[ ${OPTARG} ]] || die 'Empty json filename.' && savejson="$(normpath "${OPTARG}")" ;;
       q) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'QUOTA must be integer >= 0.' && ((quota = OPTARG * GiB)) ;;
       *) print_help ;;
     esac
   done
 
   # variables & constants
+  seed_dir="$(normpath "${seed_dir}")"
   tr_header='' tr_json='' tr_totalsize='' tr_paused='' logs=()
   declare -Ag tr_names=()
   readonly -- tr_api seed_dir watch_dir GiB quota locations dryrun savejson
@@ -143,7 +143,8 @@ copy_finished() {
       append_log 'Finish' "${root}" "${TR_TORRENT_NAME}"
       return 0
     fi
-  elif cp -r -f -- "${tr_path}" "${seed_dir}/" &&
+  elif [[ -e ${seed_dir} ]] || mkdir -p -- "${seed_dir}" &&
+    cp -r -f -- "${tr_path}" "${seed_dir}/" &&
     get_tr_header &&
     request_tr "{\"arguments\":{\"ids\":[${TR_TORRENT_ID}],\"location\":\"${seed_dir}/\"},\"method\":\"torrent-set-location\"}" >/dev/null; then
     append_log 'Finish' "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
