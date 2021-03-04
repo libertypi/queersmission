@@ -52,7 +52,7 @@ EOF
 normpath() {
   if [[ -z $1 ]]; then
     printf '.\n'
-    return 0
+    return
   fi
   local IFS=/ initial_slashes='' comp comps new_comps=()
   if [[ $1 == /* ]]; then
@@ -71,7 +71,6 @@ normpath() {
   done
   comp="${initial_slashes}${new_comps[*]}"
   printf -- '%s\n' "${comp:-.}"
-  return 0
 }
 
 init() {
