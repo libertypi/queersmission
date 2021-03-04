@@ -114,7 +114,7 @@ copy_finished() {
   [[ ${tr_path} ]] || return
   local root dest
 
-  if [[ ${TR_TORRENT_DIR} == "${seed_dir}" ]]; then
+  if [[ ${TR_TORRENT_DIR} -ef ${seed_dir} ]]; then
     # fallback to default if the result is blank
     root="${locations[$(
       awk -v TR_TORRENT_DIR="${TR_TORRENT_DIR}" \
