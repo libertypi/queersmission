@@ -54,23 +54,22 @@ normpath() {
     printf '.\n'
     return
   fi
-  local IFS=/ initial_slashes='' comp comps new_comps=()
+  local IFS=/ initial_slashes='' comp comps=()
   if [[ $1 == /* ]]; then
     initial_slashes='/'
     [[ $1 == //* && $1 != ///* ]] && initial_slashes='//'
   fi
-  read -r -a comps <<<"$1"
-  for comp in "${comps[@]}"; do
+  for comp in $1; do
     [[ -z ${comp} || ${comp} == '.' ]] && continue
-    if [[ ${comp} != '..' || (-z ${initial_slashes} && ${#new_comps[@]} -eq 0) || (\
-      ${#new_comps[@]} -gt 0 && ${new_comps[-1]} == '..') ]]; then
-      new_comps+=("${comp}")
-    elif ((${#new_comps[@]})); then
-      unset 'new_comps[-1]'
+    if [[ ${comp} != '..' || (-z ${initial_slashes} && ${#comps[@]} -eq 0) || (\
+      ${#comps[@]} -gt 0 && ${comps[-1]} == '..') ]]; then
+      comps+=("${comp}")
+    elif ((${#comps[@]})); then
+      unset 'comps[-1]'
     fi
   done
-  comp="${initial_slashes}${new_comps[*]}"
-  printf -- '%s\n' "${comp:-.}"
+  comp="${initial_slashes}${comps[*]}"
+  printf '%s\n' "${comp:-.}"
 }
 
 init() {
@@ -137,7 +136,7 @@ copy_finished() {
     else
       dest="${root}/${TR_TORRENT_NAME}"
     fi
-
+    # copy file
     if [[ -e ${dest} ]] || mkdir -p -- "${dest}" &&
       cp -r -f -- "${tr_path}" "${dest}/"; then
       append_log 'Finish' "${root}" "${TR_TORRENT_NAME}"
