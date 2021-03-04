@@ -141,9 +141,11 @@ copy_finished() {
   elif [[ -e ${seed_dir} ]] || mkdir -p -- "${seed_dir}" &&
     cp -r -f -- "${tr_path}" "${seed_dir}/" &&
     get_tr_header &&
-    request_tr "{\"arguments\":{\"ids\":[${TR_TORRENT_ID}],\"location\":\"${seed_dir}/\"},\"method\":\"torrent-set-location\"}" >/dev/null; then
+    request_tr "$(jq -acn --argjson i "${TR_TORRENT_ID}" --arg d "${seed_dir}" '{"arguments":{"ids":[$i],"location":$d},"method":"torrent-set-location"}')" >/dev/null; then
     append_log 'Finish' "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
     return 0
+  elif [[ -e "${seed_dir}/${TR_TORRENT_NAME}" ]]; then
+    rm -r -f -- "${seed_dir}/${TR_TORRENT_NAME}"
   fi
 
   append_log 'Error' "${root:-${TR_TORRENT_DIR}}" "${TR_TORRENT_NAME}"
@@ -151,7 +153,7 @@ copy_finished() {
 }
 
 get_tr_header() {
-  if [[ "$(curl -s -I -- "${tr_api}")" =~ X-Transmission-Session-Id:[[:blank:]]*[[:alnum:]]+ ]]; then
+  if [[ "$(curl -s -I -- "${tr_api}")" =~ 'X-Transmission-Session-Id:'[[:blank:]]*[[:alnum:]]+ ]]; then
     tr_header="${BASH_REMATCH[0]}"
     printf 'API header: "%s"\n' "${tr_header}" 1>&2
     return 0
@@ -162,6 +164,10 @@ get_tr_header() {
 # Send an API request.
 # Arguments: $1: data to send
 request_tr() {
+  if [[ -z $1 ]]; then
+    printf 'Error: Empty argument.\n' 1>&2
+    return 1
+  fi
   local i
   for i in {1..4}; do
     if curl -s -f --header "${tr_header}" -d "$1" -- "${tr_api}"; then
@@ -184,7 +190,7 @@ query_json() {
 
   [[ ${tr_header} ]] || get_tr_header
   tr_json="$(
-    request_tr '{"arguments":{"fields":["activityDate","downloadDir","id","name","percentDone","sizeWhenDone","status","trackerStats"]},"method":"torrent-get"}'
+    request_tr '{"arguments":{"fields":["activityDate","id","name","percentDone","sizeWhenDone","status","trackerStats"]},"method":"torrent-get"}'
   )" || exit 1
   if [[ ${savejson} ]]; then
     printf 'Save json to %s\n' "${savejson}" 1>&2
@@ -198,11 +204,11 @@ query_json() {
       tr_names["${i}"]=1
     done
   } < <(
-    printf '%s' "${tr_json}" | jq --arg d "${seed_dir}" -j '
+    printf '%s' "${tr_json}" | jq -j '
       "\(.result)\u0000",
       "\(.arguments.torrents|map(select(.status == 0))|length)\u0000",
-      (.arguments.torrents|map(select(.downloadDir == $d))|
-      "\([.[].sizeWhenDone]|add)\u0000", "\(.[].name)\u0000")'
+      "\([.arguments.torrents[].sizeWhenDone]|add)\u0000",
+      "\(.arguments.torrents[].name)\u0000"'
   ) && [[ ${result} == 'success' ]] ||
     die "Parsing json failed. Status: '${result}'"
 
@@ -270,9 +276,8 @@ remove_inactive() {
     names+=("${name}")
     (((target -= size) <= 0)) && break
   done < <(
-    printf '%s' "${tr_json}" | jq --arg d "${seed_dir}" -j '
-      .arguments.torrents|
-      map(select(.downloadDir == $d and .percentDone == 1))|
+    printf '%s' "${tr_json}" | jq -j '
+      .arguments.torrents|map(select(.percentDone == 1))|
       sort_by(.activityDate, ([.trackerStats[].leecherCount]|add))[]|      
       "\(.id)/\(.sizeWhenDone)/\(.name)\u0000"'
   )
