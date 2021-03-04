@@ -50,22 +50,21 @@ EOF
 # Translated from Python's posixpath.normpath:
 # https://github.com/python/cpython/blob/master/Lib/posixpath.py#L337
 normpath() {
-  local IFS=/ initial_slashes='' comp comps=()
+  local IFS=/ s='' c cs=()
   if [[ $1 == /* ]]; then
-    initial_slashes='/'
-    [[ $1 == //* && $1 != ///* ]] && initial_slashes='//'
+    s='/'
+    [[ $1 == //* && $1 != ///* ]] && s='//'
   fi
-  for comp in $1; do
-    [[ -z ${comp} || ${comp} == '.' ]] && continue
-    if [[ ${comp} != '..' || (-z ${initial_slashes} && ${#comps[@]} -eq 0) || (\
-      ${#comps[@]} -gt 0 && ${comps[-1]} == '..') ]]; then
-      comps+=("${comp}")
-    elif ((${#comps[@]})); then
-      unset 'comps[-1]'
+  for c in $1; do
+    [[ -z ${c} || ${c} == '.' ]] && continue
+    if [[ ${c} != '..' || (-z ${s} && ${#cs[@]} -eq 0) || (${#cs[@]} -gt 0 && ${cs[-1]} == '..') ]]; then
+      cs+=("${c}")
+    elif ((${#cs[@]})); then
+      unset 'cs[-1]'
     fi
   done
-  comp="${initial_slashes}${comps[*]}"
-  printf '%s\n' "${comp:-.}"
+  c="${s}${cs[*]}"
+  printf '%s\n' "${c:-.}"
 }
 
 init() {
