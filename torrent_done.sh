@@ -17,7 +17,7 @@ export LC_ALL=C LANG=C
 
 [[ ${BASH_VERSINFO[0]} -ge 4 ]] 1>/dev/null 2>&1 || die 'Bash >=4 required.'
 cd "${BASH_SOURCE[0]%/*}" || die 'Unable to enter script directory.'
-source ./config || die "Reading config file failed."
+source ./config || die "Loading config file failed."
 hash curl jq || die 'Curl and jq required.'
 
 readonly -- \
