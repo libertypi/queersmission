@@ -50,10 +50,6 @@ EOF
 # Translated from Python's posixpath.normpath:
 # https://github.com/python/cpython/blob/master/Lib/posixpath.py#L337
 normpath() {
-  if [[ -z $1 ]]; then
-    printf '.\n'
-    return
-  fi
   local IFS=/ initial_slashes='' comp comps=()
   if [[ $1 == /* ]]; then
     initial_slashes='/'
