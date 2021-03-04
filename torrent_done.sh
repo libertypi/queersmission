@@ -45,17 +45,41 @@ EOF
   exit 1
 }
 
-# Normalize an existing path
+# Normalize path, eliminating double slashes, etc.
+# Usage: new_path="$(normpath "${old_path}")"
+# Translated from Python's posixpath.normpath:
+# https://github.com/python/cpython/blob/master/Lib/posixpath.py#L337
 normpath() {
-  cd "$1" && pwd
-} 2>/dev/null
+  if [[ -z $1 ]]; then
+    printf '.\n'
+    return 0
+  fi
+  local IFS=/ initial_slashes='' comp comps new_comps=()
+  if [[ $1 == /* ]]; then
+    initial_slashes='/'
+    [[ $1 == //* && $1 != ///* ]] && initial_slashes='//'
+  fi
+  read -r -a comps <<<"$1"
+  for comp in "${comps[@]}"; do
+    [[ -z ${comp} || ${comp} == '.' ]] && continue
+    if [[ ${comp} != '..' || (-z ${initial_slashes} && ${#new_comps[@]} -eq 0) || (\
+      ${#new_comps[@]} -gt 0 && ${new_comps[-1]} == '..') ]]; then
+      new_comps+=("${comp}")
+    elif ((${#new_comps[@]})); then
+      unset 'new_comps[-1]'
+    fi
+  done
+  comp="${initial_slashes}${new_comps[*]}"
+  printf -- '%s\n' "${comp:-.}"
+  return 0
+}
 
 init() {
   local i
   # varify configurations
-  [[ ${seed_dir} && ${locations['default']} && ${tr_api} == http* && ${quota} -ge 0 ]] ||
+  [[ ${seed_dir} == /* && ${locations['default']} == /* && ${tr_api} == http* && ${quota} -ge 0 ]] ||
     die 'Invalid configuration.'
-  seed_dir="$(normpath "${seed_dir}")" || die "seed_dir unreachable."
+  seed_dir="$(normpath "${seed_dir}")"
 
   # parse arguments
   dryrun=0 savejson=''
@@ -104,9 +128,8 @@ copy_finished() {
         -v regexfile="${regexfile}" \
         -f "${categorize}"
     )]:-${locations['default']}}"
-
-    # try to normalize the path
-    dest="$(normpath "${root}")" && root="${dest}"
+    # normalize the path
+    root="$(normpath "${root}")"
     # append a sub-directory if needed
     if [[ -d ${tr_path} ]]; then
       dest="${root}"
