@@ -18,7 +18,7 @@ EOF
 }
 
 test_regex() {
-  local result dir_video="${locations[film]%/*}" dir_driver="${locations[av]%/*}"
+  local dir_video="${locations[film]%/*}" dir_driver="${locations[av]%/*}"
 
   printf 'Testing "%s" on "%s"...\nUmatched items:\n' "${regexfile}" "${dir_driver}" 1>&2
   find "${dir_driver}" -name '[.#@]*' -prune -o -type f -regextype 'posix-extended' \
