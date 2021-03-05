@@ -125,7 +125,7 @@ copy_finished() {
     # append a sub-directory if needed
     if [[ -d ${tr_path} ]]; then
       dest="${root}"
-    elif [[ ${TR_TORRENT_NAME} =~ ^(.+)\.[^./]+$ ]]; then
+    elif [[ ${TR_TORRENT_NAME} =~ ([^/]+)\.[^./]+$ ]]; then
       dest="${root}/${BASH_REMATCH[1]}"
     else
       dest="${root}/${TR_TORRENT_NAME}"
