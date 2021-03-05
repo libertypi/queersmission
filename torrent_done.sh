@@ -78,7 +78,7 @@ init() {
   while getopts 'hds:q:' i; do
     case "$i" in
       d) dryrun=1 ;;
-      s) [[ ${OPTARG} ]] || die 'Empty json filename.' && savejson="$(normpath "${OPTARG}")" ;;
+      s) savejson="$(normpath "${OPTARG}")" && [[ ! -d ${savejson} ]] || die 'Invalid json filename.' ;;
       q) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'QUOTA must be integer >= 0.' && ((quota = OPTARG * GiB)) ;;
       *) print_help ;;
     esac
@@ -88,7 +88,7 @@ init() {
   seed_dir="$(normpath "${seed_dir}")"
   tr_header='' tr_json='' tr_totalsize='' tr_paused='' logs=()
   declare -Ag tr_names=()
-  readonly -- tr_api seed_dir watch_dir GiB quota locations dryrun savejson
+  readonly tr_api seed_dir watch_dir GiB quota locations dryrun savejson
 
   # acquire lock
   printf 'Acquiring lock...' 1>&2
@@ -120,8 +120,8 @@ copy_finished() {
         -v TR_TORRENT_NAME="${TR_TORRENT_NAME}" \
         -v regexfile="${regexfile}" \
         -f "${categorize}"
-    )]:-${locations['default']}}"
-    root="$(normpath "${root}")"
+    )]}"
+    root="$(normpath "${root:-${locations['default']}}")"
     # append a sub-directory if needed
     if [[ -d ${tr_path} ]]; then
       dest="${root}"
@@ -275,8 +275,9 @@ remove_inactive() {
     (((target -= size) <= 0)) && break
   done < <(
     printf '%s' "${tr_json}" | jq -j '
-      .arguments.torrents|map(select(.percentDone == 1))|
-      sort_by(.activityDate, ([.trackerStats[].leecherCount]|add))[]|      
+      .arguments.torrents|
+      sort_by(.activityDate, ([.trackerStats[].leecherCount]|add))[]|
+      select(.percentDone == 1)|
       "\(.id)/\(.sizeWhenDone)/\(.name)\u0000"'
   )
 
