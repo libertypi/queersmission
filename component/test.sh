@@ -21,7 +21,6 @@ test_regex() {
   local result dir_video="${locations[film]%/*}" dir_driver="${locations[av]%/*}"
 
   printf 'Testing "%s" on "%s"...\nUmatched items:\n' "${regexfile}" "${dir_driver}" 1>&2
-
   find "${dir_driver}" -name '[.#@]*' -prune -o -type f -regextype 'posix-extended' \
     -iregex '.+\.((bd|w)mv|3gp|asf|avi|flv|iso|m(2?ts|4p|[24kop]v|p([24]|e?g)|xf)|rm(vb)?|ts|vob|webm)' \
     -printf '%P\n' | grep --color -Eivf "${regexfile}"
@@ -82,7 +81,7 @@ printf '%s\n\n' "Testing: ${TR_TORRENT_DIR}" 1>&2
 
 for TR_TORRENT_NAME in "${names[@]}"; do
 
-  printf '%s\n' "${TR_TORRENT_NAME}"
+  printf '%s\n' "${TR_TORRENT_NAME}" 1>&2
 
   path=''
   key="$(
@@ -112,7 +111,7 @@ for TR_TORRENT_NAME in "${names[@]}"; do
         ;;
     esac
   fi
-  printf "\033[${color}m%s\n%s\033[0m\n\n" "Type: ${key}" "Path: ${path}"
+  printf "\033[${color}m%s\n%s\033[0m\n\n" "Type: ${key}" "Path: ${path}" 1>&2
 
 done
 
