@@ -22,12 +22,12 @@ test_regex() {
 
   printf 'Testing "%s" on "%s"...\nUmatched items:\n' "${regexfile}" "${dir_driver}" 1>&2
 
-  find "${dir_driver}" -type f -not -path '*/[.@#]*' -regextype 'posix-extended' \
+  find "${dir_driver}" -name '[.#@]*' -prune -o -type f -regextype 'posix-extended' \
     -iregex '.+\.((bd|w)mv|3gp|asf|avi|flv|iso|m(2?ts|4p|[24kop]v|p([24]|e?g)|xf)|rm(vb)?|ts|vob|webm)' \
     -printf '%P\n' | grep --color -Eivf "${regexfile}"
 
   printf '\nTesting "%s" on "%s"...\n' "${regexfile}" "${dir_video}" 1>&2
-  find "${dir_video}" -type f -not -path '*/[.@#]*' -printf '%P\n' | grep --color -Eif "${regexfile}"
+  find "${dir_video}" -name '[.#@]*' -prune -o -type f -printf '%P\n' | grep --color -Eif "${regexfile}"
   printf 'Done, this should show no match.\n' 1>&2
 }
 

@@ -121,7 +121,6 @@ copy_finished() {
         -v regexfile="${regexfile}" \
         -f "${categorize}"
     )]:-${locations['default']}}"
-    # normalize the path
     root="$(normpath "${root}")"
     # append a sub-directory if needed
     if [[ -d ${tr_path} ]]; then
