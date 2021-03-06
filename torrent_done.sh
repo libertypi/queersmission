@@ -114,13 +114,14 @@ copy_finished() {
   local root dest
 
   if [[ ${TR_TORRENT_DIR} -ef ${seed_dir} ]]; then
-    # fallback to default if the result is blank
+    # decide the destination location
     root="${locations[$(
       awk -v TR_TORRENT_DIR="${TR_TORRENT_DIR}" \
         -v TR_TORRENT_NAME="${TR_TORRENT_NAME}" \
         -v regexfile="${regexfile}" \
         -f "${categorize}"
     )]}"
+    # fallback to default if the result is blank
     root="$(normpath "${root:-${locations['default']}}")"
     # append a sub-directory if needed
     if [[ -d ${tr_path} ]]; then
