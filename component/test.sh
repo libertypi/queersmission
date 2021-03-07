@@ -52,15 +52,9 @@ while getopts 'htfd:r' a; do
       check=1
       ;;
     d)
-      while [[ ${OPTARG} == */ ]]; do OPTARG="${OPTARG%/}"; done
-      names=("${OPTARG##*/}")
-      if [[ -z ${names[0]} ]]; then
-        print_help
-      elif [[ ${names[0]} == "${OPTARG}" ]]; then
-        TR_TORRENT_DIR="${PWD}"
-      else
-        TR_TORRENT_DIR="${OPTARG%/*}"
-      fi
+      names=("$(basename "${OPTARG}")")
+      [[ -z ${names} ]] && print_help
+      TR_TORRENT_DIR="$(dirname "${OPTARG}")"
       [[ -e ${OPTARG} ]] && check=1
       ;;
     r)
@@ -94,7 +88,7 @@ for TR_TORRENT_NAME in "${names[@]}"; do
   if [[ $? -ne 0 || -z ${key} || -z ${path} ]]; then
     error+=("Runtime Error: '${TR_TORRENT_NAME}' -> '${path}' (${key})")
     color=31
-  elif [[ ${check} -ne 0 && ${path} != "${TR_TORRENT_DIR}" ]]; then
+  elif [[ ${check} -ne 0 && ! ${path} -ef ${TR_TORRENT_DIR} ]]; then
     error+=("Location differ: '${TR_TORRENT_NAME}' -> '${path}' (${key})")
     color=31
   else
