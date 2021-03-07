@@ -52,9 +52,9 @@ while getopts 'htfd:r' a; do
       check=1
       ;;
     d)
-      names=("$(basename "${OPTARG}")")
+      names=("$(basename -- "${OPTARG}")")
       [[ -z ${names} ]] && print_help
-      TR_TORRENT_DIR="$(dirname "${OPTARG}")"
+      TR_TORRENT_DIR="$(dirname -- "${OPTARG}")"
       [[ -e ${OPTARG} ]] && check=1
       ;;
     r)

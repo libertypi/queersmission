@@ -122,7 +122,7 @@ copy_finished() {
         -f "${categorize}"
     )]}"
     # fallback to default if the result is blank
-    root="$(normpath "${root:-${locations['default']}}")"
+    root="$(normpath "${root:-${locations[default]}}")"
     # append a sub-directory if needed
     if [[ -d ${tr_path} ]]; then
       dest="${root}"
