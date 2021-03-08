@@ -35,6 +35,7 @@ BEGIN {
     } else {
         sizedict[tolower(TR_TORRENT_NAME)] = tr_stat["size"]
     }
+    for (i in sizedict) printf("%s (%s)\n", i, sizedict[i]) >"/dev/stderr"
 
     pattern_match(sizedict, filelist, videoset)
 
@@ -79,11 +80,8 @@ function walkdir(dir, sizedict,  fpath, fstat)
             }
             fpath = tolower(substr(fpath, path_offset))
             sub(/\.part$/, "", fpath)
-            if (match(fpath, /\/bdmv\/stream\/[^/]+\.m2ts$/)) {
-                fpath = (substr(fpath, 1, RSTART) "bdmv/index.bdmv")
-            } else if (match(fpath, /\/video_ts\/[^/]+\.vob$/)) {
-                fpath = (substr(fpath, 1, RSTART) "video_ts/video_ts.vob")
-            }
+            if (! sub(/\/bdmv\/stream\/[^/]+\.m2ts$/, "/bdmv/index.bdmv", fpath))
+                sub(/\/video_ts\/[^/]+\.vob$/, "/video_ts/video_ts.vob", fpath)
             sizedict[fpath] += fstat["size"]
             break
         case "d":
