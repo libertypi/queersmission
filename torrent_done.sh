@@ -126,10 +126,13 @@ copy_finished() {
     # append a sub-directory if needed
     if [[ -d ${tr_path} ]]; then
       dest="${root}"
-    elif [[ ${TR_TORRENT_NAME} =~ ([^/]+)\.[^./]+$ ]]; then
-      dest="${root}/${BASH_REMATCH[1]}"
     else
-      dest="${root}/${TR_TORRENT_NAME}"
+      dest="${TR_TORRENT_NAME//\//_}"
+      if [[ ${dest} =~ (.*[^.].*)\.[^.]*$ ]]; then
+        dest="${root}/${BASH_REMATCH[1]}"
+      else
+        dest="${root}/${dest}"
+      fi
     fi
     # copy file
     if [[ -e ${dest} ]] || mkdir -p -- "${dest}" &&
@@ -308,13 +311,13 @@ resume_paused() {
 append_log() {
   local loc
   if ((${#2} <= 30)); then loc="$2"; else loc="${2::27}..."; fi
-  printf -v "logs[${#logs[@]}]" '%(%D %T)T    %-6s    %-30s    %s\n' '-1' "$1" "$loc" "$3"
+  printf -v "logs[${#logs[@]}]" '%(%D %T)T  %-6s  %-30s  %s\n' -1 "$1" "$loc" "$3"
 }
 
 # Print logs in reversed order.
 print_log() {
   local i
-  printf '%-17s    %-6s    %-30s    %s\n%s\n' \
+  printf '%-17s  %-6s  %-30s  %s\n%s\n' \
     'Date' 'Status' 'Location' 'Name' \
     '--------------------------------------------------------------------------------'
   for ((i = ${#logs[@]} - 1; i >= 0; i--)); do
