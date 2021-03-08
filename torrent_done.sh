@@ -423,8 +423,8 @@ unit_test() {
       tr) test_tr ;;
       re) test_regex ;;
       tv | film)
-        shopt -s nullglob
         pushd "${locations[${arg}]}" >/dev/null || die "Unable to enter: '"${locations[${arg}]}"'"
+        shopt -s nullglob
         for name in [^.\#@]*; do
           test_dir "${PWD}" "${name}"
         done
