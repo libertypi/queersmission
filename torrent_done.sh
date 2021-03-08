@@ -147,7 +147,7 @@ copy_finished() {
     append_log 'Finish' "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
     return 0
   elif [[ -e "${seed_dir}/${TR_TORRENT_NAME}" ]]; then
-    rm -r -f -- "${seed_dir}/${TR_TORRENT_NAME}"
+    rm -r -f -- "${seed_dir:?}/${TR_TORRENT_NAME:?}"
   fi
 
   append_log 'Error' "${root:-${TR_TORRENT_DIR}}" "${TR_TORRENT_NAME}"
@@ -227,7 +227,7 @@ clean_disk() (
   if ((${#tr_names[@]})) && cd "${seed_dir}"; then
     for i in [^.\#@]*; do
       [[ ${tr_names["${i}"]} || ${tr_names["${i%.part}"]} ]] ||
-        obsolete+=("${PWD}/${i}")
+        obsolete+=("${PWD:?}/${i}")
     done
   else
     printf 'Skip cleaning seed_dir "%s"\n' "${seed_dir}" 1>&2
@@ -235,7 +235,7 @@ clean_disk() (
 
   if [[ ${watch_dir} ]] && cd "${watch_dir}"; then
     for i in **; do
-      [[ -s ${i} ]] || obsolete+=("${PWD}/${i}")
+      [[ -s ${i} ]] || obsolete+=("${PWD:?}/${i}")
     done
   else
     printf 'Skip cleaning watch_dir "%s"\n' "${watch_dir}" 1>&2
