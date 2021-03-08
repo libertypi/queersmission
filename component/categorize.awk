@@ -17,13 +17,13 @@ BEGIN {
         raise("Reading regex file failed.")
     }
     close(regexfile)
-    size_reached = 0
-    size_thresh = (80 * 1024 ^ 2)
     split("", sizedict)
     split("", filelist)
     split("", videoset)
     FS = "\000"
     RS = "\000\000"
+    size_reached = 0
+    size_thresh = (80 * 1024 ^ 2)
 }
 
 NF != 2 {

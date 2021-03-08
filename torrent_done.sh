@@ -405,7 +405,7 @@ unit_test() {
 
   local arg name error=()
   for arg in "$@"; do
-    printf -- '--- %s ---\n' "${arg}" 1>&2
+    printf '=== %s ===\n' "${arg}" 1>&2
     case "${arg}" in
       tr) test_tr ;;
       tv | film)
