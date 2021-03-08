@@ -85,13 +85,7 @@ init() {
       d) dryrun=1 ;;
       s) savejson="$(normpath "${OPTARG}")" && [[ ! -d ${savejson} ]] || die 'Invalid json filename.' ;;
       q) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'QUOTA must be integer >= 0.' && ((quota = OPTARG * GiB)) ;;
-      t)
-        case "${OPTARG}" in
-          all) unit_test tr tv film ;;
-          '') die "Empty unittest target." ;;
-          *) unit_test "${OPTARG}" ;;
-        esac
-        ;;
+      t) unit_test "${OPTARG}" ;;
       *) print_help ;;
     esac
   done
@@ -125,7 +119,7 @@ copy_finished() {
     # decide the destination location
     root="${locations[$(
       request_tr "{\"arguments\":{\"fields\":[\"files\"],\"ids\":[${TR_TORRENT_ID:?}]},\"method\":\"torrent-get\"}" |
-        jq -j '.arguments.torrents[].files[]|"\(.length)\u0000\(.name)\u0000\u0000"' |
+        jq -j '.arguments.torrents[].files[]|"\(.length)\u0000\(.name)\u0000"' |
         awk -v regexfile="${regexfile}" -f "${categorize}"
     )]}"
     # fallback to default if failed
@@ -355,7 +349,7 @@ unit_test() {
       printf 'Name: %s\n' "${name}" 1>&2
       key="$(
         printf '%s' "${files}" |
-          jq -j '.[]|"\(.length)\u0000\(.name)\u0000\u0000"' |
+          jq -j '.[]|"\(.length)\u0000\(.name)\u0000"' |
           awk -v regexfile="${regexfile}" -f "${categorize}"
       )"
       examine "${name}" "${key}"
@@ -370,9 +364,9 @@ unit_test() {
     printf 'Name: %s\n' "${name}" 1>&2
     key="$(
       if [[ ${root} ]] && { [[ ${PWD} == "${root}" ]] || cd "${root}"; }; then
-        find "${name}" -name '[.#@]*' -prune -o -type f -printf '%s\0%p\0\0'
+        find "${name}" -name '[.#@]*' -prune -o -type f -printf '%s\0%p\0'
       else
-        printf '%d\0%s\0\0' 0 "${name}"
+        printf '%d\0%s\0' 0 "${name}"
       fi | awk -v regexfile="${regexfile}" -f "${categorize}"
     )"
     examine "${name}" "${key}" "${root}"
@@ -403,13 +397,18 @@ unit_test() {
     printf "\033[${color}m%s\n%s\033[0m\n" "Type: ${key}" "Root: ${locations[${key}]}" 1>&2
   }
 
+  case "$1" in
+    all) set -- tr tv film ;;
+    '') die "Empty unittest target." ;;
+  esac
   local arg name error=()
+
   for arg in "$@"; do
     printf '=== %s ===\n' "${arg}" 1>&2
     case "${arg}" in
       tr) test_tr ;;
       tv | film)
-        pushd "${locations[${arg}]}" >/dev/null || die "Unable to enter: '"${locations[${arg}]}"'"
+        pushd "${locations[${arg}]}" >/dev/null || die "Unable to enter: '${locations[${arg}]}'"
         shopt -s nullglob
         for name in [^.\#@]*; do
           test_dir "${PWD}" "${name}"

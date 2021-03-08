@@ -2,7 +2,7 @@
 # Author: David Pi
 #
 # Input stream:
-#   size\0path\0\0, ...
+#   size\0path\0, ...
 # Input variables (passed via "-v"):
 #   regexfile
 # Output is one of:
@@ -17,21 +17,20 @@ BEGIN {
         raise("Reading regex file failed.")
     }
     close(regexfile)
+    RS = "\000"
+    size_reached = 0
+    size_thresh = (80 * 1024 ^ 2)
     split("", sizedict)
     split("", filelist)
     split("", videoset)
-    FS = "\000"
-    RS = "\000\000"
-    size_reached = 0
-    size_thresh = (80 * 1024 ^ 2)
 }
 
-NF != 2 {
-    raise("Invalid input. Expect null-terminated (size, path) pairs.")
+! /^[0-9]+$/ || (getline path) <= 0 {
+    raise("Invalid input. Expect null-terminated size, path pairs.")
 }
 
 {
-    if ($1 >= size_thresh) {
+    if ($0 >= size_thresh) {
         if (! size_reached) {
             delete sizedict
             size_reached = 1
@@ -39,10 +38,10 @@ NF != 2 {
     } else if (size_reached) {
         next
     }
-    $2 = tolower($2)
-    sub(/\/bdmv\/stream\/[^/]+\.m2ts$/, "/bdmv/index.bdmv", $2) ||
-    sub(/\/video_ts\/[^/]+\.vob$/, "/video_ts/video_ts.vob", $2)
-    sizedict[$2] += $1
+    path = tolower(path)
+    sub(/\/bdmv\/stream\/[^/]+\.m2ts$/, "/bdmv/index.bdmv", path) ||
+    sub(/\/video_ts\/[^/]+\.vob$/, "/video_ts/video_ts.vob", path)
+    sizedict[path] += $0
 }
 
 END {
