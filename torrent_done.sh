@@ -373,7 +373,7 @@ unit_test() {
   }
 
   examine() {
-    local name="$1" key="$2" root="$3"
+    local name="$1" key="$2" root="$3" color
     if [[ -z ${key} ]]; then
       error+=("Runtime Error: '${name}' -> ${key}")
       color=31
