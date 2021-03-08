@@ -41,7 +41,7 @@ optional arguments:
   -d         dryrun mode
   -s FILE    save formated json to FILE
   -q NUM     set disk quota to NUM GiB (default: $((quota / GiB)))
-  -t TARGET  unit test (all, tr, tv, film, re, <custom path>)
+  -t TARGET  unit test, TARGET: "all", "tr", "tv", "film" or custom path
 EOF
   exit 1
 }
@@ -87,8 +87,8 @@ init() {
       q) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'QUOTA must be integer >= 0.' && ((quota = OPTARG * GiB)) ;;
       t)
         case "${OPTARG}" in
-          all) unit_test tr tv film re ;;
-          '') die "Empty unit test target." ;;
+          all) unit_test tr tv film ;;
+          '') die "Empty unittest target." ;;
           *) unit_test "${OPTARG}" ;;
         esac
         ;;
@@ -119,8 +119,8 @@ init() {
 copy_finished() {
   [[ ${tr_path} ]] || return
   local root dest
-  get_tr_header
 
+  get_tr_header
   if [[ ${TR_TORRENT_DIR} -ef ${seed_dir} ]]; then
     # decide the destination location
     root="${locations[$(
@@ -369,7 +369,7 @@ unit_test() {
     local root="$1" name="$2" key
     printf 'Name: %s\n' "${name}" 1>&2
     key="$(
-      if [[ ${root} ]] && { [[ ${PWD} == ${root} ]] || cd "${root}"; }; then
+      if [[ ${root} ]] && { [[ ${PWD} == "${root}" ]] || cd "${root}"; }; then
         find "${name}" -name '[.#@]*' -prune -o -type f -printf '%s\0%p\0\0'
       else
         printf '%d\0%s\0\0' 0 "${name}"
@@ -403,25 +403,11 @@ unit_test() {
     printf "\033[${color}m%s\n%s\033[0m\n" "Type: ${key}" "Root: ${locations[${key}]}" 1>&2
   }
 
-  test_regex() {
-    local driver_dir="${locations[av]%/*}" video_dir="${locations[film]%/*}"
-
-    printf 'Testing "%s" on "%s"...\nUmatched items:\n' "${regexfile}" "${driver_dir}" 1>&2
-    find "${driver_dir}" -name '[.#@]*' -prune -o -type f -regextype 'posix-extended' \
-      -iregex '.+\.((bd|w)mv|3gp|asf|avi|flv|iso|m(2?ts|4p|[24kop]v|p([24]|e?g)|xf)|rm(vb)?|ts|vob|webm)' \
-      -printf '%P\n' | grep --color -Eivf "${regexfile}"
-
-    printf '\nTesting "%s" on "%s"...\n' "${regexfile}" "${video_dir}" 1>&2
-    find "${video_dir}" -name '[.#@]*' -prune -o -type f -printf '%P\n' | grep --color -Eif "${regexfile}"
-    printf 'Done, this should show no match.\n' 1>&2
-  }
-
   local arg name error=()
   for arg in "$@"; do
-    printf -- '-- %s ---\n' "${arg}" 1>&2
+    printf -- '--- %s ---\n' "${arg}" 1>&2
     case "${arg}" in
       tr) test_tr ;;
-      re) test_regex ;;
       tv | film)
         pushd "${locations[${arg}]}" >/dev/null || die "Unable to enter: '"${locations[${arg}]}"'"
         shopt -s nullglob
@@ -434,7 +420,7 @@ unit_test() {
         if [[ -e ${arg} ]]; then
           test_dir "$(dirname "${arg}")" "$(basename "${arg}")"
         else
-          test_dir "" "${arg}"
+          test_dir "" "$(normpath "${arg}")"
         fi
         ;;
     esac

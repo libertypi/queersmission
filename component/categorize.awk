@@ -5,7 +5,7 @@
 #   size\0path\0\0, ...
 # Input variables (passed via "-v"):
 #   regexfile
-# Output one of:
+# Output is one of:
 #   default, av, film, tv, music, adobe
 
 BEGIN {
@@ -27,7 +27,7 @@ BEGIN {
 }
 
 NF != 2 {
-    raise("Invalid input. Expect (size, path) pairs terminated by 0 byte.")
+    raise("Invalid input. Expect null-terminated (size, path) pairs.")
 }
 
 {
@@ -62,7 +62,7 @@ END {
 
 function raise(msg)
 {
-    printf("[AWK] Error: %s\n", msg) > "/dev/stderr"
+    printf("[AWK] Fatal: %s\n", msg) > "/dev/stderr"
     errno = 1
     exit 1
 }
