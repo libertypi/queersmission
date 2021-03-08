@@ -78,6 +78,7 @@ function walkdir(dir, sizedict,  fpath, fstat)
                 continue
             }
             fpath = tolower(substr(fpath, path_offset))
+            gsub(/\.part$/, "", fpath)
             if (match(fpath, /\/bdmv\/stream\/[^/]+\.m2ts$/)) {
                 fpath = (substr(fpath, 1, RSTART) "bdmv/index.bdmv")
             } else if (match(fpath, /\/video_ts\/[^/]+\.vob$/)) {
