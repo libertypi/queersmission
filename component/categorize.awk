@@ -1,103 +1,76 @@
 # GNU Awk program for torrents categorization.
 # Author: David Pi
 #
-# Input values (passed via "-v" arguments):
-#   TR_TORRENT_DIR, TR_TORRENT_NAME, regexfile
+# Input stream:
+#   size\0path\0\0, ...
+# Input variables (passed via "-v"):
+#   regexfile
 # Output one of:
 #   default, av, film, tv, music, adobe
 
-
-@load "readdir"
-@load "filefuncs"
-
-
 BEGIN {
-    if (TR_TORRENT_DIR == "" || TR_TORRENT_NAME == "" || regexfile == "") {
-        printf("[AWK] Invalid inputs: TR_TORRENT_DIR='%s', TR_TORRENT_NAME='%s', regexfile='%s'\n",
-            TR_TORRENT_DIR, TR_TORRENT_NAME, regexfile) > "/dev/stderr"
-        exit 1
+    errno = 0
+    RS = "^$"
+    if ((getline av_regex < regexfile) > 0 && av_regex ~ /\S/) {
+        gsub(/^\s+|\s+$/, "", av_regex)
+    } else {
+        raise("Reading regex file failed.")
     }
-
+    close(regexfile)
+    size_reached = 0
+    size_thresh = (80 * 1024 ^ 2)
     split("", sizedict)
     split("", filelist)
     split("", videoset)
-    FS = "/"
+    FS = "\000"
+    RS = "\000\000"
+}
 
-    av_regex = read_regex(regexfile)
-    tr_path = (TR_TORRENT_DIR "/" TR_TORRENT_NAME)
-    stat(tr_path, tr_stat)
+NF != 2 {
+    raise("Invalid input. Expect (size, path) pairs terminated by 0 byte.")
+}
 
-    if (tr_stat["type"] == "directory") {
-        path_offset = (length(TR_TORRENT_DIR) + 2)
-        size_reached = 0
-        size_thresh = (80 * 1024 ^ 2)
-        walkdir(tr_path, sizedict)
-    } else {
-        sizedict[tolower(TR_TORRENT_NAME)] = tr_stat["size"]
+{
+    if ($1 >= size_thresh) {
+        if (! size_reached) {
+            delete sizedict
+            size_reached = 1
+        }
+    } else if (size_reached) {
+        next
     }
-    for (i in sizedict) printf("%s (%s)\n", i, sizedict[i]) >"/dev/stderr"
+    $2 = tolower($2)
+    sub(/\/bdmv\/stream\/[^/]+\.m2ts$/, "/bdmv/index.bdmv", $2) ||
+    sub(/\/video_ts\/[^/]+\.vob$/, "/video_ts/video_ts.vob", $2)
+    sizedict[$2] += $1
+}
+
+END {
+    if (errno) exit errno
+
+    # sizedict[path]: size
+    # filelist[1]: path (sorted by filesize, largest first)
+    if (! asorti(sizedict, filelist, "@val_num_desc"))
+        raise("Empty input.")
 
     pattern_match(sizedict, filelist, videoset)
-
     if (length(videoset) >= 3)
         series_match(videoset)
-
     ext_match(sizedict, filelist, videoset)
 }
 
 
-function read_regex(fpath,  s)
+function raise(msg)
 {
-    while ((getline s < fpath) > 0) {
-        if (s ~ /\S/) {
-            close(fpath)
-            gsub(/^\s+|\s+$/, "", s)
-            return s
-        }
-    }
-    close(fpath)
-    printf("[AWK] Reading regex file failed: '%s'\n", fpath) > "/dev/stderr"
+    printf("[AWK] Error: %s\n", msg) > "/dev/stderr"
+    errno = 1
     exit 1
-}
-
-function walkdir(dir, sizedict,  fpath, fstat)
-{
-    # array sizedict:
-    # sizedict[path] = size
-    while ((getline < dir) > 0) {
-        if ($2 ~ /^[.#@]/) continue
-        fpath = (dir "/" $2)
-        switch ($3) {
-        case "f":
-            stat(fpath, fstat)
-            if (fstat["size"] >= size_thresh) {
-                if (! size_reached) {
-                    delete sizedict
-                    size_reached = 1
-                }
-            } else if (size_reached) {
-                continue
-            }
-            fpath = tolower(substr(fpath, path_offset))
-            sub(/\.part$/, "", fpath)
-            if (! sub(/\/bdmv\/stream\/[^/]+\.m2ts$/, "/bdmv/index.bdmv", fpath))
-                sub(/\/video_ts\/[^/]+\.vob$/, "/video_ts/video_ts.vob", fpath)
-            sizedict[fpath] += fstat["size"]
-            break
-        case "d":
-            walkdir(fpath, sizedict)
-        }
-    }
-    close(dir)
 }
 
 function pattern_match(sizedict, filelist, videoset,  i, j, s)
 {
-    # set 2 arrays: filelist, videoset
-    # filelist[1]: path
-    # (sorted by filesize (largest first))
     # videoset[path]
-    j = asorti(sizedict, filelist, "@val_num_desc")
+    j = length(filelist)
     for (i = 1; i <= j; i++) {
         s = filelist[i]
         if (s ~ /\.(3gp|asf|avi|bdmv|flv|iso|m(2?ts|4p|[24kop]v|p2|p4|pe?g|xf)|rm|rmvb|ts|vob|webm|wmv)$/) {
@@ -181,7 +154,6 @@ function output(type)
         print type
         exit 0
     } else {
-        printf("[AWK] Invalid type: '%s'\n", type) > "/dev/stderr"
-        exit 1
+        raise("Invalid type: " type)
     }
 }

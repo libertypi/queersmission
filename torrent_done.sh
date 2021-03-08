@@ -21,9 +21,9 @@ source ./config || die "Loading config file failed."
 hash curl jq || die 'Curl and jq required.'
 
 readonly -- \
-  logfile='logfile.log' \
-  categorize='component/categorize.awk' \
-  regexfile='component/regex.txt'
+  logfile="${PWD}/logfile.log" \
+  categorize="${PWD}/component/categorize.awk" \
+  regexfile="${PWD}/component/regex.txt"
 
 ################################################################################
 #                                  Functions                                   #
@@ -37,10 +37,11 @@ Transmission Maintenance Tool
 Author: David Pi
 
 optional arguments:
-  -h        show this message and exit
-  -d        dryrun mode
-  -s FILE   save formated json to FILE
-  -q NUM    set disk quota to NUM GiB (default: $((quota / GiB)))
+  -h         show this message and exit
+  -d         dryrun mode
+  -s FILE    save formated json to FILE
+  -q NUM     set disk quota to NUM GiB (default: $((quota / GiB)))
+  -t TARGET  unit test (all, tr, tv, film, re, <custom path>)
 EOF
   exit 1
 }
@@ -72,22 +73,28 @@ init() {
   # varify configurations
   [[ ${seed_dir} == /* && ${locations['default']} == /* && ${tr_api} == http* && ${quota} -ge 0 ]] ||
     die 'Invalid configuration.'
+  seed_dir="$(normpath "${seed_dir}")"
+
+  # init variables
+  tr_header='' tr_json='' tr_totalsize='' tr_paused='' logs=() dryrun=0 savejson=''
+  declare -Ag tr_names=()
 
   # parse arguments
-  dryrun=0 savejson=''
-  while getopts 'hds:q:' i; do
+  while getopts 'hds:q:t:' i; do
     case "$i" in
       d) dryrun=1 ;;
       s) savejson="$(normpath "${OPTARG}")" && [[ ! -d ${savejson} ]] || die 'Invalid json filename.' ;;
       q) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'QUOTA must be integer >= 0.' && ((quota = OPTARG * GiB)) ;;
+      t)
+        case "${OPTARG}" in
+          all) unit_test tr tv film re ;;
+          '') die "Empty unit test target." ;;
+          *) unit_test "${OPTARG}" ;;
+        esac
+        ;;
       *) print_help ;;
     esac
   done
-
-  # variables & constants
-  seed_dir="$(normpath "${seed_dir}")"
-  tr_header='' tr_json='' tr_totalsize='' tr_paused='' logs=()
-  declare -Ag tr_names=()
   readonly tr_api seed_dir watch_dir GiB quota locations dryrun savejson
 
   # acquire lock
@@ -112,16 +119,16 @@ init() {
 copy_finished() {
   [[ ${tr_path} ]] || return
   local root dest
+  get_tr_header
 
   if [[ ${TR_TORRENT_DIR} -ef ${seed_dir} ]]; then
     # decide the destination location
     root="${locations[$(
-      awk -v TR_TORRENT_DIR="${TR_TORRENT_DIR}" \
-        -v TR_TORRENT_NAME="${TR_TORRENT_NAME}" \
-        -v regexfile="${regexfile}" \
-        -f "${categorize}"
+      request_tr "{\"arguments\":{\"fields\":[\"files\"],\"ids\":[${TR_TORRENT_ID:?}]},\"method\":\"torrent-get\"}" |
+        jq -j '.arguments.torrents[].files[]|"\(.length)\u0000\(.name)\u0000\u0000"' |
+        awk -v regexfile="${regexfile}" -f "${categorize}"
     )]}"
-    # fallback to default if the result is blank
+    # fallback to default if failed
     root="$(normpath "${root:-${locations[default]}}")"
     # append a sub-directory if needed
     if [[ -d ${tr_path} ]]; then
@@ -139,7 +146,6 @@ copy_finished() {
     fi
   elif [[ -e ${seed_dir} ]] || mkdir -p -- "${seed_dir}" &&
     cp -r -f -- "${tr_path}" "${seed_dir}/" &&
-    get_tr_header &&
     request_tr "$(jq -acn --argjson i "${TR_TORRENT_ID}" --arg d "${seed_dir}" '{"arguments":{"ids":[$i],"location":$d},"method":"torrent-set-location"}')" >/dev/null; then
     append_log 'Finish' "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
     return 0
@@ -154,10 +160,11 @@ copy_finished() {
 get_tr_header() {
   if [[ "$(curl -s -I -- "${tr_api}")" =~ 'X-Transmission-Session-Id:'[[:blank:]]*[[:alnum:]]+ ]]; then
     tr_header="${BASH_REMATCH[0]}"
-    printf 'API header: "%s"\n' "${tr_header}" 1>&2
     return 0
+  else
+    printf 'Getting API header failed.\n' 1>&2
+    return 1
   fi
-  return 1
 }
 
 # Send an API request.
@@ -170,7 +177,6 @@ request_tr() {
   local i
   for i in {1..4}; do
     if curl -s -f --header "${tr_header}" -d "$1" -- "${tr_api}"; then
-      printf 'Querying API success: "%s"\n' "$1" 1>&2
       return 0
     elif ((i < 4)); then
       printf 'Querying API failed. Retries: %d\n' "${i}" 1>&2
@@ -294,8 +300,9 @@ remove_inactive() {
 
 # Restart paused torrents, if there is any.
 resume_paused() {
-  if ((tr_paused > 0 && !dryrun)); then
-    request_tr '{"method":"torrent-start"}' >/dev/null
+  if ((tr_paused > 0)); then
+    printf 'Resume torrents.\n'
+    ((dryrun)) || request_tr '{"method":"torrent-start"}' >/dev/null
   fi
 }
 
@@ -336,6 +343,110 @@ write_log() {
         [[ ${backup} ]] && printf '%s\n' "${backup}"
       } >"${logfile}"
     fi
+  fi
+}
+
+unit_test() {
+
+  test_tr() {
+    local name files key
+    get_tr_header || die "Connecting failed."
+    while IFS=/ read -r -d '' name files; do
+      printf 'Name: %s\n' "${name}" 1>&2
+      key="$(
+        printf '%s' "${files}" |
+          jq -j '.[]|"\(.length)\u0000\(.name)\u0000\u0000"' |
+          awk -v regexfile="${regexfile}" -f "${categorize}"
+      )"
+      examine "${name}" "${key}"
+    done < <(
+      request_tr '{"arguments":{"fields":["name","files"]},"method":"torrent-get"}' |
+        jq -j '.arguments.torrents[]|"\(.name)/\(.files)\u0000"'
+    )
+  }
+
+  test_dir() {
+    local root="$1" name="$2" key
+    printf 'Name: %s\n' "${name}" 1>&2
+    key="$(
+      if [[ ${root} ]] && { [[ ${PWD} == ${root} ]] || cd "${root}"; }; then
+        find "${name}" -name '[.#@]*' -prune -o -type f -printf '%s\0%p\0\0'
+      else
+        printf '%d\0%s\0\0' 0 "${name}"
+      fi | awk -v regexfile="${regexfile}" -f "${categorize}"
+    )"
+    examine "${name}" "${key}" "${root}"
+  }
+
+  examine() {
+    local name="$1" key="$2" root="$3"
+    if [[ -z ${key} ]]; then
+      error+=("Runtime Error: '${name}' -> ${key}")
+      color=31
+    elif [[ ${root} && ! ${locations[${key}]} -ef ${root} ]]; then
+      error+=("Differ: '${root}/${name}' -> '${locations[${key}]}' (${key})")
+      color=31
+    else
+      case "${key}" in
+        default) color=0 ;;
+        av) color=32 ;;
+        film) color=33 ;;
+        tv) color=34 ;;
+        music) color=35 ;;
+        adobe) color=36 ;;
+        *)
+          error+=("Invalid type: '${name}' -> '${key}'")
+          color=31
+          ;;
+      esac
+    fi
+    printf "\033[${color}m%s\n%s\033[0m\n" "Type: ${key}" "Root: ${locations[${key}]}" 1>&2
+  }
+
+  test_regex() {
+    local driver_dir="${locations[av]%/*}" video_dir="${locations[film]%/*}"
+
+    printf 'Testing "%s" on "%s"...\nUmatched items:\n' "${regexfile}" "${driver_dir}" 1>&2
+    find "${driver_dir}" -name '[.#@]*' -prune -o -type f -regextype 'posix-extended' \
+      -iregex '.+\.((bd|w)mv|3gp|asf|avi|flv|iso|m(2?ts|4p|[24kop]v|p([24]|e?g)|xf)|rm(vb)?|ts|vob|webm)' \
+      -printf '%P\n' | grep --color -Eivf "${regexfile}"
+
+    printf '\nTesting "%s" on "%s"...\n' "${regexfile}" "${video_dir}" 1>&2
+    find "${video_dir}" -name '[.#@]*' -prune -o -type f -printf '%P\n' | grep --color -Eif "${regexfile}"
+    printf 'Done, this should show no match.\n' 1>&2
+  }
+
+  local arg name error=()
+  for arg in "$@"; do
+    printf -- '-- %s ---\n' "${arg}" 1>&2
+    case "${arg}" in
+      tr) test_tr ;;
+      re) test_regex ;;
+      tv | film)
+        shopt -s nullglob
+        pushd "${locations[${arg}]}" >/dev/null || die "Unable to enter: '"${locations[${arg}]}"'"
+        for name in [^.\#@]*; do
+          test_dir "${PWD}" "${name}"
+        done
+        popd >/dev/null
+        ;;
+      *)
+        if [[ -e ${arg} ]]; then
+          test_dir "$(dirname "${arg}")" "$(basename "${arg}")"
+        else
+          test_dir "" "${arg}"
+        fi
+        ;;
+    esac
+    printf '\n' 1>&2
+  done
+
+  if ((${#error})); then
+    printf '%s\n' 'Errors:' "${error[@]}" 1>&2
+    exit 1
+  else
+    printf '%s\n' 'Finished.' 1>&2
+    exit 0
   fi
 }
 
