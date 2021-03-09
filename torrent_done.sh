@@ -399,7 +399,7 @@ unit_test() {
   shopt -s nullglob
   [[ $1 == 'all' ]] && set -- tr tv film
 
-  for arg in "$@"; do
+  for arg; do
     printf '=== %s ===\n' "${arg}" 1>&2
     case "${arg}" in
       tr) test_tr ;;
