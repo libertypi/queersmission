@@ -3,8 +3,8 @@
 #
 # Input stream:
 #   size\0path\0, ...
-# Input variables (passed via "-v"):
-#   regexfile
+# Variable assignment (passed via "-v"):
+#   regexfile=/path/to/regexfile
 # Output is one of:
 #   default, av, film, tv, music
 
@@ -17,7 +17,7 @@ BEGIN {
     }
     close(regexfile)
     RS = "\000"
-    errno = size_reached = 0
+    raise_exit = size_reached = 0
     size_thresh = (80 * 1024 ^ 2)
     split("", sizedict)
     split("", typedict)
@@ -48,8 +48,8 @@ NR % 2 {
 }
 
 END {
-    if (errno)
-        exit errno
+    if (raise_exit)
+        exit 1
     if (NR % 2)
         raise("Invalid input. Expect null-terminated (size, path) pairs.")
     if (! length(sizedict))
@@ -67,7 +67,7 @@ END {
 function raise(msg)
 {
     printf("[AWK] Fatal: %s\n", msg) > "/dev/stderr"
-    errno = 1
+    raise_exit = 1
     exit 1
 }
 
