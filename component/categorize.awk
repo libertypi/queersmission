@@ -6,7 +6,7 @@
 # Input variables (passed via "-v"):
 #   regexfile
 # Output is one of:
-#   default, av, film, tv, music, adobe
+#   default, av, film, tv, music
 
 BEGIN {
     RS = "^$"
@@ -20,7 +20,7 @@ BEGIN {
     errno = size_reached = 0
     size_thresh = (80 * 1024 ^ 2)
     split("", sizedict)
-    split("", filelist)
+    split("", typedict)
     split("", videoset)
 }
 
@@ -31,6 +31,7 @@ NR % 2 {
     next
 }
 
+# sizedict[path]: size
 {
     if (size >= size_thresh) {
         if (! size_reached) {
@@ -46,20 +47,20 @@ NR % 2 {
     sizedict[path] += size
 }
 
-# sizedict[path]: size
-# filelist[1]: path (sorted by filesize, largest first)
 END {
     if (errno)
         exit errno
     if (NR % 2)
         raise("Invalid input. Expect null-terminated (size, path) pairs.")
-    if (asorti(sizedict, filelist, "@val_num_desc") <= 0)
+    if (! length(sizedict))
         raise("Empty input.")
 
-    pattern_match(filelist, videoset)
+    pattern_match(sizedict, typedict, videoset)
     if (length(videoset) >= 3)
         series_match(videoset)
-    ext_match(sizedict, filelist, videoset)
+
+    PROCINFO["sorted_in"] = "@val_num_desc"
+    for (i in typedict) output(i)
 }
 
 
@@ -72,28 +73,34 @@ function raise(msg)
 
 # match files against patterns
 # save video files to: videoset[path]
-function pattern_match(filelist, videoset,  n, i, s)
+# save cumulative size to: typedict[type]: sum
+function pattern_match(sizedict, typedict, videoset,  i, type)
 {
-    n = length(filelist)
-    for (i = 1; i <= n; i++) {
-        s = filelist[i]
-        if (s ~ /\.(3gp|asf|avi|bdmv|flv|iso|m(2?ts|4p|[24kop]v|p2|p4|pe?g|xf)|rm|rmvb|ts|vob|webm|wmv)$/) {
-            if (s ~ av_regex)
+    delete typedict
+    delete videoset
+    PROCINFO["sorted_in"] = "@val_num_desc"
+    for (i in sizedict) {
+        switch (i) {
+        case /\.((a|bd|w)mv|3g[2p]|[as]vi|asf|f4[abpv]|flv|iso|m(2?ts|4p|[24kop]v|p[24e]|pe?g|xf)|og[gv]|qt|rm|rmvb|ts|viv|vob|webm|yuv)$/:
+            if (i ~ av_regex)
                 output("av")
-            if (s ~ /\y([es]|ep[ _-]?|s([1-9][0-9]|0?[1-9])e)([1-9][0-9]|0?[1-9])\y/)
+            if (i ~ /\y([es]|ep[ _-]?|s([1-9][0-9]|0?[1-9])e)([1-9][0-9]|0?[1-9])\y/)
                 output("tv")
-            videoset[s]
+            videoset[i]
+            type = "film"
+            break
+        case /\.((al?|fl)ac|ape|m4a|mp3|ogg|wav|wma)$/:
+            type = "music"
+            break
+        default:
+            type = "default"
         }
-        if (i == 1 && s ~ /\.(7z|[di]mg|[rt]ar|exe|gz|iso|zip)$/) {
-            if (s ~ /(^|[^a-z])(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)($|[^a-z])/)
-                output("adobe")
-            if (s ~ /(^|[^a-z0-9])((32|64)bit|mac(os)?|windows|microsoft|x64|x86)($|[^a-z0-9])/)
-                output("default")
-        }
+        typedict[type] += sizedict[i]
     }
+    delete PROCINFO["sorted_in"]
 }
 
-# Scan multiple videoset to identify consecutive digits:
+# Scan videoset to identify consecutive digits:
 # input:
 #   videoset[parent/string_05.mp4]
 #   videoset[parent/string_06.mp4]
@@ -133,25 +140,9 @@ function series_match(videoset,  m, n, i, j, words, nums, groups)
     }
 }
 
-function ext_match(sizedict, filelist, videoset,  i, j, groups)
-{
-    for (i = 1; i in filelist && i <= 3; i++) {
-        if (filelist[i] in videoset) {
-            j = "film"
-        } else if (filelist[i] ~ /\.((al?|fl)ac|ape|m4a|mp3|ogg|wav|wma)$/) {
-            j = "music"
-        } else {
-            j = "default"
-        }
-        groups[j] += sizedict[filelist[i]]
-    }
-    asorti(groups, groups, "@val_num_desc")
-    output(groups[1])
-}
-
 function output(type)
 {
-    if (type ~ /^(default|av|film|tv|music|adobe)$/) {
+    if (type ~ /^(default|av|film|tv|music)$/) {
         print type
         exit 0
     } else {

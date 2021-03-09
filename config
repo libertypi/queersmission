@@ -22,5 +22,4 @@ declare -A locations=(
   ['film']='/volume1/video/Films'
   ['tv']='/volume1/video/TV Series'
   ['music']='/volume1/music/Download'
-  ['adobe']='/volume1/homes/admin/Download/Adobe'
 )

@@ -378,7 +378,6 @@ unit_test() {
       film) color=33 ;;
       tv) color=34 ;;
       music) color=35 ;;
-      adobe) color=36 ;;
       '')
         error+=("Runtime Error: '${name}' -> ${key}")
         color=31
