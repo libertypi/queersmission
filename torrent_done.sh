@@ -361,7 +361,7 @@ unit_test() {
     local name="$1" root="$2" key
     printf 'Name: %s\n' "${name}" 1>&2
     key="$(
-      if [[ ${root} ]] && { [[ ${PWD} == "${root}" ]] || cd "${root}"; }; then
+      if [[ ${root} ]] && { [[ ${PWD} == "${root}" ]] || cd "${root}" 1>/dev/null 2>&1; }; then
         find "${name}" -name '[.#@]*' -prune -o -type f -printf '%s\0%p\0'
       else
         printf '%d\0%s\0' 0 "${name}"
@@ -404,11 +404,12 @@ unit_test() {
     case "${arg}" in
       tr) test_tr ;;
       tv | film)
-        pushd "${locations[${arg}]}" >/dev/null || die "Unable to enter: '${locations[${arg}]}'"
+        pushd "${locations[${arg}]}" 1>/dev/null 2>&1 ||
+          die "Unable to enter: '${locations[${arg}]}'"
         for name in [^.\#@]*; do
           test_dir "${name}" "${PWD}"
         done
-        popd >/dev/null
+        popd 1>/dev/null 2>&1
         ;;
       *)
         if [[ -e ${arg} ]]; then
@@ -421,7 +422,7 @@ unit_test() {
   done
 
   if ((${#error})); then
-    printf '%s\n' 'Errors:' "${error[@]}" 1>&2
+    printf '%s\n' "Errors (${#error[@]}):" "${error[@]}" 1>&2
     exit 1
   else
     printf '%s\n' 'Finished.' 1>&2

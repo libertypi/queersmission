@@ -25,10 +25,10 @@ BEGIN {
     split("", videoset)
 }
 
-
 NR % 2 {
-    if ($0 !~ /^[0-9]+$/)
+    if ($0 !~ /^[0-9]+$/) {
         raise("Size should be integer, not: " $0)
+    }
     size = $0
     next
 }
@@ -49,21 +49,17 @@ NR % 2 {
 }
 
 END {
-    if (errno)
+    if (errno) 
         exit errno
     if (NR % 2)
         raise("Invalid input. Expect null-terminated (size, path) pairs.")
-
     # sizedict[path]: size
     # filelist[1]: path (sorted by filesize, largest first)
     if (! asorti(sizedict, filelist, "@val_num_desc"))
         raise("Empty input.")
-
     pattern_match(filelist, videoset)
-
     if (length(videoset) >= 3)
         series_match(videoset)
-
     ext_match(sizedict, filelist, videoset)
 }
 
