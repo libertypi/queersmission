@@ -107,6 +107,16 @@ init() {
   trap 'write_log' EXIT
 }
 
+get_tr_header() {
+  if [[ "$(curl -s -I -- "${tr_api}")" =~ 'X-Transmission-Session-Id:'[[:blank:]]*[[:alnum:]]+ ]]; then
+    tr_header="${BASH_REMATCH[0]}"
+    return 0
+  else
+    printf 'Getting API header failed.\n' 1>&2
+    return 1
+  fi
+}
+
 # Copy finished downloads to destination.
 # This function only runs when the script was invoked by transmission as
 # "script-torrent-done".
@@ -148,16 +158,6 @@ copy_finished() {
 
   append_log 'Error' "${root:-${TR_TORRENT_DIR}}" "${TR_TORRENT_NAME}"
   return 1
-}
-
-get_tr_header() {
-  if [[ "$(curl -s -I -- "${tr_api}")" =~ 'X-Transmission-Session-Id:'[[:blank:]]*[[:alnum:]]+ ]]; then
-    tr_header="${BASH_REMATCH[0]}"
-    return 0
-  else
-    printf 'Getting API header failed.\n' 1>&2
-    return 1
-  fi
 }
 
 # Send an API request.
@@ -392,7 +392,7 @@ unit_test() {
       error+=("Differ: '${root}/${name}' -> '${locations[${key}]}' (${key})")
       color=31
     fi
-    printf "\033[${color}m%s\n%s\033[0m\n" "Type: ${key}" "Root: ${locations[${key}]}" 1>&2
+    printf "\033[${color}m%s\n%s\033[0m\n---\n" "Type: ${key}" "Root: ${locations[${key}]}" 1>&2
   }
 
   local arg name error=()
@@ -418,7 +418,6 @@ unit_test() {
         fi
         ;;
     esac
-    printf '\n' 1>&2
   done
 
   if ((${#error})); then
