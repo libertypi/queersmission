@@ -379,7 +379,7 @@ unit_test() {
       tv) color=34 ;;
       music) color=35 ;;
       '')
-        error+=("Runtime Error: '${name}' -> ${key}")
+        error+=("Runtime Error: '${name}'")
         color=31
         ;;
       *)
