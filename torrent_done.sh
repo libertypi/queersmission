@@ -114,7 +114,6 @@ copy_finished() {
   [[ ${tr_path} ]] || return
   local root dest
 
-  get_tr_header
   if [[ ${TR_TORRENT_DIR} -ef ${seed_dir} ]]; then
     # decide the destination location
     root="${locations[$(
@@ -187,7 +186,6 @@ request_tr() {
 query_json() {
   local i result
 
-  [[ ${tr_header} ]] || get_tr_header
   tr_json="$(
     request_tr '{"arguments":{"fields":["activityDate","id","name","percentDone","sizeWhenDone","status","trackerStats"]},"method":"torrent-get"}'
   )" || exit 1
@@ -437,6 +435,7 @@ unit_test() {
 ################################################################################
 
 init "$@"
+get_tr_header
 copy_finished
 query_json
 clean_disk
