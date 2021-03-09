@@ -27,6 +27,8 @@ BEGIN {
 
 
 NR % 2 {
+    if ($0 !~ /^[0-9]+$/)
+        raise("Size should be integer, not: " $0)
     size = $0
     next
 }
