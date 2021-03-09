@@ -81,7 +81,7 @@ function pattern_match(sizedict, typedict, videoset,  i, type)
     PROCINFO["sorted_in"] = "@val_num_desc"
     for (i in sizedict) {
         switch (i) {
-        case /\.((a|bd|w)mv|3g[2p]|[as]vi|asf|f4[abpv]|flv|iso|m(2?ts|4p|[24kop]v|p[24e]|pe?g|xf)|og[gv]|qt|rm|rmvb|ts|viv|vob|webm|yuv)$/:
+        case /\.((a|bd|w)mv|(fl|og|vi|yu)v|3g[2p]|[as]vi|asf|f4[abpv]|iso|m(2?ts|4p|[24kop]v|p[24g]|peg?|xf)|qt|rm|rmvb|ts|vob|webm)$/:
             if (i ~ av_regex)
                 output("av")
             if (i ~ /\y([es]|ep[ _-]?|s([1-9][0-9]|0?[1-9])e)([1-9][0-9]|0?[1-9])\y/)
