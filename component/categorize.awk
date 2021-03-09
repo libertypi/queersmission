@@ -26,7 +26,7 @@ BEGIN {
 
 NR % 2 {
     if ($0 !~ /^[0-9]+$/)
-        raise("Invalid size input, expect integer: '" $0 "'")
+        raise("Invalid size, expect integer: '" $0 "'")
     size = $0
     next
 }
@@ -70,27 +70,24 @@ function raise(msg)
     exit 1
 }
 
-function pattern_match(filelist, videoset,  i, j, s)
+function pattern_match(filelist, videoset,  n, i, s)
 {
     # videoset[path]
-    j = length(filelist)
-    for (i = 1; i <= j; i++) {
+    n = length(filelist)
+    for (i = 1; i <= n; i++) {
         s = filelist[i]
         if (s ~ /\.(3gp|asf|avi|bdmv|flv|iso|m(2?ts|4p|[24kop]v|p2|p4|pe?g|xf)|rm|rmvb|ts|vob|webm|wmv)$/) {
-            if (s ~ av_regex) {
+            if (s ~ av_regex)
                 output("av")
-            } else if (s ~ /\y([es]|ep[ _-]?|s([1-9][0-9]|0?[1-9])e)([1-9][0-9]|0?[1-9])\y/) {
+            if (s ~ /\y([es]|ep[ _-]?|s([1-9][0-9]|0?[1-9])e)([1-9][0-9]|0?[1-9])\y/)
                 output("tv")
-            }
             videoset[s]
         }
-    }
-    s = filelist[1]
-    if (s ~ /\.(7z|[di]mg|[rt]ar|exe|gz|iso|zip)$/) {
-        if (s ~ /(^|[^a-z])(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)($|[^a-z])/) {
-            output("adobe")
-        } else if (s ~ /(^|[^a-z0-9])((32|64)bit|mac(os)?|windows|microsoft|x64|x86)($|[^a-z0-9])/) {
-            output("default")
+        if (i == 1 && s ~ /\.(7z|[di]mg|[rt]ar|exe|gz|iso|zip)$/) {
+            if (s ~ /(^|[^a-z])(acrobat|adobe|animate|audition|dreamweaver|illustrator|incopy|indesign|lightroom|photoshop|prelude|premiere)($|[^a-z])/)
+                output("adobe")
+            if (s ~ /(^|[^a-z0-9])((32|64)bit|mac(os)?|windows|microsoft|x64|x86)($|[^a-z0-9])/)
+                output("default")
         }
     }
 }
