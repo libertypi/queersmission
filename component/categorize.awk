@@ -46,13 +46,13 @@ NR % 2 {
     sizedict[path] += size
 }
 
+# sizedict[path]: size
+# filelist[1]: path (sorted by filesize, largest first)
 END {
     if (errno)
         exit errno
     if (NR % 2)
         raise("Invalid input. Expect null-terminated (size, path) pairs.")
-    # sizedict[path]: size
-    # filelist[1]: path (sorted by filesize, largest first)
     if (asorti(sizedict, filelist, "@val_num_desc") <= 0)
         raise("Empty input.")
 
@@ -70,9 +70,10 @@ function raise(msg)
     exit 1
 }
 
+# match files against patterns
+# save video files to: videoset[path]
 function pattern_match(filelist, videoset,  n, i, s)
 {
-    # videoset[path]
     n = length(filelist)
     for (i = 1; i <= n; i++) {
         s = filelist[i]
@@ -92,25 +93,25 @@ function pattern_match(filelist, videoset,  n, i, s)
     }
 }
 
+# Scan multiple videoset to identify consecutive digits:
+# input:
+#   videoset[parent/string_05.mp4]
+#   videoset[parent/string_06.mp4]
+#   videoset[parent/string_04string_05.mp4]
+# After split, grouped as:
+#   groups[1, "string"][5] (parent/string_05.mp4)
+#   groups[1, "string"][6] (parent/string_06.mp4)
+#   groups[1, "string"][4] (parent/string_04string_05.mp4)
+#   groups[2, "string"][5] (parent/string_04string_05.mp4)
+#   (file would never appear in one group twice)
+# For each group, sort its subgroup by the digits:
+#   nums[1] = 4
+#   nums[2] = 5
+#   nums[3] = 6
+# If we found three consecutive digits in one group,
+# identify as TV Series.
 function series_match(videoset,  m, n, i, j, words, nums, groups)
 {
-    # Scan multiple videoset to identify consecutive digits:
-    # input:
-    #   videoset[parent/string_05.mp4]
-    #   videoset[parent/string_06.mp4]
-    #   videoset[parent/string_04string_05.mp4]
-    # After split, grouped as:
-    #   groups[1, "string"][5] (parent/string_05.mp4)
-    #   groups[1, "string"][6] (parent/string_06.mp4)
-    #   groups[1, "string"][4] (parent/string_04string_05.mp4)
-    #   groups[2, "string"][5] (parent/string_04string_05.mp4)
-    #   (file would never appear in one group twice)
-    # For each group, sort its subgroup by the digits:
-    #   nums[1] = 4
-    #   nums[2] = 5
-    #   nums[3] = 6
-    # If we found three consecutive digits in one group,
-    # identify as TV Series.
     for (m in videoset) {
         n = split(m, words, /[0-9]+/, nums)
         for (i = 1; i < n; i++) {
