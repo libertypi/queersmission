@@ -26,9 +26,8 @@ BEGIN {
 }
 
 NR % 2 {
-    if ($0 !~ /^[0-9]+$/) {
+    if ($0 !~ /^[0-9]+$/)
         raise("Size should be integer, not: " $0)
-    }
     size = $0
     next
 }
@@ -49,7 +48,7 @@ NR % 2 {
 }
 
 END {
-    if (errno) 
+    if (errno)
         exit errno
     if (NR % 2)
         raise("Invalid input. Expect null-terminated (size, path) pairs.")
