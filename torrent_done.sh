@@ -85,7 +85,7 @@ init() {
       d) dryrun=1 ;;
       s) savejson="$(normpath "${OPTARG}")" && [[ ! -d ${savejson} ]] || die 'Invalid json filename.' ;;
       q) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'QUOTA must be integer >= 0.' && ((quota = OPTARG * GiB)) ;;
-      t) unit_test "${OPTARG}" ;;
+      t) [[ ${OPTARG} ]] || die "Empty unittest target." && unit_test "${OPTARG}" ;;
       *) print_help ;;
     esac
   done
@@ -360,7 +360,7 @@ unit_test() {
   }
 
   test_dir() {
-    local root="$1" name="$2" key
+    local name="$1" root="$2" key
     printf 'Name: %s\n' "${name}" 1>&2
     key="$(
       if [[ ${root} ]] && { [[ ${PWD} == "${root}" ]] || cd "${root}"; }; then
@@ -374,34 +374,32 @@ unit_test() {
 
   examine() {
     local name="$1" key="$2" root="$3" color
-    if [[ -z ${key} ]]; then
-      error+=("Runtime Error: '${name}' -> ${key}")
-      color=31
-    elif [[ ${root} && ! ${locations[${key}]} -ef ${root} ]]; then
+    case "${key}" in
+      default) color=0 ;;
+      av) color=32 ;;
+      film) color=33 ;;
+      tv) color=34 ;;
+      music) color=35 ;;
+      adobe) color=36 ;;
+      '')
+        error+=("Runtime Error: '${name}' -> ${key}")
+        color=31
+        ;;
+      *)
+        error+=("Invalid type: '${name}' -> '${key}'")
+        color=31
+        ;;
+    esac
+    if [[ ${color} != 31 && ${root} && ! ${root} -ef ${locations[${key}]} ]]; then
       error+=("Differ: '${root}/${name}' -> '${locations[${key}]}' (${key})")
       color=31
-    else
-      case "${key}" in
-        default) color=0 ;;
-        av) color=32 ;;
-        film) color=33 ;;
-        tv) color=34 ;;
-        music) color=35 ;;
-        adobe) color=36 ;;
-        *)
-          error+=("Invalid type: '${name}' -> '${key}'")
-          color=31
-          ;;
-      esac
     fi
     printf "\033[${color}m%s\n%s\033[0m\n" "Type: ${key}" "Root: ${locations[${key}]}" 1>&2
   }
 
-  case "$1" in
-    all) set -- tr tv film ;;
-    '') die "Empty unittest target." ;;
-  esac
   local arg name error=()
+  shopt -s nullglob
+  [[ $1 == 'all' ]] && set -- tr tv film
 
   for arg in "$@"; do
     printf '=== %s ===\n' "${arg}" 1>&2
@@ -409,17 +407,16 @@ unit_test() {
       tr) test_tr ;;
       tv | film)
         pushd "${locations[${arg}]}" >/dev/null || die "Unable to enter: '${locations[${arg}]}'"
-        shopt -s nullglob
         for name in [^.\#@]*; do
-          test_dir "${PWD}" "${name}"
+          test_dir "${name}" "${PWD}"
         done
         popd >/dev/null
         ;;
       *)
         if [[ -e ${arg} ]]; then
-          test_dir "$(dirname "${arg}")" "$(basename "${arg}")"
+          test_dir "$(basename "${arg}")" "$(dirname "${arg}")"
         else
-          test_dir "" "$(normpath "${arg}")"
+          test_dir "$(normpath "${arg}")"
         fi
         ;;
     esac
