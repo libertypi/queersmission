@@ -41,7 +41,7 @@ optional arguments:
   -d         dryrun mode
   -s FILE    save formated json to FILE
   -q NUM     set disk quota to NUM GiB (default: $((quota / GiB)))
-  -t TARGET  unit test, TARGET: "all", "tr", "tv", "film" or custom path
+  -t TEST    unit test, TEST: "all", "tr", "tv", "film" or custom path
 EOF
   exit 1
 }
@@ -85,7 +85,7 @@ init() {
       d) dryrun=1 ;;
       s) savejson="$(normpath "${OPTARG}")" && [[ ! -d ${savejson} ]] || die 'Invalid json filename.' ;;
       q) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'QUOTA must be integer >= 0.' && ((quota = OPTARG * GiB)) ;;
-      t) [[ ${OPTARG} ]] || die "Empty unittest target." && unit_test "${OPTARG}" ;;
+      t) [[ ${OPTARG} ]] || die "Empty TEST target." && unit_test "${OPTARG}" ;;
       *) print_help ;;
     esac
   done
