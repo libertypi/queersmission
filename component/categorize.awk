@@ -9,16 +9,15 @@
 #   default, av, film, tv, music, adobe
 
 BEGIN {
-    errno = 0
     RS = "^$"
-    if ((getline av_regex < regexfile) > 0 && av_regex ~ /\S/) {
+    if (regexfile != "" && (getline av_regex < regexfile) > 0 && av_regex ~ /\S/) {
         gsub(/^\s+|\s+$/, "", av_regex)
     } else {
-        raise("Reading regex file failed.")
+        raise("Reading regexfile '" regexfile "' failed.")
     }
     close(regexfile)
     RS = "\000"
-    size_reached = 0
+    errno = size_reached = 0
     size_thresh = (80 * 1024 ^ 2)
     split("", sizedict)
     split("", filelist)
@@ -27,7 +26,7 @@ BEGIN {
 
 NR % 2 {
     if ($0 !~ /^[0-9]+$/)
-        raise("Size should be integer, not: " $0)
+        raise("Invalid size input, expect integer: '" $0 "'")
     size = $0
     next
 }

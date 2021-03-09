@@ -350,7 +350,7 @@ unit_test() {
           jq -j '.[]|"\(.length)\u0000\(.name)\u0000"' |
           awk -v regexfile="${regexfile}" -f "${categorize}"
       )"
-      examine "${name}" "${key}"
+      examine "${key}" "${name}"
     done < <(
       request_tr '{"arguments":{"fields":["name","files"]},"method":"torrent-get"}' |
         jq -j '.arguments.torrents[]|"\(.name)/\(.files)\u0000"'
@@ -367,11 +367,11 @@ unit_test() {
         printf '%d\0%s\0' 0 "${name}"
       fi | awk -v regexfile="${regexfile}" -f "${categorize}"
     )"
-    examine "${name}" "${key}" "${root}"
+    examine "${key}" "$@"
   }
 
   examine() {
-    local name="$1" key="$2" root="$3" color
+    local key="$1" name="$2" root="$3" color
     case "${key}" in
       default) color=0 ;;
       av) color=32 ;;
