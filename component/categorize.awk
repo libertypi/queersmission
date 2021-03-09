@@ -89,7 +89,7 @@ function pattern_match(sizedict, typedict, videoset,  i, type)
             videoset[i]
             type = "film"
             break
-        case /\.((al?|fl)ac|ape|m4a|mp3|ogg|wav|wma)$/:
+        case /\.((al?|fl)ac|(m4|og|r|wm)a|aiff|ape|m?ogg|mp[3c]|opus|wa?v)$/:
             type = "music"
             break
         default:
