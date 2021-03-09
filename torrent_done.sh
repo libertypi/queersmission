@@ -136,10 +136,10 @@ copy_finished() {
     # append a sub-directory if needed
     if [[ -d ${tr_path} ]]; then
       dest="${root}"
-    elif [[ ${dest} =~ ([^/]*[^/.][^/]*)\.[^/.]*$ ]]; then
+    elif [[ ${TR_TORRENT_NAME} =~ ([^/]*[^/.][^/]*)\.[^/.]*$ ]]; then
       dest="${root}/${BASH_REMATCH[1]}"
     else
-      dest="${root}/${dest}"
+      dest="${root}/${TR_TORRENT_NAME}"
     fi
     # copy file
     if [[ -e ${dest} ]] || mkdir -p -- "${dest}" &&

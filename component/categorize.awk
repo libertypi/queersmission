@@ -54,7 +54,7 @@ END {
         raise("Invalid input. Expect null-terminated (size, path) pairs.")
     # sizedict[path]: size
     # filelist[1]: path (sorted by filesize, largest first)
-    if (! asorti(sizedict, filelist, "@val_num_desc"))
+    if (asorti(sizedict, filelist, "@val_num_desc") <= 0)
         raise("Empty input.")
     pattern_match(filelist, videoset)
     if (length(videoset) >= 3)
