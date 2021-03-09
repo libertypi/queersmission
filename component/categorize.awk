@@ -19,9 +19,9 @@ BEGIN {
     RS = "\000"
     raise_exit = size_reached = 0
     size_thresh = (80 * 1024 ^ 2)
-    split("", sizedict)
-    split("", typedict)
-    split("", videoset)
+    delete sizedict
+    delete typedict
+    delete videoset
 }
 
 NR % 2 {
@@ -59,8 +59,8 @@ END {
     if (length(videoset) >= 3)
         series_match(videoset)
 
-    PROCINFO["sorted_in"] = "@val_num_desc"
-    for (i in typedict) output(i)
+    asorti(typedict, typedict, "@val_num_desc")
+    output(typedict[1])
 }
 
 
@@ -122,8 +122,8 @@ function series_match(videoset,  m, n, i, j, words, nums, groups)
     for (m in videoset) {
         n = split(m, words, /[0-9]+/, nums)
         for (i = 1; i < n; i++) {
-            gsub(/.*\/|\s+/, "", words[i])
-            groups[i, words[i]][int(nums[i])]
+            gsub(/.*\/|[[:space:][:punct:]]+/, "", words[i])
+            groups[i, words[i]][nums[i] + 0]
         }
     }
     for (m in groups) {
