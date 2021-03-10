@@ -133,12 +133,16 @@ function series_match(videoset,  m, n, i, j, words, nums, groups)
     }
 }
 
-function max_value(groups,  i)
+function max_value(groups,  i, j, m)
 {
-    PROCINFO["sorted_in"] = "@val_num_desc"
-    for (i in groups) break
-    delete PROCINFO["sorted_in"]
-    return i
+    i = -1
+    for (m in groups) {
+        if (groups[m] > i) {
+            i = groups[m]
+            j = m
+        }
+    }
+    return j
 }
 
 function output(type)
