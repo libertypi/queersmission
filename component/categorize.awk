@@ -1,11 +1,11 @@
 # GNU Awk program for torrents categorization.
 # Author: David Pi
 #
-# Input stream:
-#   size\0path\0, ...
-# Variable assignment (passed via "-v"):
-#   regexfile=/path/to/regexfile
-# Output is one of:
+# input stream:
+#   size \0 path \0 ...
+# variable assignment (passed via "-v"):
+#   regexfile="/path/to/regexfile"
+# output is one of:
 #   default, av, film, tv, music
 
 BEGIN {
