@@ -17,8 +17,8 @@ BEGIN {
     size_thresh = (80 * 1024 ^ 2)
     delete sizedict
 
-    if (regexfile != "" && (getline av_regex < regexfile) > 0 && av_regex ~ /\S/) {
-        gsub(/^\s+|\s+$/, "", av_regex)
+    if (regexfile != "" && (getline av_regex < regexfile) > 0 && av_regex ~ /[^[:space:]]/) {
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", av_regex)
     } else {
         raise("Reading regexfile '" regexfile "' failed.")
     }
@@ -26,14 +26,12 @@ BEGIN {
 }
 
 NR % 2 {
-    if ($0 !~ /^[0-9]+$/)
-        raise("Invalid size, expect integer: '" $0 "'")
     size = $0
     next
 }
 
 # sizedict[path]: size
-{
+size ~ /^[[:digit:]]*$/ {
     if (size >= size_thresh) {
         if (! size_reached) {
             delete sizedict
@@ -51,10 +49,10 @@ NR % 2 {
 END {
     if (raise_exit)
         exit 1
-    if (NR % 2)
-        raise("Invalid input. Expect null-terminated (size, path) pairs.")
     if (! length(sizedict))
         raise("Empty input.")
+    if (NR % 2)
+        raise("Invalid input. Expect null-terminated (size, path) pairs.")
 
     pattern_match(sizedict, typedict, videoset)
     if (length(videoset) >= 3)
