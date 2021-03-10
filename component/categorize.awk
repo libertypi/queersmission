@@ -62,7 +62,7 @@ END {
 
 function raise(msg)
 {
-    printf("[AWK] Fatal: %s\n", msg) > "/dev/stderr"
+    printf("[AWK] Error: %s\n", msg) > "/dev/stderr"
     raise_exit = 1
     exit 1
 }
@@ -103,8 +103,8 @@ function pattern_match(sizedict, typedict, videoset,  i, type)
 #   groups[1, "string"][6] (parent/string_06.mp4)
 #   groups[1, "string"][4] (parent/string_04string_05.mp4)
 #   groups[2, "string"][5] (parent/string_04string_05.mp4)
-#   (file would never appear in one group twice)
-# For each group, sort its subgroup by the digits:
+#   (one file would never appear in the same group twice)
+# For each group, sort its subgroups by their keys:
 #   nums[1] = 4
 #   nums[2] = 5
 #   nums[3] = 6
