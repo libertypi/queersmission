@@ -12,7 +12,7 @@ seed_dir='/volume2/@transmission'
 
 # Directory where transmission monitors for new torrents, match "watch-dir" in
 # transmission settings, leave empty to disable watch_dir cleanup
-watch_dir='/volume1/video/Torrents'
+watch_dir='/volume1/video/Torrent'
 
 # Disk quota (minimum free space to keep on disk)
 ((GiB = 1024 ** 3, quota = 50 * GiB))
@@ -21,7 +21,7 @@ watch_dir='/volume1/video/Torrents'
 declare -A locations=(
   ['default']='/volume1/homes/admin/Download'
   ['av']='/volume1/driver/Temp'
-  ['film']='/volume1/video/Films'
-  ['tv']='/volume1/video/TV Series'
+  ['film']='/volume1/video/Film'
+  ['tv']='/volume1/video/TV'
   ['music']='/volume1/music/Download'
 )

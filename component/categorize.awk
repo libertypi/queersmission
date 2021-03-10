@@ -31,7 +31,7 @@ NR % 2 {
 }
 
 # sizedict[path]: size
-size ~ /^[[:digit:]]*$/ {
+size ~ /^[0-9]*$/ {
     if (size >= size_thresh) {
         if (! size_reached) {
             delete sizedict
@@ -49,17 +49,14 @@ size ~ /^[[:digit:]]*$/ {
 END {
     if (raise_exit)
         exit 1
-    if (! length(sizedict))
-        raise("Empty input.")
-    if (NR % 2)
+    if (NR % 2 || ! length(sizedict))
         raise("Invalid input. Expect null-terminated (size, path) pairs.")
 
     pattern_match(sizedict, typedict, videoset)
     if (length(videoset) >= 3)
         series_match(videoset)
 
-    asorti(typedict, typedict, "@val_num_desc")
-    output(typedict[1])
+    output(max_value(typedict))
 }
 
 
@@ -134,6 +131,14 @@ function series_match(videoset,  m, n, i, j, words, nums, groups)
             }
         }
     }
+}
+
+function max_value(groups,  i)
+{
+    PROCINFO["sorted_in"] = "@val_num_desc"
+    for (i in groups) break
+    delete PROCINFO["sorted_in"]
+    return i
 }
 
 function output(type)
