@@ -22,7 +22,7 @@ hash curl jq || die 'Curl and jq required.'
 
 readonly -- \
   logfile="${PWD}/logfile.log" \
-  categorize="${PWD}/component/categorize.awk" \
+  categorizer="${PWD}/component/categorizer.awk" \
   regexfile="${PWD}/component/regex.txt"
 
 ################################################################################
@@ -129,7 +129,7 @@ copy_finished() {
     root="${locations[$(
       request_tr "{\"arguments\":{\"fields\":[\"files\"],\"ids\":[${TR_TORRENT_ID:?}]},\"method\":\"torrent-get\"}" |
         jq -j '.arguments.torrents[].files[]|"\(.length)\u0000\(.name)\u0000"' |
-        awk -v regexfile="${regexfile}" -f "${categorize}"
+        awk -v regexfile="${regexfile}" -f "${categorizer}"
     )]}"
     # fallback to default if failed
     root="$(normpath "${root:-${locations[default]}}")"
@@ -348,7 +348,7 @@ unit_test() {
       key="$(
         printf '%s' "${files}" |
           jq -j '.[]|"\(.length)\u0000\(.name)\u0000"' |
-          awk -v regexfile="${regexfile}" -f "${categorize}"
+          awk -v regexfile="${regexfile}" -f "${categorizer}"
       )"
       examine "${key}" "${name}"
     done < <(
@@ -365,7 +365,7 @@ unit_test() {
         find "${name}" -name '[.#@]*' -prune -o -type f -printf '%s\0%p\0'
       else
         printf '%d\0%s\0' 0 "${name}"
-      fi | awk -v regexfile="${regexfile}" -f "${categorize}"
+      fi | awk -v regexfile="${regexfile}" -f "${categorizer}"
     )"
     examine "${key}" "$@"
   }
