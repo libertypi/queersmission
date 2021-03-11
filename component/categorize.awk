@@ -115,7 +115,7 @@ function pattern_match(sizedict, videoset,  i, type, arr)
 #   arr[1, "string"][4] (parent/string_04string_05.mp4)
 #   arr[2, "string"][5] (parent/string_04string_05.mp4)
 #   (one file would never appear in the same group twice)
-# For each group, sort its subgroups by their keys:
+# For each group, sort its subgroups by keys:
 #   nums[1] = 4
 #   nums[2] = 5
 #   nums[3] = 6
