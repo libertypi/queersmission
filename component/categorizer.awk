@@ -2,7 +2,7 @@
 # Author: David Pi
 #
 # input stream:
-#   size \0 path \0 ...
+#   path \0 size \0 ...
 # variable assignment (passed via "-v"):
 #   regexfile="/path/to/regexfile"
 # output is one of:
@@ -26,13 +26,13 @@ BEGIN {
 }
 
 NR % 2 {
-    size = $0
+    path = $0
     next
 }
 
 # sizedict[path]: size
-size ~ /^[0-9]*$/ {
-    if (size >= size_thresh) {
+/^[0-9]*$/ {
+    if ($0 >= size_thresh) {
         if (! size_reached) {
             delete sizedict
             size_reached = 1
@@ -40,17 +40,17 @@ size ~ /^[0-9]*$/ {
     } else if (size_reached) {
         next
     }
-    path = tolower($0)
+    path = tolower(path)
     sub(/\/bdmv\/stream\/[^/]+\.m2ts$/, "/bdmv/index.bdmv", path) ||
     sub(/\/video_ts\/[^/]+\.vob$/, "/video_ts/video_ts.vob", path)
-    sizedict[path] += size
+    sizedict[path] += $0
 }
 
 END {
     if (raise_exit)
         exit 1
     if (NR % 2 || ! length(sizedict))
-        raise("Invalid input. Expect null-terminated (size, path) pairs.")
+        raise("Invalid input. Expect null-terminated (path, size) pairs.")
 
     type = pattern_match(sizedict, videoset)
     if (type == "film" && length(videoset) >= 3)

@@ -128,7 +128,7 @@ copy_finished() {
     # decide the destination location
     root="${locations[$(
       request_tr "{\"arguments\":{\"fields\":[\"files\"],\"ids\":[${TR_TORRENT_ID:?}]},\"method\":\"torrent-get\"}" |
-        jq -j '.arguments.torrents[].files[]|"\(.length)\u0000\(.name)\u0000"' |
+        jq -j '.arguments.torrents[].files[]|"\(.name)\u0000\(.length)\u0000"' |
         awk -v regexfile="${regexfile}" -f "${categorizer}"
     )]}"
     # fallback to default if failed
@@ -347,7 +347,7 @@ unit_test() {
       printf 'Name: %s\n' "${name}" 1>&2
       key="$(
         printf '%s' "${files}" |
-          jq -j '.[]|"\(.length)\u0000\(.name)\u0000"' |
+          jq -j '.[]|"\(.name)\u0000\(.length)\u0000"' |
           awk -v regexfile="${regexfile}" -f "${categorizer}"
       )"
       examine "${key}" "${name}"
@@ -362,9 +362,9 @@ unit_test() {
     printf 'Name: %s\n' "${name}" 1>&2
     key="$(
       if [[ ${root} ]] && { [[ ${PWD} == "${root}" ]] || cd "${root}" 1>/dev/null 2>&1; }; then
-        find "${name}" -name '[.#@]*' -prune -o -type f -printf '%s\0%p\0'
+        find "${name}" -name '[.#@]*' -prune -o -type f -printf '%p\0%s\0'
       else
-        printf '%d\0%s\0' 0 "${name}"
+        printf '%s\0%d\0' "${name}" 0
       fi | awk -v regexfile="${regexfile}" -f "${categorizer}"
     )"
     examine "${key}" "$@"
