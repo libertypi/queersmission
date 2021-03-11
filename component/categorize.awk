@@ -52,10 +52,10 @@ END {
     if (NR % 2 || ! length(sizedict))
         raise("Invalid input. Expect null-terminated (size, path) pairs.")
 
-    most_common = pattern_match(sizedict, videoset)
-    if (most_common == "film" && length(videoset) >= 3)
+    type = pattern_match(sizedict, videoset)
+    if (type == "film" && length(videoset) >= 3)
         series_match(videoset)
-    output(most_common)
+    output(type)
 }
 
 
@@ -78,9 +78,19 @@ function max_val(arr,  i, j, m)
     return j
 }
 
+function output(type)
+{
+    if (type ~ /^(default|av|film|tv|music)$/) {
+        print type
+        exit 0
+    } else {
+        raise("Invalid type: " type)
+    }
+}
+
 # match files against patterns
 # save video files to: videoset[path]
-# return the most common file type
+# return the most significant file type
 function pattern_match(sizedict, videoset,  i, type, arr)
 {
     delete videoset
@@ -141,15 +151,5 @@ function series_match(videoset,  m, n, i, j, words, nums, arr)
                 i = 1
             }
         }
-    }
-}
-
-function output(type)
-{
-    if (type ~ /^(default|av|film|tv|music)$/) {
-        print type
-        exit 0
-    } else {
-        raise("Invalid type: " type)
     }
 }
