@@ -97,7 +97,7 @@ init() {
   if [[ ${TR_TORRENT_DIR} && ${TR_TORRENT_NAME} ]]; then
     flock -x "$i"
     readonly tr_path="${TR_TORRENT_DIR}/${TR_TORRENT_NAME}"
-  elif flock -xn "$i"; then
+  elif flock -x -n "$i"; then
     readonly tr_path=''
   else
     printf 'Failed.\n' 1>&2
