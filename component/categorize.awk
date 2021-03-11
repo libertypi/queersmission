@@ -52,11 +52,10 @@ END {
     if (NR % 2 || ! length(sizedict))
         raise("Invalid input. Expect null-terminated (size, path) pairs.")
 
-    pattern_match(sizedict, typedict, videoset)
-    if (length(videoset) >= 3)
+    most_common = pattern_match(sizedict, videoset)
+    if (most_common == "film" && length(videoset) >= 3)
         series_match(videoset)
-
-    output(max_value(typedict))
+    output(most_common)
 }
 
 
@@ -67,12 +66,23 @@ function raise(msg)
     exit 1
 }
 
+function max_value(arr,  i, j, m)
+{
+    i = -1
+    for (m in arr) {
+        if (arr[m] > i) {
+            i = arr[m]
+            j = m
+        }
+    }
+    return j
+}
+
 # match files against patterns
 # save video files to: videoset[path]
-# save cumulative size to: typedict[type]: sum
-function pattern_match(sizedict, typedict, videoset,  i, type)
+# return the most common file type
+function pattern_match(sizedict, videoset,  i, type, arr)
 {
-    delete typedict
     delete videoset
     PROCINFO["sorted_in"] = "@val_num_desc"
     for (i in sizedict) {
@@ -88,9 +98,10 @@ function pattern_match(sizedict, typedict, videoset,  i, type)
         } else {
             type = "default"
         }
-        typedict[type] += sizedict[i]
+        arr[type] += sizedict[i]
     }
     delete PROCINFO["sorted_in"]
+    return max_value(arr)
 }
 
 # Scan videoset to identify consecutive digits:
@@ -99,10 +110,10 @@ function pattern_match(sizedict, typedict, videoset,  i, type)
 #   videoset[parent/string_06.mp4]
 #   videoset[parent/string_04string_05.mp4]
 # After split, grouped as:
-#   groups[1, "string"][5] (parent/string_05.mp4)
-#   groups[1, "string"][6] (parent/string_06.mp4)
-#   groups[1, "string"][4] (parent/string_04string_05.mp4)
-#   groups[2, "string"][5] (parent/string_04string_05.mp4)
+#   arr[1, "string"][5] (parent/string_05.mp4)
+#   arr[1, "string"][6] (parent/string_06.mp4)
+#   arr[1, "string"][4] (parent/string_04string_05.mp4)
+#   arr[2, "string"][5] (parent/string_04string_05.mp4)
 #   (one file would never appear in the same group twice)
 # For each group, sort its subgroups by their keys:
 #   nums[1] = 4
@@ -110,18 +121,18 @@ function pattern_match(sizedict, typedict, videoset,  i, type)
 #   nums[3] = 6
 # If we found three consecutive digits in one group,
 # identify as TV Series.
-function series_match(videoset,  m, n, i, j, words, nums, groups)
+function series_match(videoset,  m, n, i, j, words, nums, arr)
 {
     for (m in videoset) {
         n = split(m, words, /[0-9]+/, nums)
         for (i = 1; i < n; i++) {
             gsub(/.*\/|[[:space:][:punct:]]+/, "", words[i])
-            groups[i, words[i]][nums[i] + 0]
+            arr[i, words[i]][nums[i] + 0]
         }
     }
-    for (m in groups) {
-        if (length(groups[m]) < 3) continue
-        n = asorti(groups[m], nums, "@ind_num_asc")
+    for (m in arr) {
+        if (length(arr[m]) < 3) continue
+        n = asorti(arr[m], nums, "@ind_num_asc")
         i = 1
         for (j = 2; j <= n; j++) {
             if (nums[j - 1] == nums[j] - 1) {
@@ -131,18 +142,6 @@ function series_match(videoset,  m, n, i, j, words, nums, groups)
             }
         }
     }
-}
-
-function max_value(groups,  i, j, m)
-{
-    i = -1
-    for (m in groups) {
-        if (groups[m] > i) {
-            i = groups[m]
-            j = m
-        }
-    }
-    return j
 }
 
 function output(type)
