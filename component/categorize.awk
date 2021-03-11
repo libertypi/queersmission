@@ -66,7 +66,7 @@ function raise(msg)
     exit 1
 }
 
-function max_value(arr,  i, j, m)
+function max_key(arr,  i, j, m)
 {
     i = -1
     for (m in arr) {
@@ -101,7 +101,7 @@ function pattern_match(sizedict, videoset,  i, type, arr)
         arr[type] += sizedict[i]
     }
     delete PROCINFO["sorted_in"]
-    return max_value(arr)
+    return max_key(arr)
 }
 
 # Scan videoset to identify consecutive digits:
