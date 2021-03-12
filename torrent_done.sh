@@ -83,7 +83,7 @@ init() {
   while getopts 'hds:q:t:' i; do
     case "$i" in
       d) dryrun=1 ;;
-      s) savejson="$(normpath "${OPTARG}")" && [[ ! -d ${savejson} ]] || die 'Invalid json filename.' ;;
+      s) [[ ${OPTARG} && ! -d ${OPTARG} ]] || die 'Invalid json filename.' && savejson="$(normpath "${OPTARG}")" ;;
       q) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'QUOTA must be integer >= 0.' && ((quota = OPTARG * GiB)) ;;
       t) [[ ${OPTARG} ]] || die "Empty TEST target." && unit_test "${OPTARG}" ;;
       *) print_help ;;
