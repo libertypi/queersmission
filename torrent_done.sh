@@ -395,8 +395,8 @@ unit_test() {
   }
 
   local arg name error=()
-  shopt -s nullglob
   [[ $1 == 'all' ]] && set -- tr tv film
+  shopt -s nullglob
 
   for arg; do
     printf '=== %s ===\n' "${arg}" 1>&2
