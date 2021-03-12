@@ -86,7 +86,7 @@ function pattern_match(sizedict, videoset,  i, type, arr)
     for (i in sizedict) {
         switch (i) {
         case /\.iso$/:
-            if (i ~ /(\y|_)(v[0-9]+(\.[0-9]+)+|adobe|microsoft|windows)(\y|_)/) {
+            if (i ~ /(\y|_)(v[0-9]+(\.[0-9]+)+|x(64|86)|adobe|microsoft|windows)(\y|_)/) {
                 type = "default"
                 break
             }
