@@ -25,13 +25,12 @@ BEGIN {
     close(regexfile)
 }
 
-NR % 2 {
+NR % 2 {  # path
     path = $0
     next
 }
 
-# sizedict[path]: size
-/^[0-9]*$/ {
+/^[0-9]*$/ {  # size
     if ($0 >= size_thresh) {
         if (! size_reached) {
             delete sizedict
@@ -43,7 +42,7 @@ NR % 2 {
     path = tolower(path)
     sub(/\/bdmv\/stream\/[^/]+\.m2ts$/, "/bdmv/index.bdmv", path) ||
     sub(/\/video_ts\/[^/]+\.vob$/, "/video_ts/video_ts.vob", path)
-    sizedict[path] += $0
+    sizedict[path] += $0  # sizedict[path]: size
 }
 
 END {
