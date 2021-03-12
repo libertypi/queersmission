@@ -30,6 +30,7 @@ NR % 2 {  # path
     next
 }
 
+# sizedict[path]: size
 /^[0-9]*$/ {  # size
     if ($0 >= size_thresh) {
         if (! size_reached) {
@@ -40,9 +41,9 @@ NR % 2 {  # path
         next
     }
     path = tolower(path)
-    sub(/\/bdmv\/stream\/[^/]+\.m2ts$/, "/bdmv/index.bdmv", path) ||
-    sub(/\/video_ts\/[^/]+\.vob$/, "/video_ts/video_ts.vob", path)
-    sizedict[path] += $0  # sizedict[path]: size
+    sub(/\/bdmv\/stream\/[^/]+\.m2ts$/, "/bdmv/stream.m2ts", path) ||
+    sub(/\/[^/]*vts[0-9_]+\.vob$/, "/video_ts.vob", path)
+    sizedict[path] += $0
 }
 
 END {
@@ -90,7 +91,7 @@ function pattern_match(sizedict, videoset,  i, type, arr)
                 break
             }
             # fall-through to video
-        case /\.((a|bd|w)mv|(fl|og|vi|yu)v|3g[2p]|[as]vi|asf|f4[abpv]|m(2?ts|4p|[24kop]v|p[24g]|peg?|xf)|qt|rm|rmvb|ts|vob|webm)$/:
+        case /\.((fl|og|vi|yu)v|3g[2p]|[as]vi|[aw]mv|asf|f4[abpv]|m(2?ts|4p|[24kop]v|p[24e]|pe?g|xf)|qt|rm|rmvb|ts|vob|webm)$/:
             if (i ~ av_regex)
                 output("av")
             if (i ~ /(\y|_)([es]|ep[ _-]?|s([1-9][0-9]|0?[1-9])e)([1-9][0-9]|0?[1-9])(\y|_)/)
