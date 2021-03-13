@@ -203,12 +203,14 @@ copy_finished() {
     printf 'Done.\n' 1>&2
     append_log 'Finish' "${logpath}" "${TR_TORRENT_NAME}"
     return 0
-  elif ((copy_to)) && [[ -e "${seed_dir}/${TR_TORRENT_NAME}" ]]; then
-    rm -r -f -- "${seed_dir:?}/${TR_TORRENT_NAME:?}"
+  else
+    printf 'Failed.\n' 1>&2
+    append_log 'Error' "${logpath:-${TR_TORRENT_DIR}}" "${TR_TORRENT_NAME}"
+    if ((copy_to)) && [[ -e "${seed_dir}/${TR_TORRENT_NAME}" ]]; then
+      rm -r -f -- "${seed_dir:?}/${TR_TORRENT_NAME:?}"
+    fi
+    return 1
   fi
-  printf 'Failed.\n' 1>&2
-  append_log 'Error' "${logpath:-${TR_TORRENT_DIR}}" "${TR_TORRENT_NAME}"
-  return 1
 }
 
 # Get and parse transmission json.
