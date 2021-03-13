@@ -4,11 +4,11 @@
 #                                Configurations                                #
 ################################################################################
 
-# Transmission rpc address with authentication disabled
+# Transmission rpc address with authentication disabled.
 tr_api='http://localhost:9091/transmission/rpc'
 
 # Directory storing seeding files, match "download-dir" in transmission
-# settings. This directory should only be used for internal cache. DO NOT save
+# settings. This directory should only be used for internal cache. DO NOT put
 # user files here or they will be lost.
 seed_dir='/volume2/@transmission'
 
@@ -23,7 +23,7 @@ watch_dir='/volume1/video/Torrent'
 
 # Download save locations. When transmission finishes a download, this script
 # categorizes the torrent and copies it to the corresponding location. Locations
-# should NOT be the same or within seed_dir.
+# should NOT be the same as nor within seed_dir.
 declare -A locations=(
   ['default']='/volume1/homes/admin/Download'
   ['av']='/volume1/driver/Temp'
