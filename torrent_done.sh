@@ -87,7 +87,7 @@ init() {
       f) [[ ${OPTARG} ]] || die 'Empty NAME.' && set_tr_const "${OPTARG}" ;;
       q) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'QUOTA must be integer >= 0.' && ((quota = OPTARG * GiB)) ;;
       s) [[ ${OPTARG} && ! -d ${OPTARG} ]] || die 'Invalid json filename.' && savejson="$(normpath "${OPTARG}")" ;;
-      t) [[ ${OPTARG} ]] || die "Empty TEST target." && unit_test "${OPTARG}" ;;
+      t) [[ ${OPTARG} ]] || die "Empty TEST." && unit_test "${OPTARG}" ;;
       *) print_help ;;
     esac
   done
@@ -200,7 +200,7 @@ copy_finished() {
   else
     printf 'Failed.\n' 1>&2
     append_log 'Error' "${logdir}" "${TR_TORRENT_NAME}"
-    if ((to_seeddir)) && [[ -e "${seed_dir}/${TR_TORRENT_NAME}" ]]; then
+    if [[ ${to_seeddir} -eq 1 && -e "${seed_dir}/${TR_TORRENT_NAME}" ]]; then
       rm -r -f -- "${seed_dir:?}/${TR_TORRENT_NAME:?}"
     fi
     return 1
@@ -238,7 +238,6 @@ query_json() {
 
   printf 'Torrents: %d, size: %d GiB, paused: %d\n' \
     "${#tr_names[@]}" "$((tr_totalsize / GiB))" "${tr_paused}" 1>&2
-  return 0
 }
 
 # Clean junk files in seed_dir and watch_dir. This function runs in a subshell.
