@@ -180,7 +180,7 @@ copy_finished() {
 
   # decide the destination location
   if [[ ${TR_TORRENT_DIR} -ef ${seed_dir} ]]; then
-    # 1st situation, copy to dest
+    # 1st situation, copy from seed_dir to dest
     # TR_TORRENT_DIR == seed_dir ? dest
     logpath="${locations[$(
       request_tr "{\"arguments\":{\"fields\":[\"files\"],\"ids\":[${TR_TORRENT_ID:?}]},\"method\":\"torrent-get\"}" |
@@ -436,7 +436,6 @@ unit_test() {
 
   local arg name error=()
   [[ $1 == 'all' ]] && set -- tr tv film
-  shopt -s nullglob
 
   for arg; do
     printf '=== %s ===\n' "${arg}" 1>&2
@@ -445,9 +444,11 @@ unit_test() {
       tv | film)
         pushd "${locations[${arg}]}" 1>/dev/null 2>&1 ||
           die "Unable to enter: '${locations[${arg}]}'"
+        shopt -s nullglob
         for name in [^.\#@]*; do
           test_dir "${name}" "${PWD}"
         done
+        shopt -u nullglob
         popd 1>/dev/null 2>&1
         ;;
       *)
