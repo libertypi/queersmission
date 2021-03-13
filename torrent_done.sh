@@ -180,7 +180,7 @@ copy_finished() {
 
   # decide the destination location
   if [[ ${TR_TORRENT_DIR} -ef ${seed_dir} ]]; then
-    # 1st situation, copy to dest:
+    # 1st situation, copy to dest
     # TR_TORRENT_DIR == seed_dir ? dest
     logpath="${locations[$(
       request_tr "{\"arguments\":{\"fields\":[\"files\"],\"ids\":[${TR_TORRENT_ID:?}]},\"method\":\"torrent-get\"}" |
@@ -198,7 +198,7 @@ copy_finished() {
       dest="${logpath}/${TR_TORRENT_NAME}"
     fi
   else
-    # 2nd situation, copy to seed_dir:
+    # 2nd situation, copy to seed_dir
     # TR_TORRENT_DIR != seed_dir == dest
     logpath="${TR_TORRENT_DIR}"
     dest="${seed_dir}"

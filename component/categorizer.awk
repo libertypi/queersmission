@@ -3,7 +3,7 @@
 #
 # input stream:
 #   path \0 size \0 ...
-# variable assignment (passed via "-v"):
+# variable assignment (-v var=val):
 #   regexfile="/path/to/regexfile"
 # output is one of:
 #   default, av, film, tv, music
