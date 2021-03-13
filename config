@@ -22,7 +22,7 @@ watch_dir='/volume1/video/Torrent'
 ((GiB = 1024 ** 3, quota = 50 * GiB))
 
 # Download save locations. When transmission finishes a download, this script
-# will categorize the torrent and copy it to corresponding location. Locations
+# categorizes the torrent and copies it to the corresponding location. Locations
 # should NOT be the same or within seed_dir.
 declare -A locations=(
   ['default']='/volume1/homes/admin/Download'
