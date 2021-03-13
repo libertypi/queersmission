@@ -113,25 +113,19 @@ set_tr_header() {
   if [[ "$(curl -s -I -- "${tr_api}")" =~ 'X-Transmission-Session-Id:'[[:blank:]]*[[:alnum:]]+ ]]; then
     tr_header="${BASH_REMATCH[0]}"
     return 0
-  else
-    printf 'Getting API header failed.\n' 1>&2
-    return 1
   fi
+  printf 'Getting API header failed.\n' 1>&2
+  return 1
 }
 
 # Send an API request.
-# Arguments: $1: data to send
+# $1: data to send
 request_tr() {
-  if [[ -z $1 ]]; then
-    printf 'Error: Empty argument.\n' 1>&2
-    return 1
-  fi
   local i
   for i in {1..4}; do
     if curl -s -f --header "${tr_header}" -d "$1" -- "${tr_api}"; then
       return 0
     elif ((i < 4)); then
-      printf 'Querying API failed. Retries: %d\n' "${i}" 1>&2
       set_tr_header
     fi
   done
@@ -207,7 +201,7 @@ copy_finished() {
   fi
 }
 
-# Query and parse transmission torrent list json.
+# Query and parse transmission torrent list.
 # torrent status number:
 # https://github.com/transmission/transmission/blob/master/libtransmission/transmission.h#L1658
 query_json() {
@@ -217,7 +211,7 @@ query_json() {
     request_tr '{"arguments":{"fields":["activityDate","id","name","percentDone","sizeWhenDone","status","trackerStats"]},"method":"torrent-get"}'
   )" || exit 1
   if [[ ${savejson} ]]; then
-    printf 'Save json to %s\n' "${savejson}" 1>&2
+    printf 'Save json to: "%s"\n' "${savejson}" 1>&2
     printf '%s' "${tr_json}" | jq '.' >"${savejson}"
   fi
 
@@ -321,7 +315,7 @@ remove_inactive() {
 # Restart paused torrents, if any.
 resume_paused() {
   if ((tr_paused > 0)); then
-    printf 'Resume torrents.\n'
+    printf 'Resume torrents.\n' 1>&2
     ((dryrun)) || request_tr '{"method":"torrent-start"}' >/dev/null
   fi
 }
