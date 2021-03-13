@@ -4,11 +4,46 @@
 # Author: David Pi
 
 ################################################################################
-#                                  Functions                                   #
+#                                 Environment                                  #
 ################################################################################
 
 die() {
   printf 'Error: %s\n' "$1" 1>&2
+  exit 1
+}
+
+unset IFS tr_api seed_dir watch_dir GiB quota locations
+export LC_ALL=C LANG=C
+
+((BASH_VERSINFO[0] >= 4)) 1>/dev/null 2>&1 || die 'Bash >=4 required.'
+hash curl jq || die 'Curl and jq required.'
+cd "${BASH_SOURCE[0]%/*}" || die 'Unable to enter script directory.'
+. ./config || die "Loading config file failed."
+
+readonly -- \
+  logfile="${PWD}/logfile.log" \
+  categorizer="${PWD}/component/categorizer.awk" \
+  regexfile="${PWD}/component/regex.txt"
+
+################################################################################
+#                                  Functions                                   #
+################################################################################
+
+print_help() {
+  cat <<EOF 1>&2
+usage: ${BASH_SOURCE[0]} [OPTION]...
+
+Transmission Maintenance Tool
+Author: David Pi
+
+optional arguments:
+  -h         show this message and exit
+  -d         dryrun mode
+  -f NAME    force copy torrent NAME, like "script-torrent-done"
+  -q NUM     set disk quota to NUM GiB (default: $((quota / GiB)))
+  -s FILE    save formated json to FILE
+  -t TEST    unit test, TEST: "all", "tr", "tv", "film" or custom path
+EOF
   exit 1
 }
 
@@ -34,26 +69,17 @@ normpath() {
   printf '%s\n' "${c:-.}"
 }
 
-print_help() {
-  cat <<EOF 1>&2
-usage: ${BASH_SOURCE[0]} [OPTION]...
-
-Transmission Maintenance Tool
-Author: David Pi
-
-optional arguments:
-  -h         show this message and exit
-  -d         dryrun mode
-  -f NAME    force copy torrent NAME, like "script-torrent-done"
-  -q NUM     set disk quota to NUM GiB (default: $((quota / GiB)))
-  -s FILE    save formated json to FILE
-  -t TEST    unit test, TEST: "all", "tr", "tv", "film" or custom path
-EOF
-  exit 1
-}
-
 init() {
   local i
+  # varify configurations
+  [[ ${seed_dir} == /* && ${locations['default']} == /* && ${tr_api} == http* && ${quota} -ge 0 ]] ||
+    die 'Invalid configuration.'
+  seed_dir="$(normpath "${seed_dir}")"
+
+  # init variables
+  tr_header='' tr_json='' tr_totalsize='' tr_paused='' logs=() dryrun=0 savejson=''
+  declare -Ag tr_names=()
+
   # parse arguments
   while getopts 'hdf:q:s:t:' i; do
     case "$i" in
@@ -76,7 +102,7 @@ init() {
   else
     die "Acquiring lock failed."
   fi
-  readonly dryrun quota savejson tr_path
+  readonly -- tr_api seed_dir watch_dir GiB quota locations dryrun savejson tr_path
   trap 'write_log' EXIT
 
   # get API header
@@ -91,16 +117,6 @@ set_tr_header() {
     printf 'Getting API header failed.\n' 1>&2
     return 1
   fi
-}
-
-set_tr_const() {
-  set_tr_header
-  IFS=/ read -r -d '' TR_TORRENT_ID TR_TORRENT_NAME TR_TORRENT_DIR < <(
-    request_tr '{"arguments":{"fields":["id","name","downloadDir"]},"method":"torrent-get"}' |
-      jq -j --arg n "$1" '.arguments.torrents[]|select(.name == $n)|"\(.id)/\(.name)/\(.downloadDir)\u0000"'
-  ) && [[ ${TR_TORRENT_ID} =~ ^[0-9]+$ ]] ||
-    die "No name '$1' in torrent list."
-  export TR_TORRENT_ID TR_TORRENT_NAME TR_TORRENT_DIR
 }
 
 # Send an API request.
@@ -121,6 +137,16 @@ request_tr() {
   done
   printf 'Querying API failed: url: "%s", data: "%s"\n' "${tr_api}" "$1" 1>&2
   return 1
+}
+
+set_tr_const() {
+  set_tr_header
+  IFS=/ read -r -d '' TR_TORRENT_ID TR_TORRENT_NAME TR_TORRENT_DIR < <(
+    request_tr '{"arguments":{"fields":["id","name","downloadDir"]},"method":"torrent-get"}' |
+      jq -j --arg n "$1" '.arguments.torrents[]|select(.name == $n)|"\(.id)/\(.name)/\(.downloadDir)\u0000"'
+  ) && [[ ${TR_TORRENT_ID} =~ ^[0-9]+$ ]] ||
+    die "No name '$1' in torrent list."
+  export TR_TORRENT_ID TR_TORRENT_NAME TR_TORRENT_DIR
 }
 
 # Copy finished downloads to destination.
@@ -432,30 +458,6 @@ unit_test() {
     exit 0
   fi
 }
-
-################################################################################
-#                                 Environment                                  #
-################################################################################
-
-unset IFS seed_dir locations tr_api GiB quota
-export LC_ALL=C LANG=C
-
-((BASH_VERSINFO[0] >= 4)) 1>/dev/null 2>&1 || die 'Bash >=4 required.'
-hash curl jq || die 'Curl and jq required.'
-
-cd "${BASH_SOURCE[0]%/*}" || die 'Unable to enter script directory.'
-. ./config || die "Loading config file failed."
-[[ ${seed_dir} == /* && ${locations['default']} == /* && ${tr_api} == http* && ${quota} -ge 0 ]] ||
-  die 'Invalid configuration.'
-
-readonly -- tr_api watch_dir GiB locations \
-  seed_dir="$(normpath "${seed_dir}")" \
-  logfile="${PWD}/logfile.log" \
-  categorizer="${PWD}/component/categorizer.awk" \
-  regexfile="${PWD}/component/regex.txt"
-
-tr_header='' tr_json='' tr_totalsize='' tr_paused='' logs=() dryrun=0 savejson=''
-declare -A tr_names=()
 
 ################################################################################
 #                                     Main                                     #
