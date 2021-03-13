@@ -198,7 +198,7 @@ copy_finished() {
     return 0
   else
     printf 'Failed.\n' 1>&2
-    append_log 'Error' "${logdir:-${TR_TORRENT_DIR}}" "${TR_TORRENT_NAME}"
+    append_log 'Error' "${logdir}" "${TR_TORRENT_NAME}"
     if ((to_seeddir)) && [[ -e "${seed_dir}/${TR_TORRENT_NAME}" ]]; then
       rm -r -f -- "${seed_dir:?}/${TR_TORRENT_NAME:?}"
     fi
