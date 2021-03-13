@@ -123,6 +123,35 @@ set_tr_header() {
   fi
 }
 
+set_tr_const() {
+  IFS=/ read -r -d '' TR_TORRENT_ID TR_TORRENT_NAME TR_TORRENT_DIR < <(
+    request_tr '{"arguments":{"fields":["id","name","downloadDir"]},"method":"torrent-get"}' |
+      jq -j --arg n "$1" '.arguments.torrents[]|select(.name == $n)|"\(.id)/\(.name)/\(.downloadDir)\u0000"'
+  ) && [[ ${TR_TORRENT_ID} =~ ^[0-9]+$ ]] ||
+    die "No name '$1' in torrent list."
+  export TR_TORRENT_ID TR_TORRENT_NAME TR_TORRENT_DIR
+}
+
+# Send an API request.
+# Arguments: $1: data to send
+request_tr() {
+  if [[ -z $1 ]]; then
+    printf 'Error: Empty argument.\n' 1>&2
+    return 1
+  fi
+  local i
+  for i in {1..4}; do
+    if curl -s -f --header "${tr_header}" -d "$1" -- "${tr_api}"; then
+      return 0
+    elif ((i < 4)); then
+      printf 'Querying API failed. Retries: %d\n' "${i}" 1>&2
+      set_tr_header
+    fi
+  done
+  printf 'Querying API failed: url: "%s", data: "%s"\n' "${tr_api}" "$1" 1>&2
+  return 1
+}
+
 # Copy finished downloads to destination.
 # This function only runs when the script was invoked by transmission as
 # "script-torrent-done".
@@ -166,26 +195,6 @@ copy_finished() {
 
   printf 'Failed.\n' 1>&2
   append_log 'Error' "${root:-${TR_TORRENT_DIR}}" "${TR_TORRENT_NAME}"
-  return 1
-}
-
-# Send an API request.
-# Arguments: $1: data to send
-request_tr() {
-  if [[ -z $1 ]]; then
-    printf 'Error: Empty argument.\n' 1>&2
-    return 1
-  fi
-  local i
-  for i in {1..4}; do
-    if curl -s -f --header "${tr_header}" -d "$1" -- "${tr_api}"; then
-      return 0
-    elif ((i < 4)); then
-      printf 'Querying API failed. Retries: %d\n' "${i}" 1>&2
-      set_tr_header
-    fi
-  done
-  printf 'Querying API failed: url: "%s", data: "%s"\n' "${tr_api}" "$1" 1>&2
   return 1
 }
 
@@ -345,15 +354,6 @@ write_log() {
       } >"${logfile}"
     fi
   fi
-}
-
-set_tr_const() {
-  IFS=/ read -r -d '' TR_TORRENT_ID TR_TORRENT_NAME TR_TORRENT_DIR < <(
-    request_tr '{"arguments":{"fields":["id","name","downloadDir"]},"method":"torrent-get"}' |
-      jq -j --arg n "$1" '[.arguments.torrents[]|select(.name == $n)|"\(.id)/\(.name)/\(.downloadDir)\u0000"]|first'
-  ) && [[ ${TR_TORRENT_ID} =~ ^[0-9]+$ ]] ||
-    die "No name '$1' in transmission torrent list."
-  export TR_TORRENT_ID TR_TORRENT_NAME TR_TORRENT_DIR
 }
 
 unit_test() {
