@@ -4,46 +4,11 @@
 # Author: David Pi
 
 ################################################################################
-#                                 Environment                                  #
+#                                  Functions                                   #
 ################################################################################
 
 die() {
   printf 'Error: %s\n' "$1" 1>&2
-  exit 1
-}
-
-unset IFS
-export LC_ALL=C LANG=C
-
-((BASH_VERSINFO[0] >= 4)) 1>/dev/null 2>&1 || die 'Bash >=4 required.'
-cd "${BASH_SOURCE[0]%/*}" || die 'Unable to enter script directory.'
-source ./config || die "Loading config file failed."
-hash curl jq || die 'Curl and jq required.'
-
-readonly -- \
-  logfile="${PWD}/logfile.log" \
-  categorizer="${PWD}/component/categorizer.awk" \
-  regexfile="${PWD}/component/regex.txt"
-
-################################################################################
-#                                  Functions                                   #
-################################################################################
-
-print_help() {
-  cat <<EOF 1>&2
-usage: ${BASH_SOURCE[0]} [OPTION]...
-
-Transmission Maintenance Tool
-Author: David Pi
-
-optional arguments:
-  -h         show this message and exit
-  -d         dryrun mode
-  -f NAME    force copy torrent NAME, like "script-torrent-done"
-  -q NUM     set disk quota to NUM GiB (default: $((quota / GiB)))
-  -s FILE    save formated json to FILE
-  -t TEST    unit test, TEST: "all", "tr", "tv", "film" or custom path
-EOF
   exit 1
 }
 
@@ -69,17 +34,26 @@ normpath() {
   printf '%s\n' "${c:-.}"
 }
 
+print_help() {
+  cat <<EOF 1>&2
+usage: ${BASH_SOURCE[0]} [OPTION]...
+
+Transmission Maintenance Tool
+Author: David Pi
+
+optional arguments:
+  -h         show this message and exit
+  -d         dryrun mode
+  -f NAME    force copy torrent NAME, like "script-torrent-done"
+  -q NUM     set disk quota to NUM GiB (default: $((quota / GiB)))
+  -s FILE    save formated json to FILE
+  -t TEST    unit test, TEST: "all", "tr", "tv", "film" or custom path
+EOF
+  exit 1
+}
+
 init() {
   local i
-  # varify configurations
-  [[ ${seed_dir} == /* && ${locations['default']} == /* && ${tr_api} == http* && ${quota} -ge 0 ]] ||
-    die 'Invalid configuration.'
-  seed_dir="$(normpath "${seed_dir}")"
-
-  # init variables
-  tr_header='' tr_json='' tr_totalsize='' tr_paused='' logs=() dryrun=0 savejson=''
-  declare -Ag tr_names=()
-
   # parse arguments
   while getopts 'hdf:q:s:t:' i; do
     case "$i" in
@@ -91,21 +65,18 @@ init() {
       *) print_help ;;
     esac
   done
-  readonly tr_api seed_dir watch_dir GiB quota locations dryrun savejson
 
   # acquire lock
-  printf 'Acquiring lock...' 1>&2
   exec {i}<"${BASH_SOURCE[0]##*/}"
   if [[ ${TR_TORRENT_DIR} && ${TR_TORRENT_NAME} ]]; then
     flock -x "$i"
-    readonly tr_path="${TR_TORRENT_DIR}/${TR_TORRENT_NAME}"
+    tr_path="${TR_TORRENT_DIR}/${TR_TORRENT_NAME}"
   elif flock -x -n "$i"; then
-    readonly tr_path=''
+    tr_path=''
   else
-    printf 'Failed.\n' 1>&2
-    exit 1
+    die "Acquiring lock failed."
   fi
-  printf 'Done.\n' 1>&2
+  readonly dryrun quota savejson tr_path
   trap 'write_log' EXIT
 
   # get API header
@@ -461,6 +432,30 @@ unit_test() {
     exit 0
   fi
 }
+
+################################################################################
+#                                 Environment                                  #
+################################################################################
+
+unset IFS seed_dir locations tr_api GiB quota
+export LC_ALL=C LANG=C
+
+((BASH_VERSINFO[0] >= 4)) 1>/dev/null 2>&1 || die 'Bash >=4 required.'
+hash curl jq || die 'Curl and jq required.'
+
+cd "${BASH_SOURCE[0]%/*}" || die 'Unable to enter script directory.'
+. ./config || die "Loading config file failed."
+[[ ${seed_dir} == /* && ${locations['default']} == /* && ${tr_api} == http* && ${quota} -ge 0 ]] ||
+  die 'Invalid configuration.'
+
+readonly -- tr_api watch_dir GiB locations \
+  seed_dir="$(normpath "${seed_dir}")" \
+  logfile="${PWD}/logfile.log" \
+  categorizer="${PWD}/component/categorizer.awk" \
+  regexfile="${PWD}/component/regex.txt"
+
+tr_header='' tr_json='' tr_totalsize='' tr_paused='' logs=() dryrun=0 savejson=''
+declare -A tr_names=()
 
 ################################################################################
 #                                     Main                                     #
