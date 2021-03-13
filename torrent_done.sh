@@ -157,31 +157,24 @@ request_tr() {
 # "script-torrent-done".
 copy_finished() {
   [[ ${tr_path} ]] || return
-  local logpath dest
 
-  copy_file() {
-    [[ -e ${dest} ]] || mkdir -p -- "${dest}" || return 1
+  _copy_to_dest() {
+    if [[ ! -e ${dest} ]]; then
+      mkdir -p -- "${dest}" || return 1
+    fi
     if cp -r -f -- "${tr_path}" "${dest}/"; then
-      # implies: TR_TORRENT_DIR != dest, otherwise samefile error
-      if [[ ${seed_dir} == "${dest}" ]]; then
-        # imples: TR_TORRENT_DIR != seed_dir == dest, 2nd situation
+      if ((copy_to)); then
         request_tr "$(jq -acn --argjson i "${TR_TORRENT_ID}" --arg d "${seed_dir}" '{"arguments":{"ids":[$i],"location":$d},"method":"torrent-set-location"}')" >/dev/null || return 1
       fi
-      return 0
-    elif [[ ${TR_TORRENT_DIR} -ef ${dest} ]]; then
-      # TR_TORRENT_DIR == dest => samefile error
-      # implies 1st situation:
-      # TR_TORRENT_DIR == seed_dir == dest (locations[type])
-      printf 'Warning: setting "seed_dir" and "location" to the same directory may cause problems.\n' 1>&2
       return 0
     fi
     return 1
   }
 
+  local copy_to=0 logpath dest
   # decide the destination location
   if [[ ${TR_TORRENT_DIR} -ef ${seed_dir} ]]; then
     # 1st situation, copy from seed_dir to dest
-    # TR_TORRENT_DIR == seed_dir ? dest
     logpath="${locations[$(
       request_tr "{\"arguments\":{\"fields\":[\"files\"],\"ids\":[${TR_TORRENT_ID:?}]},\"method\":\"torrent-get\"}" |
         jq -j '.arguments.torrents[].files[]|"\(.name)\u0000\(.length)\u0000"' |
@@ -199,20 +192,18 @@ copy_finished() {
     fi
   else
     # 2nd situation, copy to seed_dir
-    # TR_TORRENT_DIR != seed_dir == dest
+    copy_to=1
     logpath="${TR_TORRENT_DIR}"
     dest="${seed_dir}"
   fi
 
   # copy file
   printf 'Copying: "%s" -> "%s" ...\n' "${tr_path}" "${dest}" 1>&2
-  if ((dryrun)) || copy_file; then
+  if ((dryrun)) || _copy_to_dest; then
     printf 'Done.\n' 1>&2
     append_log 'Finish' "${logpath}" "${TR_TORRENT_NAME}"
     return 0
-  elif [[ ${seed_dir} == "${dest}" && -e "${seed_dir}/${TR_TORRENT_NAME}" ]]; then
-    # if TR_TORRENT_DIR == seed_dir == dest, the first test will not fail.
-    # implies 2nd situation: TR_TORRENT_DIR != seed_dir == dest
+  elif ((copy_to)) && [[ -e "${seed_dir}/${TR_TORRENT_NAME}" ]]; then
     rm -r -f -- "${seed_dir:?}/${TR_TORRENT_NAME:?}"
   fi
   printf 'Failed.\n' 1>&2
@@ -255,35 +246,37 @@ query_json() {
 }
 
 # Clean junk files in seed_dir and watch_dir. This function runs in a subshell.
-clean_disk() (
-  shopt -s nullglob dotglob globstar
-  obsolete=()
+clean_disk() {
+  (
+    shopt -s nullglob dotglob globstar
+    obsolete=()
 
-  if ((${#tr_names[@]})) && cd "${seed_dir}"; then
-    for i in [^.\#@]*; do
-      [[ ${tr_names["${i}"]} || ${tr_names["${i%.part}"]} ]] ||
-        obsolete+=("${PWD:?}/${i}")
-    done
-  else
-    printf 'Skip cleaning seed_dir "%s"\n' "${seed_dir}" 1>&2
-  fi
+    if ((${#tr_names[@]})) && cd "${seed_dir}"; then
+      for i in [^.\#@]*; do
+        [[ ${tr_names["${i}"]} || ${tr_names["${i%.part}"]} ]] ||
+          obsolete+=("${PWD:?}/${i}")
+      done
+    else
+      printf 'Skip cleaning seed_dir "%s"\n' "${seed_dir}" 1>&2
+    fi
 
-  if [[ ${watch_dir} ]] && cd "${watch_dir}"; then
-    for i in **; do
-      [[ -s ${i} ]] || obsolete+=("${PWD:?}/${i}")
-    done
-  else
-    printf 'Skip cleaning watch_dir "%s"\n' "${watch_dir}" 1>&2
-  fi
+    if [[ ${watch_dir} ]] && cd "${watch_dir}"; then
+      for i in **; do
+        [[ -s ${i} ]] || obsolete+=("${PWD:?}/${i}")
+      done
+    else
+      printf 'Skip cleaning watch_dir "%s"\n' "${watch_dir}" 1>&2
+    fi
 
-  if ((n = ${#obsolete[@]})); then
-    printf 'Delete %d files:\n' "$n" 1>&2
-    printf '%s\n' "${obsolete[@]}" 1>&2
-    ((dryrun)) || for ((i = 0; i < n; i += 100)); do
-      rm -r -f -- "${obsolete[@]:i:100}"
-    done
-  fi
-)
+    if ((n = ${#obsolete[@]})); then
+      printf 'Delete %d files:\n' "$n" 1>&2
+      printf '%s\n' "${obsolete[@]}" 1>&2
+      ((dryrun)) || for ((i = 0; i < n; i += 100)); do
+        rm -r -f -- "${obsolete[@]:i:100}"
+      done
+    fi
+  )
+}
 
 # Remove inactive torrents if disk space was bellow $quota.
 remove_inactive() {
@@ -390,7 +383,7 @@ unit_test() {
           jq -j '.[]|"\(.name)\u0000\(.length)\u0000"' |
           awk -v regexfile="${regexfile}" -f "${categorizer}"
       )"
-      examine "${key}" "${name}"
+      examine_test "${key}" "${name}"
     done < <(
       request_tr '{"arguments":{"fields":["name","files"]},"method":"torrent-get"}' |
         jq -j '.arguments.torrents[]|"\(.name)/\(.files)\u0000"'
@@ -407,10 +400,10 @@ unit_test() {
         printf '%s\0%d\0' "${name}" 0
       fi | awk -v regexfile="${regexfile}" -f "${categorizer}"
     )"
-    examine "${key}" "$@"
+    examine_test "${key}" "$@"
   }
 
-  examine() {
+  examine_test() {
     local key="$1" name="$2" root="$3" color
     case "${key}" in
       default) color=0 ;;
