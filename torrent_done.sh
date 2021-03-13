@@ -149,9 +149,8 @@ set_tr_const() {
   export TR_TORRENT_ID TR_TORRENT_NAME TR_TORRENT_DIR
 }
 
-# Copy finished downloads to destination.
-# This function only runs when the script was invoked by transmission as
-# "script-torrent-done".
+# Copy finished downloads to destination. This function only runs when the
+# script was invoked as "script-torrent-done" or with "-f" option.
 copy_finished() {
   [[ ${tr_path} ]] || return
 
@@ -208,7 +207,7 @@ copy_finished() {
   fi
 }
 
-# Get and parse transmission json.
+# Query and parse transmission torrent list json.
 # torrent status number:
 # https://github.com/transmission/transmission/blob/master/libtransmission/transmission.h#L1658
 query_json() {
@@ -320,7 +319,7 @@ remove_inactive() {
   fi
 }
 
-# Restart paused torrents, if there is any.
+# Restart paused torrents, if any.
 resume_paused() {
   if ((tr_paused > 0)); then
     printf 'Resume torrents.\n'
@@ -354,9 +353,10 @@ print_log() {
 # Insert logs at the beginning of $logfile.
 write_log() {
   if ((${#logs[@]})); then
-    printf 'Logs (%d entries):\n' "${#logs[@]}" 1>&2
-    print_log 1>&2
-    if ((!dryrun)); then
+    if ((dryrun)); then
+      printf 'Logs (%d entries):\n' "${#logs[@]}" 1>&2
+      print_log 1>&2
+    else
       local backup
       [[ -f ${logfile} ]] && backup="$(tail -n +3 -- "${logfile}")"
       {
