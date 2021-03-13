@@ -70,7 +70,7 @@ normpath() {
 }
 
 init() {
-  local i set_const
+  local i
   # varify configurations
   [[ ${seed_dir} == /* && ${locations['default']} == /* && ${tr_api} == http* && ${quota} -ge 0 ]] ||
     die 'Invalid configuration.'
@@ -84,18 +84,14 @@ init() {
   while getopts 'hdf:q:s:t:' i; do
     case "$i" in
       d) dryrun=1 ;;
-      f) [[ ${OPTARG} ]] || die 'Empty NAME.' && set_const="${OPTARG}" ;;
-      s) [[ ${OPTARG} && ! -d ${OPTARG} ]] || die 'Invalid json filename.' && savejson="$(normpath "${OPTARG}")" ;;
+      f) [[ ${OPTARG} ]] || die 'Empty NAME.' && set_tr_const "${OPTARG}" ;;
       q) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'QUOTA must be integer >= 0.' && ((quota = OPTARG * GiB)) ;;
+      s) [[ ${OPTARG} && ! -d ${OPTARG} ]] || die 'Invalid json filename.' && savejson="$(normpath "${OPTARG}")" ;;
       t) [[ ${OPTARG} ]] || die "Empty TEST target." && unit_test "${OPTARG}" ;;
       *) print_help ;;
     esac
   done
   readonly tr_api seed_dir watch_dir GiB quota locations dryrun savejson
-
-  # get API header
-  set_tr_header
-  [[ ${set_const} ]] && set_tr_const "${set_const}"
 
   # acquire lock
   printf 'Acquiring lock...' 1>&2
@@ -111,6 +107,9 @@ init() {
   fi
   printf 'Done.\n' 1>&2
   trap 'write_log' EXIT
+
+  # get API header
+  [[ ${tr_header} ]] || set_tr_header
 }
 
 set_tr_header() {
@@ -124,6 +123,7 @@ set_tr_header() {
 }
 
 set_tr_const() {
+  set_tr_header
   IFS=/ read -r -d '' TR_TORRENT_ID TR_TORRENT_NAME TR_TORRENT_DIR < <(
     request_tr '{"arguments":{"fields":["id","name","downloadDir"]},"method":"torrent-get"}' |
       jq -j --arg n "$1" '.arguments.torrents[]|select(.name == $n)|"\(.id)/\(.name)/\(.downloadDir)\u0000"'
@@ -157,44 +157,66 @@ request_tr() {
 # "script-torrent-done".
 copy_finished() {
   [[ ${tr_path} ]] || return
-  local root dest
+  local logpath dest
+
+  copy_file() {
+    [[ -e ${dest} ]] || mkdir -p -- "${dest}" || return 1
+    if cp -r -f -- "${tr_path}" "${dest}/"; then
+      # implies: TR_TORRENT_DIR != dest, otherwise samefile error
+      if [[ ${seed_dir} == "${dest}" ]]; then
+        # imples: TR_TORRENT_DIR != seed_dir == dest, 2nd situation
+        request_tr "$(jq -acn --argjson i "${TR_TORRENT_ID}" --arg d "${seed_dir}" '{"arguments":{"ids":[$i],"location":$d},"method":"torrent-set-location"}')" >/dev/null || return 1
+      fi
+      return 0
+    elif [[ ${TR_TORRENT_DIR} -ef ${dest} ]]; then
+      # TR_TORRENT_DIR == dest => samefile error
+      # implies 1st situation:
+      # TR_TORRENT_DIR == seed_dir == dest (locations[type])
+      printf 'Warning: setting "seed_dir" and "location" to the same directory may cause problems.\n' 1>&2
+      return 0
+    fi
+    return 1
+  }
 
   # decide the destination location
   if [[ ${TR_TORRENT_DIR} -ef ${seed_dir} ]]; then
-    root="${locations[$(
+    # 1st situation, copy to dest:
+    # TR_TORRENT_DIR == seed_dir ? dest
+    logpath="${locations[$(
       request_tr "{\"arguments\":{\"fields\":[\"files\"],\"ids\":[${TR_TORRENT_ID:?}]},\"method\":\"torrent-get\"}" |
         jq -j '.arguments.torrents[].files[]|"\(.name)\u0000\(.length)\u0000"' |
         awk -v regexfile="${regexfile}" -f "${categorizer}"
     )]}"
     # fallback to default if failed
-    root="$(normpath "${root:-${locations[default]}}")"
+    logpath="$(normpath "${logpath:-${locations[default]}}")"
     # append a sub-directory if needed
     if [[ -d ${tr_path} ]]; then
-      dest="${root}"
+      dest="${logpath}"
     elif [[ ${TR_TORRENT_NAME} =~ ([^/]*[^/.][^/]*)\.[^/.]*$ ]]; then
-      dest="${root}/${BASH_REMATCH[1]}"
+      dest="${logpath}/${BASH_REMATCH[1]}"
     else
-      dest="${root}/${TR_TORRENT_NAME}"
+      dest="${logpath}/${TR_TORRENT_NAME}"
     fi
   else
-    root="${TR_TORRENT_DIR}"
+    # 2nd situation, copy to seed_dir:
+    # TR_TORRENT_DIR != seed_dir == dest
+    logpath="${TR_TORRENT_DIR}"
     dest="${seed_dir}"
   fi
 
   # copy file
   printf 'Copying: "%s" -> "%s" ...\n' "${tr_path}" "${dest}" 1>&2
-  if [[ -e ${dest} ]] || mkdir -p -- "${dest}" && cp -r -f -- "${tr_path}" "${dest}/"; then
-    if [[ ${dest} != "${seed_dir}" ]] || request_tr "$(jq -acn --argjson i "${TR_TORRENT_ID}" --arg d "${seed_dir}" '{"arguments":{"ids":[$i],"location":$d},"method":"torrent-set-location"}')" >/dev/null; then
-      printf 'Done.\n' 1>&2
-      append_log 'Finish' "${root}" "${TR_TORRENT_NAME}"
-      return 0
-    elif [[ -e "${seed_dir}/${TR_TORRENT_NAME}" ]]; then
-      rm -r -f -- "${seed_dir:?}/${TR_TORRENT_NAME:?}"
-    fi
+  if ((dryrun)) || copy_file; then
+    printf 'Done.\n' 1>&2
+    append_log 'Finish' "${logpath}" "${TR_TORRENT_NAME}"
+    return 0
+  elif [[ ${seed_dir} == "${dest}" && -e "${seed_dir}/${TR_TORRENT_NAME}" ]]; then
+    # if TR_TORRENT_DIR == seed_dir == dest, the first test will not fail.
+    # implies 2nd situation: TR_TORRENT_DIR != seed_dir == dest
+    rm -r -f -- "${seed_dir:?}/${TR_TORRENT_NAME:?}"
   fi
-
   printf 'Failed.\n' 1>&2
-  append_log 'Error' "${root:-${TR_TORRENT_DIR}}" "${TR_TORRENT_NAME}"
+  append_log 'Error' "${logpath:-${TR_TORRENT_DIR}}" "${TR_TORRENT_NAME}"
   return 1
 }
 

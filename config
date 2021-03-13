@@ -7,17 +7,23 @@
 # Transmission rpc address with authentication disabled
 tr_api='http://localhost:9091/transmission/rpc'
 
-# Directory storing seeding files, match "download-dir" in transmission settings
+# Directory storing seeding files, match "download-dir" in transmission
+# settings. This directory should only be used for internal cache. DO NOT save
+# user files here or they will be deleted.
 seed_dir='/volume2/@transmission'
 
 # Directory where transmission monitors for new torrents, match "watch-dir" in
-# transmission settings, leave empty to disable watch_dir cleanup
+# transmission settings. Transmission occasionally leaves 0 byte files here, and
+# this script will delete them for you. Leave empty to disable cleanup.
 watch_dir='/volume1/video/Torrent'
 
-# Disk quota (minimum free space to keep on disk)
+# Disk quota, minimum free space to keep on the disk where seed_dir locates.
+# (default: 50 GiB)
 ((GiB = 1024 ** 3, quota = 50 * GiB))
 
-# Download save locations
+# Download save locations. When transmission finishes a download, this script
+# will categorize the torrent and copy it to corresponding location. Locations
+# should NOT be the same or within seed_dir.
 declare -A locations=(
   ['default']='/volume1/homes/admin/Download'
   ['av']='/volume1/driver/Temp'
