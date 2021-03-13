@@ -159,41 +159,34 @@ copy_finished() {
   [[ ${tr_path} ]] || return
 
   _copy_to_dest() {
-    if [[ ! -e ${dest} ]]; then
-      mkdir -p -- "${dest}" || return 1
-    fi
-    if cp -r -f -- "${tr_path}" "${dest}/"; then
-      if ((copy_to)); then
-        request_tr "$(jq -acn --argjson i "${TR_TORRENT_ID}" --arg d "${seed_dir}" '{"arguments":{"ids":[$i],"location":$d},"method":"torrent-set-location"}')" >/dev/null || return 1
-      fi
-      return 0
-    fi
+    [[ -e ${dest} ]] || mkdir -p -- "${dest}" && cp -r -f -- "${tr_path}" "${dest}/" || return 1
+    ((!to_seeddir)) || request_tr "$(jq -acn --argjson i "${TR_TORRENT_ID}" --arg d "${seed_dir}" '{"arguments":{"ids":[$i],"location":$d},"method":"torrent-set-location"}')" >/dev/null && return 0
     return 1
   }
 
-  local copy_to=0 logpath dest
+  local to_seeddir=0 logdir dest
   # decide the destination location
   if [[ ${TR_TORRENT_DIR} -ef ${seed_dir} ]]; then
-    # 1st situation, copy from seed_dir to dest
-    logpath="${locations[$(
+    # copy from seed_dir to dest
+    logdir="${locations[$(
       request_tr "{\"arguments\":{\"fields\":[\"files\"],\"ids\":[${TR_TORRENT_ID:?}]},\"method\":\"torrent-get\"}" |
         jq -j '.arguments.torrents[].files[]|"\(.name)\u0000\(.length)\u0000"' |
         awk -v regexfile="${regexfile}" -f "${categorizer}"
     )]}"
     # fallback to default if failed
-    logpath="$(normpath "${logpath:-${locations[default]}}")"
+    logdir="$(normpath "${logdir:-${locations[default]}}")"
     # append a sub-directory if needed
     if [[ -d ${tr_path} ]]; then
-      dest="${logpath}"
+      dest="${logdir}"
     elif [[ ${TR_TORRENT_NAME} =~ ([^/]*[^/.][^/]*)\.[^/.]*$ ]]; then
-      dest="${logpath}/${BASH_REMATCH[1]}"
+      dest="${logdir}/${BASH_REMATCH[1]}"
     else
-      dest="${logpath}/${TR_TORRENT_NAME}"
+      dest="${logdir}/${TR_TORRENT_NAME}"
     fi
   else
-    # 2nd situation, copy to seed_dir
-    copy_to=1
-    logpath="${TR_TORRENT_DIR}"
+    # copy to seed_dir
+    to_seeddir=1
+    logdir="${TR_TORRENT_DIR}"
     dest="${seed_dir}"
   fi
 
@@ -201,12 +194,12 @@ copy_finished() {
   printf 'Copying: "%s" -> "%s" ...\n' "${tr_path}" "${dest}" 1>&2
   if ((dryrun)) || _copy_to_dest; then
     printf 'Done.\n' 1>&2
-    append_log 'Finish' "${logpath}" "${TR_TORRENT_NAME}"
+    append_log 'Finish' "${logdir}" "${TR_TORRENT_NAME}"
     return 0
   else
     printf 'Failed.\n' 1>&2
-    append_log 'Error' "${logpath:-${TR_TORRENT_DIR}}" "${TR_TORRENT_NAME}"
-    if ((copy_to)) && [[ -e "${seed_dir}/${TR_TORRENT_NAME}" ]]; then
+    append_log 'Error' "${logdir:-${TR_TORRENT_DIR}}" "${TR_TORRENT_NAME}"
+    if ((to_seeddir)) && [[ -e "${seed_dir}/${TR_TORRENT_NAME}" ]]; then
       rm -r -f -- "${seed_dir:?}/${TR_TORRENT_NAME:?}"
     fi
     return 1
@@ -359,10 +352,9 @@ print_log() {
 # Insert logs at the beginning of $logfile.
 write_log() {
   if ((${#logs[@]})); then
-    if ((dryrun)); then
-      printf 'Logs (%d entries):\n' "${#logs[@]}" 1>&2
-      print_log 1>&2
-    else
+    printf 'Logs (%d entries):\n' "${#logs[@]}" 1>&2
+    print_log 1>&2
+    if ((!dryrun)); then
       local backup
       [[ -f ${logfile} ]] && backup="$(tail -n +3 -- "${logfile}")"
       {
