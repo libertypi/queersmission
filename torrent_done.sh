@@ -160,8 +160,13 @@ copy_finished() {
 
   _copy_to_dest() {
     [[ -e ${dest} ]] || mkdir -p -- "${dest}" && cp -r -f -- "${tr_path}" "${dest}/" || return 1
-    ((!to_seeddir)) || request_tr "$(jq -acn --argjson i "${TR_TORRENT_ID}" --arg d "${seed_dir}" '{"arguments":{"ids":[$i],"location":$d},"method":"torrent-set-location"}')" >/dev/null && return 0
-    return 1
+    if ((to_seeddir)); then
+      request_tr "$(
+        jq -acn --argjson i "${TR_TORRENT_ID}" --arg d "${seed_dir}" \
+          '{"arguments":{"ids":[$i],"location":$d},"method":"torrent-set-location"}'
+      )" >/dev/null || return 1
+    fi
+    return 0
   }
 
   local to_seeddir=0 logdir dest
