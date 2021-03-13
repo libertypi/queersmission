@@ -39,8 +39,9 @@ Author: David Pi
 optional arguments:
   -h         show this message and exit
   -d         dryrun mode
-  -s FILE    save formated json to FILE
+  -f NAME    force copy torrent NAME, like invoked by transmission
   -q NUM     set disk quota to NUM GiB (default: $((quota / GiB)))
+  -s FILE    save formated json to FILE
   -t TEST    unit test, TEST: "all", "tr", "tv", "film" or custom path
 EOF
   exit 1
@@ -69,7 +70,7 @@ normpath() {
 }
 
 init() {
-  local i
+  local i set_const
   # varify configurations
   [[ ${seed_dir} == /* && ${locations['default']} == /* && ${tr_api} == http* && ${quota} -ge 0 ]] ||
     die 'Invalid configuration.'
@@ -80,9 +81,10 @@ init() {
   declare -Ag tr_names=()
 
   # parse arguments
-  while getopts 'hds:q:t:' i; do
+  while getopts 'hdf:q:s:t:' i; do
     case "$i" in
       d) dryrun=1 ;;
+      f) [[ ${OPTARG} ]] || die 'Empty NAME.' && set_const="${OPTARG}" ;;
       s) [[ ${OPTARG} && ! -d ${OPTARG} ]] || die 'Invalid json filename.' && savejson="$(normpath "${OPTARG}")" ;;
       q) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'QUOTA must be integer >= 0.' && ((quota = OPTARG * GiB)) ;;
       t) [[ ${OPTARG} ]] || die "Empty TEST target." && unit_test "${OPTARG}" ;;
@@ -90,6 +92,10 @@ init() {
     esac
   done
   readonly tr_api seed_dir watch_dir GiB quota locations dryrun savejson
+
+  # get API header
+  set_tr_header
+  [[ ${set_const} ]] && set_tr_const "${set_const}"
 
   # acquire lock
   printf 'Acquiring lock...' 1>&2
@@ -107,7 +113,7 @@ init() {
   trap 'write_log' EXIT
 }
 
-get_tr_header() {
+set_tr_header() {
   if [[ "$(curl -s -I -- "${tr_api}")" =~ 'X-Transmission-Session-Id:'[[:blank:]]*[[:alnum:]]+ ]]; then
     tr_header="${BASH_REMATCH[0]}"
     return 0
@@ -124,8 +130,8 @@ copy_finished() {
   [[ ${tr_path} ]] || return
   local root dest
 
+  # decide the destination location
   if [[ ${TR_TORRENT_DIR} -ef ${seed_dir} ]]; then
-    # decide the destination location
     root="${locations[$(
       request_tr "{\"arguments\":{\"fields\":[\"files\"],\"ids\":[${TR_TORRENT_ID:?}]},\"method\":\"torrent-get\"}" |
         jq -j '.arguments.torrents[].files[]|"\(.name)\u0000\(.length)\u0000"' |
@@ -141,21 +147,24 @@ copy_finished() {
     else
       dest="${root}/${TR_TORRENT_NAME}"
     fi
-    # copy file
-    if [[ -e ${dest} ]] || mkdir -p -- "${dest}" &&
-      cp -r -f -- "${tr_path}" "${dest}/"; then
-      append_log 'Finish' "${root}" "${TR_TORRENT_NAME}"
-      return 0
-    fi
-  elif [[ -e ${seed_dir} ]] || mkdir -p -- "${seed_dir}" &&
-    cp -r -f -- "${tr_path}" "${seed_dir}/" &&
-    request_tr "$(jq -acn --argjson i "${TR_TORRENT_ID}" --arg d "${seed_dir}" '{"arguments":{"ids":[$i],"location":$d},"method":"torrent-set-location"}')" >/dev/null; then
-    append_log 'Finish' "${TR_TORRENT_DIR}" "${TR_TORRENT_NAME}"
-    return 0
-  elif [[ -e "${seed_dir}/${TR_TORRENT_NAME}" ]]; then
-    rm -r -f -- "${seed_dir:?}/${TR_TORRENT_NAME:?}"
+  else
+    root="${TR_TORRENT_DIR}"
+    dest="${seed_dir}"
   fi
 
+  # copy file
+  printf 'Copying: "%s" -> "%s" ...\n' "${tr_path}" "${dest}" 1>&2
+  if [[ -e ${dest} ]] || mkdir -p -- "${dest}" && cp -r -f -- "${tr_path}" "${dest}/"; then
+    if [[ ${dest} != "${seed_dir}" ]] || request_tr "$(jq -acn --argjson i "${TR_TORRENT_ID}" --arg d "${seed_dir}" '{"arguments":{"ids":[$i],"location":$d},"method":"torrent-set-location"}')" >/dev/null; then
+      printf 'Done.\n' 1>&2
+      append_log 'Finish' "${root}" "${TR_TORRENT_NAME}"
+      return 0
+    elif [[ -e "${seed_dir}/${TR_TORRENT_NAME}" ]]; then
+      rm -r -f -- "${seed_dir:?}/${TR_TORRENT_NAME:?}"
+    fi
+  fi
+
+  printf 'Failed.\n' 1>&2
   append_log 'Error' "${root:-${TR_TORRENT_DIR}}" "${TR_TORRENT_NAME}"
   return 1
 }
@@ -173,7 +182,7 @@ request_tr() {
       return 0
     elif ((i < 4)); then
       printf 'Querying API failed. Retries: %d\n' "${i}" 1>&2
-      get_tr_header
+      set_tr_header
     fi
   done
   printf 'Querying API failed: url: "%s", data: "%s"\n' "${tr_api}" "$1" 1>&2
@@ -338,11 +347,20 @@ write_log() {
   fi
 }
 
+set_tr_const() {
+  IFS=/ read -r -d '' TR_TORRENT_ID TR_TORRENT_NAME TR_TORRENT_DIR < <(
+    request_tr '{"arguments":{"fields":["id","name","downloadDir"]},"method":"torrent-get"}' |
+      jq -j --arg n "$1" '[.arguments.torrents[]|select(.name == $n)|"\(.id)/\(.name)/\(.downloadDir)\u0000"]|first'
+  ) && [[ ${TR_TORRENT_ID} =~ ^[0-9]+$ ]] ||
+    die "No name '$1' in transmission torrent list."
+  export TR_TORRENT_ID TR_TORRENT_NAME TR_TORRENT_DIR
+}
+
 unit_test() {
 
   test_tr() {
     local name files key
-    get_tr_header || die "Connecting failed."
+    set_tr_header || die "Connecting failed."
     while IFS=/ read -r -d '' name files; do
       printf 'Name: %s\n' "${name}" 1>&2
       key="$(
@@ -434,7 +452,6 @@ unit_test() {
 ################################################################################
 
 init "$@"
-get_tr_header
 copy_finished
 query_json
 clean_disk
