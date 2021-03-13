@@ -39,7 +39,7 @@ Author: David Pi
 optional arguments:
   -h         show this message and exit
   -d         dryrun mode
-  -f NAME    force copy torrent NAME, like invoked by transmission
+  -f NAME    force copy torrent NAME, like "script-torrent-done"
   -q NUM     set disk quota to NUM GiB (default: $((quota / GiB)))
   -s FILE    save formated json to FILE
   -t TEST    unit test, TEST: "all", "tr", "tv", "film" or custom path
