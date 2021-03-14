@@ -160,7 +160,7 @@ copy_finished() {
   }
 
   local to_seeddir=0 logdir dest
-  # decide the destination location
+  # decide the destination
   if [[ ${TR_TORRENT_DIR} -ef ${seed_dir} ]]; then
     # copy from seed_dir to dest
     logdir="${locations[$(
@@ -169,7 +169,7 @@ copy_finished() {
         awk -v regexfile="${regexfile}" -f "${categorizer}"
     )]}"
     # fallback to default if failed
-    logdir="$(normpath "${logdir:-${locations[default]}}")"
+    logdir="$(normpath "${logdir:-${locations['default']}}")"
     # append a sub-directory if needed
     if [[ -d ${tr_path} ]]; then
       dest="${logdir}"
