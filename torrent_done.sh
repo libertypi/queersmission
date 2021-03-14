@@ -147,6 +147,7 @@ set_tr_const() {
 # script was invoked as "script-torrent-done" or with "-f" option.
 copy_finished() {
   [[ ${tr_path} ]] || return
+  local to_seeddir=0 logdir dest
 
   _copy_to_dest() {
     [[ -e ${dest} ]] || mkdir -p -- "${dest}" && cp -r -f -- "${tr_path}" "${dest}/" || return 1
@@ -159,7 +160,6 @@ copy_finished() {
     return 0
   }
 
-  local to_seeddir=0 logdir dest
   # decide the destination
   if [[ ${TR_TORRENT_DIR} -ef ${seed_dir} ]]; then
     # copy from seed_dir to dest
