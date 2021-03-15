@@ -14,7 +14,7 @@ BEGIN {
 
     RS = "\000"
     raise_exit = size_reached = 0
-    size_thresh = (50 * 1024 ^ 2)
+    size_thresh = 52428800  # 50 MiB
     delete sizedict
 
     if (regexfile != "" && (getline av_regex < regexfile) > 0 && av_regex ~ /[^[:space:]]/) {
@@ -30,7 +30,6 @@ NR % 2 {  # path
     next
 }
 
-# sizedict[path]: size
 /^[0-9]*$/ {  # size
     if ($0 >= size_thresh) {
         if (! size_reached) {
@@ -43,7 +42,7 @@ NR % 2 {  # path
     path = tolower(path)
     sub(/\/bdmv\/stream\/[^/]+\.m2ts$/, "/bdmv/stream.m2ts", path) ||
     sub(/\/[^/]*vts[0-9_]+\.vob$/, "/video_ts.vob", path)
-    sizedict[path] += $0
+    sizedict[path] += $0  # sizedict[path]: size
 }
 
 END {

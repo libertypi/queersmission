@@ -18,7 +18,7 @@ seed_dir='/volume2/@transmission'
 watch_dir='/volume1/video/Torrent'
 
 # Disk quota, minimum free space to keep on seed_dir (default: 50 GiB)
-((GiB = 1024 ** 3, quota = 50 * GiB))
+((GiB = 1073741824, quota = 50 * GiB))
 
 # Download save locations. When transmission finishes a download, this script
 # categorizes the torrent and copies it to the corresponding location. Locations
