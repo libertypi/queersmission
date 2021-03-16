@@ -71,7 +71,7 @@ normpath() {
 
 init() {
   local i
-  # varify configurations
+  # verify configurations
   [[ ${seed_dir} == /* && ${locations['default']} == /* && ${tr_api} == http* && ${quota} -ge 0 ]] ||
     die 'Invalid configuration.'
   seed_dir="$(normpath "${seed_dir}")"
