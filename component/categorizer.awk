@@ -90,7 +90,7 @@ function pattern_match(sizedict, videoset,  i, type, arr)
                 break
             }
             # fall-through to video
-        case /\.((fl|og|vi|yu)v|3g[2p]|[as]vi|[aw]mv|asf|f4[abpv]|m(2?ts|4p|[24kop]v|p[24e]|pe?g|xf)|qt|rm|rmvb|ts|vob|webm)$/:
+        case /\.((fl|og|vi|yu)v|3g[2p]|[as]vi|[aw]mv|asf|divx|f4[abpv]|hevc|m(2?ts|4p|[24kop]v|p[24e]|pe?g|xf)|qt|rm|rmvb|swf|ts|vob|webm)$/:
             if (i ~ av_regex)
                 output("av")
             if (i ~ /(\y|_)([es]|ep[ _-]?|s([1-9][0-9]|0?[1-9])e)([1-9][0-9]|0?[1-9])(\y|_)/)
