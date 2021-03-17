@@ -12,7 +12,7 @@ BEGIN {
     if (PROCINFO["version"] < 4)
         raise("GNU Awk >= 4 required.")
 
-    RS = "\000"
+    RS = "\0"
     raise_exit = size_reached = 0
     size_thresh = 52428800  # 50 MiB
     delete sizedict
@@ -42,7 +42,7 @@ NR % 2 {  # path
     path = tolower(path)
     sub(/\/bdmv\/stream\/[^/]+\.m2ts$/, "/bdmv/stream.m2ts", path) ||
     sub(/\/[^/]*vts[0-9_]+\.vob$/, "/video_ts.vob", path)
-    sizedict[path] += $0  # sizedict[path]: size
+    sizedict[path] += $0  # {path: size}
 }
 
 END {
