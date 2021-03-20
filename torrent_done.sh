@@ -208,7 +208,7 @@ query_json() {
   local i result
 
   tr_json="$(
-    request_tr '{"arguments":{"fields":["activityDate","id","name","percentDone","sizeWhenDone","status","trackerStats"]},"method":"torrent-get"}'
+    request_tr '{"arguments":{"fields":["activityDate","id","name","percentDone","sizeWhenDone","status"]},"method":"torrent-get"}'
   )" || exit 1
   if [[ ${savejson} ]]; then
     printf 'Save json to: "%s"\n' "${savejson}" 1>&2
@@ -297,7 +297,7 @@ remove_inactive() {
   done < <(
     printf '%s' "${tr_json}" | jq -j '
       .arguments.torrents|
-      sort_by(.activityDate, ([.trackerStats[].leecherCount]|add))[]|
+      sort_by(.activityDate)[]|
       select(.percentDone == 1)|
       "\(.id)/\(.sizeWhenDone)/\(.name)\u0000"'
   )
