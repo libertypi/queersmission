@@ -362,7 +362,7 @@ write_log() {
 
 unit_test() {
 
-  test_tr() {
+  _test_tr() {
     local name files key
     set_tr_header || die "Connecting failed."
     while IFS=/ read -r -d '' name files; do
@@ -372,14 +372,14 @@ unit_test() {
           jq -j '.[]|"\(.name)\u0000\(.length)\u0000"' |
           awk -v regexfile="${regexfile}" -f "${categorizer}"
       )"
-      examine_test "${key}" "${name}"
+      _examine_test "${key}" "${name}"
     done < <(
       request_tr '{"arguments":{"fields":["name","files"]},"method":"torrent-get"}' |
         jq -j '.arguments.torrents[]|"\(.name)/\(.files)\u0000"'
     )
   }
 
-  test_dir() {
+  _test_dir() {
     local name="$1" root="$2" key
     printf 'Name: %s\n' "${name}" 1>&2
     key="$(
@@ -389,10 +389,10 @@ unit_test() {
         printf '%s\0%d\0' "${name}" 0
       fi | awk -v regexfile="${regexfile}" -f "${categorizer}"
     )"
-    examine_test "${key}" "$@"
+    _examine_test "${key}" "$@"
   }
 
-  examine_test() {
+  _examine_test() {
     local key="$1" name="$2" root="$3" color
     case "${key}" in
       default) color=0 ;;
@@ -422,22 +422,22 @@ unit_test() {
   for arg; do
     printf '=== %s ===\n' "${arg}" 1>&2
     case "${arg}" in
-      tr) test_tr ;;
+      tr) _test_tr ;;
       tv | film)
         pushd "${locations[${arg}]}" 1>/dev/null 2>&1 ||
           die "Unable to enter: '${locations[${arg}]}'"
         shopt -s nullglob
         for name in [^.\#@]*; do
-          test_dir "${name}" "${PWD}"
+          _test_dir "${name}" "${PWD}"
         done
         shopt -u nullglob
         popd 1>/dev/null 2>&1
         ;;
       *)
         if [[ -e ${arg} ]]; then
-          test_dir "$(basename "${arg}")" "$(dirname "${arg}")"
+          _test_dir "$(basename "${arg}")" "$(dirname "${arg}")"
         else
-          test_dir "$(normpath "${arg}")"
+          _test_dir "$(normpath "${arg}")"
         fi
         ;;
     esac
