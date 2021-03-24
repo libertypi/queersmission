@@ -217,17 +217,15 @@ query_json() {
 
   {
     IFS=/ read -r -d '' tr_totalsize tr_paused result &&
+      [[ ${result} == 'success' ]] &&
       while IFS= read -r -d '' i; do
         tr_names["${i}"]=1
       done
   } < <(
     printf '%s' "${tr_json}" | jq -j '
-      "\([.arguments.torrents[].sizeWhenDone]|add)/",
-      "\(.arguments.torrents|map(select(.status == 0))|length)/",
-      "\(.result)\u0000",
+      "\([.arguments.torrents[].sizeWhenDone]|add)/\(.arguments.torrents|map(select(.status == 0))|length)/\(.result)\u0000",
       "\(.arguments.torrents[].name)\u0000"'
-  ) && [[ ${result} == 'success' ]] ||
-    die "Parsing json failed. Status: '${result}'"
+  ) || die "Parsing json failed. Status: '${result}'"
 
   printf 'Torrents: %d, size: %d GiB, paused: %d\n' \
     "${#tr_names[@]}" "$((tr_totalsize / GiB))" "${tr_paused}" 1>&2
