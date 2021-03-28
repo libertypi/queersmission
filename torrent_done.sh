@@ -66,7 +66,7 @@ normpath() {
     fi
   done
   c="${s}${cs[*]}"
-  printf '%s\n' "${c:-.}"
+  printf '%s' "${c:-.}"
 }
 
 init() {
