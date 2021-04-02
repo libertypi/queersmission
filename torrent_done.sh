@@ -52,7 +52,7 @@ EOF
 # Translated from Python's posixpath.normpath:
 # https://github.com/python/cpython/blob/master/Lib/posixpath.py#L337
 normpath() {
-  local IFS=/ s='' c cs=()
+  local IFS=/ c s cs=()
   if [[ $1 == /* ]]; then
     s='/'
     [[ $1 == //* && $1 != ///* ]] && s='//'
