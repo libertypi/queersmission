@@ -150,7 +150,7 @@ copy_finished() {
   local to_seeddir=0 logdir dest
 
   _copy_to_dest() {
-    [[ -e ${dest} ]] || mkdir -p -- "${dest}" && cp -r -f -- "${tr_path}" "${dest}/" || return 1
+    rsync -a --exclude='*.part' --progress -- "${tr_path}" "${dest}/" || return 1
     if ((to_seeddir)); then
       request_tr "$(
         jq -acn --argjson i "${TR_TORRENT_ID}" --arg d "${seed_dir}" \
@@ -186,7 +186,7 @@ copy_finished() {
   fi
 
   # copy file
-  printf 'Copying: "%s" -> "%s" ...\n' "${tr_path}" "${dest}" 1>&2
+  printf 'Copying: "%s" -> "%s"\n' "${tr_path}" "${dest}" 1>&2
   if ((dryrun)) || _copy_to_dest; then
     printf 'Done.\n' 1>&2
     append_log 'Finish' "${logdir}" "${TR_TORRENT_NAME}"
