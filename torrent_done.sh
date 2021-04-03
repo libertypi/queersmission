@@ -186,9 +186,9 @@ copy_finished() {
     if hash rsync 1>/dev/null 2>&1; then
       if [[ ${dest} == "${logdir}" ]]; then
         (
-          shopt -s nullglob globstar
-          for _ in "${dest}/${TR_TORRENT_NAME}"/*; do exit 0; done
-          for _ in "${tr_path}"/**/*.part; do exit 0; done
+          shopt -s nullglob globstar || exit 1
+          for _ in "${dest}/${TR_TORRENT_NAME}/"*; do exit 0; done
+          for f in "${tr_path}/"**/*.part; do [[ -f ${f} ]] && exit 0; done
           exit 1
         ) && use_rsync=1
       elif [[ -e "${dest}/${TR_TORRENT_NAME}" ]]; then
@@ -251,7 +251,7 @@ query_json() {
 # Clean junk files in seed_dir and watch_dir. This function runs in a subshell.
 clean_disk() {
   (
-    shopt -s nullglob dotglob globstar
+    shopt -s nullglob dotglob globstar || exit 1
     obsolete=()
 
     if ((${#tr_names[@]})) && cd "${seed_dir}"; then
@@ -318,11 +318,11 @@ remove_inactive() {
 
   if ((${#names[@]})); then
     printf 'Remove %d torrents.\n' "${#names[@]}" 1>&2
-    ((dryrun)) || {
-      request_tr "{\"arguments\":{\"ids\":[${ids%,}],\"delete-local-data\":true},\"method\":\"torrent-remove\"}" >/dev/null
-    } && for name in "${names[@]}"; do
-      append_log 'Remove' "${seed_dir}" "${name}"
-    done
+    ((dryrun)) ||
+      request_tr "{\"arguments\":{\"ids\":[${ids%,}],\"delete-local-data\":true},\"method\":\"torrent-remove\"}" >/dev/null &&
+      for name in "${names[@]}"; do
+        append_log 'Remove' "${seed_dir}" "${name}"
+      done
   fi
 }
 
@@ -360,17 +360,17 @@ print_log() {
 # Insert logs at the beginning of $logfile.
 write_log() {
   if ((${#logs[@]})); then
-    if ((dryrun)); then
-      printf 'Logs (%d entries):\n' "${#logs[@]}" 1>&2
-      print_log 1>&2
-    else
-      local backup
-      [[ -f ${logfile} ]] && backup="$(tail -n +3 -- "${logfile}")"
-      {
-        print_log
-        [[ ${backup} ]] && printf '%s\n' "${backup}"
-      } >"${logfile}"
-    fi
+    {
+      printf 'Logs (%d entries):\n' "${#logs[@]}"
+      print_log
+    } 1>&2
+    ((dryrun)) && return
+    local backup
+    [[ -f ${logfile} ]] && backup="$(tail -n +3 -- "${logfile}")"
+    {
+      print_log
+      [[ ${backup} ]] && printf '%s\n' "${backup}"
+    } >"${logfile}"
   fi
 }
 
@@ -438,8 +438,7 @@ unit_test() {
     case "${arg}" in
       tr) _test_tr ;;
       tv | film)
-        pushd "${locations[${arg}]}" 1>/dev/null 2>&1 ||
-          die "Unable to enter: '${locations[${arg}]}'"
+        pushd "${locations[${arg}]}" 1>/dev/null 2>&1 || die "Unable to enter: '${locations[${arg}]}'"
         shopt -s nullglob
         for name in [^.\#@]*; do
           _test_dir "${name}" "${PWD}"
