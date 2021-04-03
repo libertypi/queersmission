@@ -147,13 +147,13 @@ set_tr_const() {
 # script was invoked as "script-torrent-done" or with "-f" option.
 copy_finished() {
   [[ ${tr_path} ]] || return
-  local to_seeddir=0 logdir dest
+  local to_seeddir=0 use_rsync=0 logdir dest
 
   _copy_to_dest() {
-    if hash rsync 1>/dev/null 2>&1; then
+    if ((use_rsync)); then
       rsync -a --exclude='*.part' --progress -- "${tr_path}" "${dest}/"
     else
-      [[ -e ${dest} ]] || mkdir -p -- "${dest}" && cp -r -f -- "${tr_path}" "${dest}/"
+      [[ -e ${dest} ]] || mkdir -p -- "${dest}" && cp -a -f -- "${tr_path}" "${dest}/"
     fi || return 1
     if ((to_seeddir)); then
       request_tr "$(
@@ -181,6 +181,19 @@ copy_finished() {
       dest="${logdir}/${BASH_REMATCH[1]}"
     else
       dest="${logdir}/${TR_TORRENT_NAME}"
+    fi
+    # whether to use rsync
+    if hash rsync 1>/dev/null 2>&1; then
+      if [[ ${dest} == "${logdir}" ]]; then
+        (
+          shopt -s nullglob globstar
+          for _ in "${dest}/${TR_TORRENT_NAME}"/*; do exit 0; done
+          for _ in "${tr_path}"/**/*.part; do exit 0; done
+          exit 1
+        ) && use_rsync=1
+      elif [[ -e "${dest}/${TR_TORRENT_NAME}" ]]; then
+        use_rsync=1
+      fi
     fi
   else
     # copy to seed_dir
