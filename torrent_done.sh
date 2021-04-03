@@ -150,7 +150,11 @@ copy_finished() {
   local to_seeddir=0 logdir dest
 
   _copy_to_dest() {
-    rsync -a --exclude='*.part' --progress -- "${tr_path}" "${dest}/" || return 1
+    if hash rsync 1>/dev/null 2>&1; then
+      rsync -a --exclude='*.part' --progress -- "${tr_path}" "${dest}/"
+    else
+      [[ -e ${dest} ]] || mkdir -p -- "${dest}" && cp -r -f -- "${tr_path}" "${dest}/"
+    fi || return 1
     if ((to_seeddir)); then
       request_tr "$(
         jq -acn --argjson i "${TR_TORRENT_ID}" --arg d "${seed_dir}" \
