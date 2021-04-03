@@ -169,7 +169,7 @@ copy_finished() {
         awk -v regexfile="${regexfile}" -f "${categorizer}"
     )]}"
     # fallback to default if failed
-    logdir="$(normpath "${logdir:-"${locations['default']}"}")"
+    logdir="$(normpath "${logdir:-${locations['default']}}")"
     # append a sub-directory if needed
     if [[ -d ${tr_path} ]]; then
       dest="${logdir}"
