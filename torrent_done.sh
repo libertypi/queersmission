@@ -140,7 +140,7 @@ init() {
   if [[ ${TR_TORRENT_ID} ]]; then
     flock -x "${i}"
   elif ! flock -x -n "${i}"; then
-    die "Acquiring lock failed."
+    die "Unable to acquire lock, another instance running?"
   fi
 
   trap 'write_log' EXIT
