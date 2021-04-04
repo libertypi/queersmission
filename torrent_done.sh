@@ -97,6 +97,7 @@ init() {
   if [[ ${TR_TORRENT_DIR} && ${TR_TORRENT_NAME} ]]; then
     flock -x "$i"
     tr_path="${TR_TORRENT_DIR}/${TR_TORRENT_NAME}"
+    while [[ ${tr_path} == */ ]]; do tr_path="${tr_path%%/}"; done
   elif flock -x -n "$i"; then
     tr_path=''
   else
@@ -180,7 +181,7 @@ copy_finished() {
     elif [[ ${TR_TORRENT_NAME} =~ ([^/]*[^/.][^/]*)\.[^/.]*$ ]]; then
       dest="${logdir}/${BASH_REMATCH[1]}"
     else
-      dest="${logdir}/${TR_TORRENT_NAME}"
+      dest="${logdir}/${TR_TORRENT_NAME//\//}"
     fi
     # whether to use rsync
     if hash rsync 1>/dev/null 2>&1; then
