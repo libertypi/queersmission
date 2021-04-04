@@ -39,9 +39,10 @@ Author: David Pi
 optional arguments:
   -h         show this message and exit
   -d         dryrun mode
-  -f NAME    force copy torrent NAME, like "script-torrent-done"
+  -s         show torrent list
+  -f ID      force copy torrent ID, like "script-torrent-done"
+  -j FILE    save formated json to FILE
   -q NUM     set disk quota to NUM GiB (default: $((quota / GiB)))
-  -s FILE    save formated json to FILE
   -t TEST    unit test, TEST: "all", "tr", "tv", "film" or custom path
 EOF
   exit 1
@@ -81,12 +82,13 @@ init() {
   declare -Ag tr_names=()
 
   # parse arguments
-  while getopts 'hdf:q:s:t:' i; do
+  while getopts 'hdsf:j:q:t:' i; do
     case "$i" in
       d) dryrun=1 ;;
-      f) [[ ${OPTARG} ]] || die 'Empty NAME.' && set_tr_const "${OPTARG}" ;;
+      s) show_tr_list ;;
+      f) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'ID should be integer >= 0' && TR_TORRENT_ID="${OPTARG}" ;;
+      j) [[ ${OPTARG} && ! -d ${OPTARG} ]] || die 'Invalid json filename.' && savejson="$(normpath "${OPTARG}")" ;;
       q) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'QUOTA must be integer >= 0.' && ((quota = OPTARG * GiB)) ;;
-      s) [[ ${OPTARG} && ! -d ${OPTARG} ]] || die 'Invalid json filename.' && savejson="$(normpath "${OPTARG}")" ;;
       t) [[ ${OPTARG} ]] || die "Empty TEST." && unit_test "${OPTARG}" ;;
       *) print_help ;;
     esac
@@ -94,19 +96,15 @@ init() {
 
   # acquire lock
   exec {i}<"${BASH_SOURCE[0]##*/}"
-  if [[ ${TR_TORRENT_DIR} && ${TR_TORRENT_NAME} ]]; then
+  if [[ ${TR_TORRENT_ID} ]]; then
     flock -x "$i"
-    tr_path="$(normpath "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}")"
-  elif flock -x -n "$i"; then
-    tr_path=''
-  else
+  elif ! flock -x -n "$i"; then
     die "Acquiring lock failed."
   fi
-  readonly -- tr_api seed_dir watch_dir GiB quota locations dryrun savejson tr_path
+  readonly -- tr_api seed_dir watch_dir GiB quota locations dryrun savejson
   trap 'write_log' EXIT
 
-  # get API header
-  [[ ${tr_header} ]] || set_tr_header
+  set_tr_header
 }
 
 set_tr_header() {
@@ -133,27 +131,34 @@ request_tr() {
   return 1
 }
 
-set_tr_const() {
-  set_tr_header
-  IFS=/ read -r -d '' TR_TORRENT_ID TR_TORRENT_NAME TR_TORRENT_DIR < <(
+show_tr_list() {
+  local id name dir arr=('ID' 'LOCATION' 'NAME')
+  local w1="${#arr[0]}" w2="${#arr[1]}"
+  set_tr_header || die 'Connection failed.'
+
+  while IFS=/ read -r -d '' id name dir; do
+    arr+=("${id}" "${dir}" "${name}")
+    ((${#id} > w1)) && w1="${#id}"
+    ((${#dir} > w2)) && w2="${#dir}"
+  done < <(
     request_tr '{"arguments":{"fields":["id","name","downloadDir"]},"method":"torrent-get"}' |
-      jq -j --arg n "$1" '.arguments.torrents[]|select(.name == $n)|"\(.id)/\(.name)/\(.downloadDir)\u0000"'
-  ) && [[ ${TR_TORRENT_ID} =~ ^[0-9]+$ ]] ||
-    die "No name '$1' in torrent list."
-  export TR_TORRENT_ID TR_TORRENT_NAME TR_TORRENT_DIR
+      jq -j '.arguments.torrents[]|"\(.id)/\(.name)/\(.downloadDir)\u0000"'
+  )
+
+  printf "%${w1}s  %-${w2}s  %s\n" "${arr[@]}"
+  exit 0
 }
 
 # Copy finished downloads to destination. This function only runs when the
 # script was invoked as "script-torrent-done" or with "-f" option.
 copy_finished() {
-  [[ ${tr_path} ]] || return
-  local to_seeddir=0 use_rsync=0 logdir dest
+  [[ ${TR_TORRENT_ID} ]] || return
 
   _copy_to_dest() {
     if ((use_rsync)); then
-      rsync -a --exclude='*.part' --progress -- "${tr_path}" "${dest}/"
+      rsync -a --exclude='*.part' --progress -- "${source}" "${dest}/"
     else
-      [[ -e ${dest} ]] || mkdir -p -- "${dest}" && cp -a -f -- "${tr_path}" "${dest}/"
+      [[ -e ${dest} ]] || mkdir -p -- "${dest}" && cp -a -f -- "${source}" "${dest}/"
     fi || return 1
     if ((to_seeddir)); then
       request_tr "$(
@@ -164,9 +169,22 @@ copy_finished() {
     return 0
   }
 
+  local source dest logdir to_seeddir=0 use_rsync=0
+  # query torrent info
+  [[ ${TR_TORRENT_DIR} && ${TR_TORRENT_NAME} ]] || {
+    {
+      IFS= read -r -d '' TR_TORRENT_DIR
+      IFS= read -r -d '' TR_TORRENT_NAME
+    } < <(
+      request_tr "{\"arguments\":{\"fields\":[\"name\",\"downloadDir\"],\"ids\":[${TR_TORRENT_ID}]},\"method\":\"torrent-get\"}" |
+        jq -j '.arguments.torrents[]|"\(.downloadDir)\u0000\(.name)\u0000"'
+    ) && [[ ${TR_TORRENT_DIR} && ${TR_TORRENT_NAME} ]] ||
+      die "Invalid torrent ID: ${TR_TORRENT_ID}. Run '${BASH_SOURCE[0]##*/} -s' to show torrent list."
+  }
+  source="$(normpath "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}")"
+
   # decide the destination
-  if [[ ${TR_TORRENT_DIR} -ef ${seed_dir} ]]; then
-    # copy from seed_dir to dest
+  if [[ ${TR_TORRENT_DIR} -ef ${seed_dir} ]]; then # source: seed_dir
     logdir="${locations[$(
       request_tr "{\"arguments\":{\"fields\":[\"files\"],\"ids\":[${TR_TORRENT_ID}]},\"method\":\"torrent-get\"}" |
         jq -j '.arguments.torrents[].files[]|"\(.name)\u0000\(.length)\u0000"' |
@@ -175,7 +193,7 @@ copy_finished() {
     # fallback to default if failed
     logdir="$(normpath "${logdir:-${locations['default']}}")"
     # append a sub-directory if needed
-    if [[ -d ${tr_path} ]]; then
+    if [[ -d ${source} ]]; then
       dest="${logdir}"
     elif [[ ${TR_TORRENT_NAME} =~ ([^/]*[^/.][^/]*)\.[^/.]*$ ]]; then
       dest="${logdir}/${BASH_REMATCH[1]}"
@@ -188,43 +206,39 @@ copy_finished() {
         (
           shopt -s nullglob globstar || exit 1
           for f in "${dest}/${TR_TORRENT_NAME}/"**; do [[ -f ${f} ]] && exit 0; done
-          for f in "${tr_path}/"**/*.part; do [[ -f ${f} ]] && exit 0; done
+          for f in "${source}/"**/*.part; do [[ -f ${f} ]] && exit 0; done
           exit 1
         ) && use_rsync=1
       elif [[ -e "${dest}/${TR_TORRENT_NAME}" ]]; then
         use_rsync=1
       fi
     fi
-  else
-    # copy to seed_dir
+  else # dest: seed_dir
     to_seeddir=1
     logdir="${TR_TORRENT_DIR}"
     dest="${seed_dir}"
   fi
 
   # copy file
-  {
-    if ((use_rsync)); then printf 'Syncing'; else printf 'Copying'; fi
-    printf ': "%s" -> "%s"\n' "${tr_path}" "${dest}"
-  } 1>&2
+  append_log 'Error' "${logdir}" "${TR_TORRENT_NAME}"
+  printf 'Copying: "%s" -> "%s"\n' "${source}" "${dest}/" 1>&2
   if ((dryrun)) || _copy_to_dest; then
-    printf 'Done.\n' 1>&2
+    unset 'logs[-1]'
     append_log 'Finish' "${logdir}" "${TR_TORRENT_NAME}"
+    printf 'Done.\n' 1>&2
     return 0
-  else
-    printf 'Failed.\n' 1>&2
-    append_log 'Error' "${logdir}" "${TR_TORRENT_NAME}"
-    if [[ ${to_seeddir} -eq 1 && -e "${seed_dir}/${TR_TORRENT_NAME}" ]]; then
-      rm -r -f -- "${seed_dir:?}/${TR_TORRENT_NAME:?}"
-    fi
-    return 1
   fi
+  printf 'Failed.\n' 1>&2
+  if [[ ${to_seeddir} -eq 1 && -e "${seed_dir}/${TR_TORRENT_NAME}" ]]; then
+    rm -r -f -- "${seed_dir:?}/${TR_TORRENT_NAME:?}"
+  fi
+  return 1
 }
 
 # Query and parse transmission torrent list.
 # torrent status number:
 # https://github.com/transmission/transmission/blob/master/libtransmission/transmission.h#L1658
-query_json() {
+get_maindata() {
   local i result
 
   tr_json="$(
@@ -474,7 +488,7 @@ unit_test() {
 
 init "$@"
 copy_finished
-query_json
+get_maindata
 clean_disk
 remove_inactive
 resume_paused
