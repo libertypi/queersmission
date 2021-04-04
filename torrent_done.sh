@@ -124,7 +124,7 @@ init() {
 
   # parse arguments
   while getopts 'hdsf:j:q:t:' i; do
-    case "$i" in
+    case "${i}" in
       d) dryrun=1 ;;
       s) show_tr_list ;;
       f) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'ID should be integer >= 0' && TR_TORRENT_ID="${OPTARG}" ;;
@@ -362,7 +362,7 @@ resume_paused() {
 append_log() {
   local loc
   if ((${#2} <= 30)); then loc="$2"; else loc="${2::27}..."; fi
-  printf -v "logs[${#logs[@]}]" '%(%D %T)T  %-6s  %-30s  %s\n' -1 "$1" "$loc" "$3"
+  printf -v "logs[${#logs[@]}]" '%(%D %T)T  %-6s  %-30s  %s\n' -1 "$1" "${loc}" "$3"
 }
 
 # Print logs in reversed order.
