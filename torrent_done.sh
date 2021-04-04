@@ -204,7 +204,7 @@ copy_finished() {
 
   # copy file
   {
-    if ((use_rsync)); then printf 'Syncing' else printf 'Copying'; fi
+    if ((use_rsync)); then printf 'Syncing'; else printf 'Copying'; fi
     printf ': "%s" -> "%s"\n' "${tr_path}" "${dest}"
   } 1>&2
   if ((dryrun)) || _copy_to_dest; then
