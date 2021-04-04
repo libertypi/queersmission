@@ -187,7 +187,7 @@ copy_finished() {
       if [[ ${dest} == "${logdir}" ]]; then
         (
           shopt -s nullglob globstar || exit 1
-          for _ in "${dest}/${TR_TORRENT_NAME}/"*; do exit 0; done
+          for f in "${dest}/${TR_TORRENT_NAME}/"**; do [[ -f ${f} ]] && exit 0; done
           for f in "${tr_path}/"**/*.part; do [[ -f ${f} ]] && exit 0; done
           exit 1
         ) && use_rsync=1
@@ -203,7 +203,10 @@ copy_finished() {
   fi
 
   # copy file
-  printf 'Copying: "%s" -> "%s"\n' "${tr_path}" "${dest}" 1>&2
+  {
+    if ((use_rsync)); then printf 'Syncing' else printf 'Copying'; fi
+    printf ': "%s" -> "%s"\n' "${tr_path}" "${dest}"
+  } 1>&2
   if ((dryrun)) || _copy_to_dest; then
     printf 'Done.\n' 1>&2
     append_log 'Finish' "${logdir}" "${TR_TORRENT_NAME}"
