@@ -13,8 +13,8 @@ tr_api='http://localhost:9091/transmission/rpc'
 seed_dir='/volume2/@transmission'
 
 # Directory where transmission monitors for new torrents, match "watch-dir" in
-# transmission settings. Transmission occasionally leaves empty files here, and
-# this script will delete them for you. Leave empty to disable cleanup.
+# transmission settings. Transmission occasionally leaves empty ".torrent" files
+# here, and this script will delete them for you. Leave empty to disable.
 watch_dir='/volume1/video/Torrent'
 
 # Disk quota, minimum free space to keep on seed_dir (default: 50 GiB)

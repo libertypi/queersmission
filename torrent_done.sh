@@ -251,11 +251,11 @@ query_json() {
 # Clean junk files in seed_dir and watch_dir. This function runs in a subshell.
 clean_disk() {
   (
-    shopt -s nullglob dotglob globstar || exit 1
+    shopt -s nullglob dotglob || exit 1
     obsolete=()
 
     if ((${#tr_names[@]})) && cd "${seed_dir}"; then
-      for i in [^.\#@]*; do
+      for i in *; do
         [[ ${tr_names["${i}"]} || ${tr_names["${i%.part}"]} ]] ||
           obsolete+=("${PWD:?}/${i}")
       done
@@ -264,7 +264,7 @@ clean_disk() {
     fi
 
     if [[ ${watch_dir} ]] && cd "${watch_dir}"; then
-      for i in **; do
+      for i in *.torrent; do
         [[ -s ${i} ]] || obsolete+=("${PWD:?}/${i}")
       done
     else
