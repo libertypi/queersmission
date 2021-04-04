@@ -323,7 +323,6 @@ remove_inactive() {
   fi
 
   while IFS=/ read -r -d '' id size name; do
-    [[ ${name} ]] || continue
     ids+="${id},"
     names+=("${name}")
     (((target -= size) <= 0)) && break
