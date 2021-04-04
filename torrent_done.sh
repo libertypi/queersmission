@@ -38,11 +38,11 @@ Author: David Pi
 
 optional arguments:
   -h         show this message and exit
-  -d         dryrun mode
-  -s         show torrent list
+  -d         perform a trial run with no changes made
+  -s         show transmission torrent list
   -f ID      force copy torrent ID, like "script-torrent-done"
-  -j FILE    save formated json to FILE
-  -q NUM     set disk quota to NUM GiB (default: $((quota / GiB)))
+  -j FILE    save json format maindata to FILE
+  -q NUM     set disk quota to NUM GiB, override config file
   -t TEST    unit test, TEST: "all", "tr", "tv", "film" or custom path
 EOF
   exit 1
@@ -70,43 +70,6 @@ normpath() {
   printf '%s' "${c:-.}"
 }
 
-init() {
-  local i
-  # verify configurations
-  [[ ${seed_dir} == /* && ${locations['default']} == /* && ${tr_api} == http* && ${quota} -ge 0 ]] ||
-    die 'Invalid configuration.'
-  seed_dir="$(normpath "${seed_dir}")"
-
-  # init variables
-  tr_header='' tr_json='' tr_totalsize='' tr_paused='' logs=() dryrun=0 savejson=''
-  declare -Ag tr_names=()
-
-  # parse arguments
-  while getopts 'hdsf:j:q:t:' i; do
-    case "$i" in
-      d) dryrun=1 ;;
-      s) show_tr_list ;;
-      f) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'ID should be integer >= 0' && TR_TORRENT_ID="${OPTARG}" ;;
-      j) [[ ${OPTARG} && ! -d ${OPTARG} ]] || die 'Invalid json filename.' && savejson="$(normpath "${OPTARG}")" ;;
-      q) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'QUOTA must be integer >= 0.' && ((quota = OPTARG * GiB)) ;;
-      t) [[ ${OPTARG} ]] || die "Empty TEST." && unit_test "${OPTARG}" ;;
-      *) print_help ;;
-    esac
-  done
-
-  # acquire lock
-  exec {i}<"${BASH_SOURCE[0]##*/}"
-  if [[ ${TR_TORRENT_ID} ]]; then
-    flock -x "$i"
-  elif ! flock -x -n "$i"; then
-    die "Acquiring lock failed."
-  fi
-  readonly -- tr_api seed_dir watch_dir GiB quota locations dryrun savejson
-  trap 'write_log' EXIT
-
-  set_tr_header
-}
-
 set_tr_header() {
   if [[ "$(curl -s -I -- "${tr_api}")" =~ 'X-Transmission-Session-Id:'[[:blank:]]*[[:alnum:]]+ ]]; then
     tr_header="${BASH_REMATCH[0]}"
@@ -132,21 +95,57 @@ request_tr() {
 }
 
 show_tr_list() {
-  local id name dir arr=('ID' 'LOCATION' 'NAME')
-  local w1="${#arr[0]}" w2="${#arr[1]}"
+  local id name pct dir w1=2 w2=8 arr=()
   set_tr_header || die 'Connection failed.'
 
-  while IFS=/ read -r -d '' id name dir; do
-    arr+=("${id}" "${dir}" "${name}")
+  while IFS=/ read -r -d '' id pct name dir; do
+    arr+=("${id}" "${pct}" "${dir}" "${name}")
     ((${#id} > w1)) && w1="${#id}"
     ((${#dir} > w2)) && w2="${#dir}"
   done < <(
-    request_tr '{"arguments":{"fields":["id","name","downloadDir"]},"method":"torrent-get"}' |
-      jq -j '.arguments.torrents[]|"\(.id)/\(.name)/\(.downloadDir)\u0000"'
+    request_tr '{"arguments":{"fields":["id","percentDone","name","downloadDir"]},"method":"torrent-get"}' |
+      jq -j '.arguments.torrents[]|"\(.id)/\(.percentDone * 100)/\(.name)/\(.downloadDir)\u0000"'
   )
 
-  printf "%${w1}s  %-${w2}s  %s\n" "${arr[@]}"
-  exit 0
+  printf "%${w1}s  %4s  %-${w2}s  %s\n" 'ID' 'PCT' 'LOCATION' 'NAME'
+  printf "%${w1}d  %3.0f%%  %-${w2}s  %s\n" "${arr[@]}"
+  exit
+}
+
+init() {
+  local i
+  # verify configurations
+  [[ ${seed_dir} == /* && ${locations['default']} == /* && ${tr_api} == http* && ${quota} -ge 0 ]] ||
+    die 'Invalid configuration.'
+  seed_dir="$(normpath "${seed_dir}")"
+
+  # init variables
+  tr_header='' tr_maindata='' tr_totalsize='' tr_paused='' logs=() dryrun=0 savejson=''
+
+  # parse arguments
+  while getopts 'hdsf:j:q:t:' i; do
+    case "$i" in
+      d) dryrun=1 ;;
+      s) show_tr_list ;;
+      f) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'ID should be integer >= 0' && TR_TORRENT_ID="${OPTARG}" ;;
+      j) [[ ${OPTARG} && ! -d ${OPTARG} ]] || die 'Invalid json filename.' && savejson="$(normpath "${OPTARG}")" ;;
+      q) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'QUOTA must be integer >= 0.' && ((quota = OPTARG * GiB)) ;;
+      t) [[ ${OPTARG} ]] || die "Empty TEST." && unit_test "${OPTARG}" ;;
+      *) print_help ;;
+    esac
+  done
+
+  # acquire lock
+  exec {i}<"${BASH_SOURCE[0]##*/}"
+  if [[ ${TR_TORRENT_ID} ]]; then
+    flock -x "${i}"
+  elif ! flock -x -n "${i}"; then
+    die "Acquiring lock failed."
+  fi
+
+  trap 'write_log' EXIT
+  readonly -- tr_api seed_dir watch_dir GiB quota locations dryrun savejson
+  set_tr_header
 }
 
 # Copy finished downloads to destination. This function only runs when the
@@ -235,34 +234,37 @@ copy_finished() {
   return 1
 }
 
-# Query and parse transmission torrent list.
+# Query and parse API maindata.
 # torrent status number:
 # https://github.com/transmission/transmission/blob/master/libtransmission/transmission.h#L1658
-get_maindata() {
-  local i result
+process_maindata() {
+  local name result
+  declare -A tr_names=()
 
-  tr_json="$(
+  tr_maindata="$(
     request_tr '{"arguments":{"fields":["activityDate","id","name","percentDone","sizeWhenDone","status"]},"method":"torrent-get"}'
   )" || exit 1
   if [[ ${savejson} ]]; then
     printf 'Save json to: "%s"\n' "${savejson}" 1>&2
-    printf '%s' "${tr_json}" | jq '.' >"${savejson}"
+    printf '%s' "${tr_maindata}" | jq '.' >"${savejson}"
   fi
 
   {
     IFS=/ read -r -d '' tr_totalsize tr_paused result &&
       [[ ${result} == 'success' ]] &&
-      while IFS= read -r -d '' i; do
-        tr_names["${i}"]=1
+      while IFS= read -r -d '' name; do
+        tr_names["${name}"]=1
       done
   } < <(
-    printf '%s' "${tr_json}" | jq -j '
+    printf '%s' "${tr_maindata}" | jq -j '
       "\([.arguments.torrents[].sizeWhenDone]|add)/\(.arguments.torrents|map(select(.status == 0))|length)/\(.result)\u0000",
       "\(.arguments.torrents[].name)\u0000"'
   ) || die "Parsing json failed. Status: '${result}'"
 
   printf 'Torrents: %d, size: %d GiB, paused: %d\n' \
     "${#tr_names[@]}" "$((tr_totalsize / GiB))" "${tr_paused}" 1>&2
+
+  clean_disk
 }
 
 # Clean junk files in seed_dir and watch_dir. This function runs in a subshell.
@@ -289,7 +291,7 @@ clean_disk() {
     fi
 
     if ((n = ${#obsolete[@]})); then
-      printf 'Delete %d files:\n' "$n" 1>&2
+      printf 'Delete %d files:\n' "${n}" 1>&2
       printf '%s\n' "${obsolete[@]}" 1>&2
       ((dryrun)) || for ((i = 0; i < n; i += 100)); do
         rm -r -f -- "${obsolete[@]:i:100}"
@@ -326,7 +328,7 @@ remove_inactive() {
     names+=("${name}")
     (((target -= size) <= 0)) && break
   done < <(
-    printf '%s' "${tr_json}" | jq -j '
+    printf '%s' "${tr_maindata}" | jq -j '
       .arguments.torrents|
       sort_by(.activityDate)[]|
       select(.percentDone == 1)|
@@ -488,8 +490,7 @@ unit_test() {
 
 init "$@"
 copy_finished
-get_maindata
-clean_disk
+process_maindata
 remove_inactive
 resume_paused
 exit 0
