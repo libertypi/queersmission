@@ -41,7 +41,7 @@ optional arguments:
   -d         perform a trial run with no changes made
   -s         show transmission torrent list
   -f ID      force copy torrent ID, like "script-torrent-done"
-  -j FILE    save json format maindata to FILE
+  -j FILE    save json format data to FILE
   -q NUM     set disk quota to NUM GiB, override config file
   -t TEST    unit test, TEST: "all", "tr", "tv", "film" or custom path
 EOF
@@ -151,7 +151,7 @@ init() {
 # Copy finished downloads to destination. This function only runs when the
 # script was invoked as "script-torrent-done" or with "-f" option.
 copy_finished() {
-  [[ ${TR_TORRENT_ID} ]] || return
+  [[ ${TR_TORRENT_ID} ]] || return 0
 
   _copy_to_dest() {
     if ((use_rsync)); then
