@@ -96,8 +96,7 @@ init() {
   exec {i}<"${BASH_SOURCE[0]##*/}"
   if [[ ${TR_TORRENT_DIR} && ${TR_TORRENT_NAME} ]]; then
     flock -x "$i"
-    tr_path="${TR_TORRENT_DIR}/${TR_TORRENT_NAME}"
-    while [[ ${tr_path} == */ ]]; do tr_path="${tr_path%%/}"; done
+    tr_path="$(normpath "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}")"
   elif flock -x -n "$i"; then
     tr_path=''
   else
