@@ -168,7 +168,7 @@ copy_finished() {
   if [[ ${TR_TORRENT_DIR} -ef ${seed_dir} ]]; then
     # copy from seed_dir to dest
     logdir="${locations[$(
-      request_tr "{\"arguments\":{\"fields\":[\"files\"],\"ids\":[${TR_TORRENT_ID:?}]},\"method\":\"torrent-get\"}" |
+      request_tr "{\"arguments\":{\"fields\":[\"files\"],\"ids\":[${TR_TORRENT_ID}]},\"method\":\"torrent-get\"}" |
         jq -j '.arguments.torrents[].files[]|"\(.name)\u0000\(.length)\u0000"' |
         awk -v regexfile="${regexfile}" -f "${categorizer}"
     )]}"
