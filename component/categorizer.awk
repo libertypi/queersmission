@@ -47,13 +47,13 @@ NR % 2 {  # path
 }
 
 {
-    raise("Invalid input, size should be digits: " $0)
+    printf("[AWK] Warning: Invalid record. path: '%s', size: '%s'\n", path, $0) > "/dev/stderr"
 }
 
 END {
     if (raise_exit)
         exit 1
-    if (NR % 2 || ! length(sizedict))
+    if (! length(sizedict))
         raise("Invalid input. Expect null-terminated (path, size) pairs.")
 
     type = pattern_match(sizedict, videoset)
