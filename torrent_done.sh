@@ -188,13 +188,13 @@ copy_finished() {
     )]}"
     # fallback to default if failed
     logdir="$(normpath "${logdir:-${locations['default']}}")"
-    # append a sub-directory if needed
+    # if source is not a dir, append a sub-directory
     if [[ -d ${src} ]]; then
       dest="${logdir}"
-    elif [[ ${TR_TORRENT_NAME} =~ ([^/]*[^/.][^/]*)\.[^/.]*$ ]]; then
+    elif [[ ${TR_TORRENT_NAME} =~ (.*[^.].*)\.[^.]*$ ]]; then
       dest="${logdir}/${BASH_REMATCH[1]}"
     else
-      dest="${logdir}/${TR_TORRENT_NAME//\//}"
+      dest="${logdir}/${TR_TORRENT_NAME}"
     fi
     # whether to use rsync
     if hash rsync 1>/dev/null 2>&1; then
