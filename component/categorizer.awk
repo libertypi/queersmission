@@ -30,7 +30,7 @@ NR % 2 {  # path
     next
 }
 
-/^[0-9]*$/ {  # size
+/^[0-9]+$/ {  # size
     if ($0 >= size_thresh) {
         if (! size_reached) {
             delete sizedict
@@ -43,6 +43,11 @@ NR % 2 {  # path
     sub(/\/bdmv\/stream\/[^/]+\.m2ts$/, "/bdmv/stream.m2ts", path) ||
     sub(/\/[^/]*vts[0-9_]+\.vob$/, "/video_ts.vob", path)
     sizedict[path] += $0  # {path: size}
+    next
+}
+
+{
+    raise("Invalid input, size should be digits: " $0)
 }
 
 END {

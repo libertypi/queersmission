@@ -169,15 +169,12 @@ copy_finished() {
   }
 
   local source dest logdir to_seeddir=0 use_rsync=0
-  # query torrent info
-  [[ ${TR_TORRENT_DIR} && ${TR_TORRENT_NAME} ]] || {
-    {
-      IFS= read -r -d '' TR_TORRENT_DIR
-      IFS= read -r -d '' TR_TORRENT_NAME
-    } < <(
+  # query torrent path by id
+  [[ ${TR_TORRENT_NAME} && ${TR_TORRENT_DIR} ]] || {
+    IFS=/ read -r -d '' TR_TORRENT_NAME TR_TORRENT_DIR < <(
       request_tr "{\"arguments\":{\"fields\":[\"name\",\"downloadDir\"],\"ids\":[${TR_TORRENT_ID}]},\"method\":\"torrent-get\"}" |
-        jq -j '.arguments.torrents[]|"\(.downloadDir)\u0000\(.name)\u0000"'
-    ) && [[ ${TR_TORRENT_DIR} && ${TR_TORRENT_NAME} ]] ||
+        jq -j '.arguments.torrents[]|"\(.name)/\(.downloadDir)\u0000"'
+    ) && [[ ${TR_TORRENT_NAME} && ${TR_TORRENT_DIR} ]] ||
       die "Invalid torrent ID: ${TR_TORRENT_ID}. Run '${BASH_SOURCE[0]##*/} -s' to show torrent list."
   }
   source="$(normpath "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}")"
