@@ -155,9 +155,9 @@ copy_finished() {
 
   _copy_to_dest() {
     if ((use_rsync)); then
-      rsync -a --exclude='*.part' --progress -- "${source}" "${dest}/"
+      rsync -a --exclude='*.part' --progress -- "${src}" "${dest}/"
     else
-      [[ -e ${dest} ]] || mkdir -p -- "${dest}" && cp -a -f -- "${source}" "${dest}/"
+      [[ -e ${dest} ]] || mkdir -p -- "${dest}" && cp -a -f -- "${src}" "${dest}/"
     fi || return 1
     if ((to_seeddir)); then
       request_tr "$(
@@ -168,7 +168,7 @@ copy_finished() {
     return 0
   }
 
-  local source dest logdir to_seeddir=0 use_rsync=0
+  local src dest logdir to_seeddir=0 use_rsync=0
   # query torrent path by id
   [[ ${TR_TORRENT_NAME} && ${TR_TORRENT_DIR} ]] || {
     IFS=/ read -r -d '' TR_TORRENT_NAME TR_TORRENT_DIR < <(
@@ -177,7 +177,7 @@ copy_finished() {
     ) && [[ ${TR_TORRENT_NAME} && ${TR_TORRENT_DIR} ]] ||
       die "Invalid torrent ID: ${TR_TORRENT_ID}. Run '${BASH_SOURCE[0]##*/} -s' to show torrent list."
   }
-  source="$(normpath "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}")"
+  src="$(normpath "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}")"
 
   # decide the destination
   if [[ ${TR_TORRENT_DIR} -ef ${seed_dir} ]]; then # source: seed_dir
@@ -189,7 +189,7 @@ copy_finished() {
     # fallback to default if failed
     logdir="$(normpath "${logdir:-${locations['default']}}")"
     # append a sub-directory if needed
-    if [[ -d ${source} ]]; then
+    if [[ -d ${src} ]]; then
       dest="${logdir}"
     elif [[ ${TR_TORRENT_NAME} =~ ([^/]*[^/.][^/]*)\.[^/.]*$ ]]; then
       dest="${logdir}/${BASH_REMATCH[1]}"
@@ -202,7 +202,7 @@ copy_finished() {
         (
           shopt -s nullglob globstar || exit 1
           for f in "${dest}/${TR_TORRENT_NAME}/"**; do [[ -f ${f} ]] && exit 0; done
-          for f in "${source}/"**/*.part; do [[ -f ${f} ]] && exit 0; done
+          for f in "${src}/"**/*.part; do [[ -f ${f} ]] && exit 0; done
           exit 1
         ) && use_rsync=1
       elif [[ -e "${dest}/${TR_TORRENT_NAME}" ]]; then
@@ -217,7 +217,7 @@ copy_finished() {
 
   # copy file
   append_log 'Error' "${logdir}" "${TR_TORRENT_NAME}"
-  printf 'Copying: "%s" -> "%s"\n' "${source}" "${dest}/" 1>&2
+  printf 'Copying: "%s" -> "%s"\n' "${src}" "${dest}/" 1>&2
   if ((dryrun)) || _copy_to_dest; then
     unset 'logs[-1]'
     append_log 'Finish' "${logdir}" "${TR_TORRENT_NAME}"
