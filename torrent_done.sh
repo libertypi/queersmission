@@ -45,7 +45,7 @@ optional arguments:
   -q NUM     set disk quota to NUM GiB, override config file
   -t TEST    unit test, TEST: "all", "tr", "tv", "film" or custom path
 EOF
-  exit 1
+  exit 0
 }
 
 # Normalize path, eliminating double slashes, etc.
@@ -117,21 +117,22 @@ init() {
   # verify configurations
   [[ ${seed_dir} == /* && ${locations['default']} == /* && ${tr_api} == http* && ${quota} -ge 0 ]] ||
     die 'Invalid configuration.'
-  seed_dir="$(normpath "${seed_dir}")"
 
   # init variables
+  seed_dir="$(normpath "${seed_dir}")"
   tr_header='' tr_maindata='' tr_totalsize='' tr_paused='' logs=() dryrun=0 savejson=''
 
   # parse arguments
   while getopts 'hdsf:j:q:t:' i; do
     case "${i}" in
+      h) print_help ;;
       d) dryrun=1 ;;
       s) show_tr_list ;;
       f) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'ID should be integer >= 0' && TR_TORRENT_ID="${OPTARG}" ;;
       j) [[ ${OPTARG} && ! -d ${OPTARG} ]] || die 'Invalid json filename.' && savejson="$(normpath "${OPTARG}")" ;;
       q) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'QUOTA must be integer >= 0.' && ((quota = OPTARG * GiB)) ;;
       t) [[ ${OPTARG} ]] || die "Empty TEST." && unit_test "${OPTARG}" ;;
-      *) print_help ;;
+      *) die "Try '${BASH_SOURCE[0]} -h' for more information" ;;
     esac
   done
 
@@ -175,7 +176,7 @@ copy_finished() {
       request_tr "{\"arguments\":{\"fields\":[\"name\",\"downloadDir\"],\"ids\":[${TR_TORRENT_ID}]},\"method\":\"torrent-get\"}" |
         jq -j '.arguments.torrents[]|"\(.name)/\(.downloadDir)\u0000"'
     ) && [[ ${TR_TORRENT_NAME} && ${TR_TORRENT_DIR} ]] ||
-      die "Invalid torrent ID: ${TR_TORRENT_ID}. Run '${BASH_SOURCE[0]##*/} -s' to show torrent list."
+      die "Invalid torrent ID: ${TR_TORRENT_ID}. Run '${BASH_SOURCE[0]} -s' to show torrent list."
   }
   src="$(normpath "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}")"
 
@@ -217,7 +218,7 @@ copy_finished() {
 
   # copy file
   append_log 'Error' "${logdir}" "${TR_TORRENT_NAME}"
-  printf 'Copying: "%s" -> "%s"\n' "${src}" "${dest}/" 1>&2
+  printf 'Copying: "%s" -> "%s/"\n' "${src}" "${dest}" 1>&2
   if ((dryrun)) || _copy_to_dest; then
     unset 'logs[-1]'
     append_log 'Finish' "${logdir}" "${TR_TORRENT_NAME}"
@@ -364,9 +365,8 @@ append_log() {
 # Print logs in reversed order.
 print_log() {
   local i
-  printf '%-17s  %-6s  %-30s  %s\n%s\n' \
-    'Date' 'Status' 'Location' 'Name' \
-    '--------------------------------------------------------------------------------'
+  printf -v i '%0.s-' {1..80} # sep-line length: 80
+  printf '%-17s  %-6s  %-30s  %s\n%s\n' 'Date' 'Status' 'Location' 'Name' "${i}"
   for ((i = ${#logs[@]} - 1; i >= 0; i--)); do
     printf '%s' "${logs[i]}"
   done
