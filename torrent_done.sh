@@ -112,10 +112,11 @@ show_tr_list() {
 
   printf "%${w1}s  %5s  %-${w2}s  %s\n" 'ID' 'PCT' 'LOCATION' 'NAME'
   if [[ -t 1 ]]; then
-    printf "%${w1}d  ${MAGENTA}%5.1f  %-${w2}s  ${YELLOW}%s${ENDCOLOR}\n" "${arr[@]}"
+    w1="%${w1}d  ${MAGENTA}%5.1f  %-${w2}s  ${YELLOW}%s${ENDCOLOR}\n"
   else
-    printf "%${w1}d  %5.1f  %-${w2}s  %s\n" "${arr[@]}"
+    w1="%${w1}d  %5.1f  %-${w2}s  %s\n"
   fi
+  printf "${w1}" "${arr[@]//[[:cntrl:]]/ }"
   exit
 }
 
@@ -282,20 +283,19 @@ clean_disk() {
           obsolete+=("${PWD:?}/${i}")
       done
     else
-      printf 'Skip cleaning seed_dir "%s"\n' "${seed_dir}" 1>&2
+      printf 'Skip seed_dir cleanup: "%s"\n' "${seed_dir}" 1>&2
     fi
 
-    if [[ ${watch_dir} ]] && cd "${watch_dir}"; then
-      for i in *.torrent; do
-        [[ -s ${i} ]] || obsolete+=("${PWD:?}/${i}")
+    if [[ ${watch_dir} ]]; then
+      for i in "${watch_dir}/"*.torrent; do
+        [[ -s ${i} ]] || obsolete+=("${i}")
       done
     else
-      printf 'Skip cleaning watch_dir "%s"\n' "${watch_dir}" 1>&2
+      printf 'Skip watch_dir cleanup "%s"\n' "${watch_dir}" 1>&2
     fi
 
     if ((n = ${#obsolete[@]})); then
-      printf 'Delete %d files:\n' "${n}" 1>&2
-      printf '%s\n' "${obsolete[@]}" 1>&2
+      printf 'Delete: %s\n' "${obsolete[@]//[[:cntrl:]]/ }" 1>&2
       ((dryrun)) || for ((i = 0; i < n; i += 100)); do
         rm -r -f -- "${obsolete[@]:i:100}"
       done
@@ -364,7 +364,7 @@ resume_paused() {
 append_log() {
   local loc
   if ((${#2} <= 30)); then loc="$2"; else loc="${2::27}..."; fi
-  printf -v "logs[${#logs[@]}]" '%(%D %T)T  %-6s  %-30s  %s\n' -1 "$1" "${loc}" "$3"
+  printf -v "logs[${#logs[@]}]" '%(%D %T)T  %-6s  %-30s  %s' -1 "$1" "${loc}" "$3"
 }
 
 # Print logs in reversed order.
@@ -373,24 +373,26 @@ print_log() {
   printf -v i '%0.s-' {1..80} # sep-line length: 80
   printf '%-17s  %-6s  %-30s  %s\n%s\n' 'Date' 'Status' 'Location' 'Name' "${i}"
   for ((i = ${#logs[@]} - 1; i >= 0; i--)); do
-    printf '%s' "${logs[i]}"
+    printf '%s\n' "${logs[i]//[[:cntrl:]]/ }"
   done
 }
 
 # Insert logs at the beginning of $logfile.
 write_log() {
   if ((${#logs[@]})); then
-    {
-      printf 'Logs (%d entries):\n' "${#logs[@]}"
-      print_log
-    } 1>&2
-    ((dryrun)) && return
-    local backup
-    [[ -f ${logfile} ]] && backup="$(tail -n +3 -- "${logfile}")"
-    {
-      print_log
-      [[ ${backup} ]] && printf '%s\n' "${backup}"
-    } >"${logfile}"
+    if ((dryrun)); then
+      {
+        printf 'Logs (%d entries):\n' "${#logs[@]}"
+        print_log
+      } 1>&2
+    else
+      local backup
+      [[ -f ${logfile} ]] && backup="$(tail -n +3 -- "${logfile}")"
+      {
+        print_log
+        [[ ${backup} ]] && printf '%s\n' "${backup}"
+      } >"${logfile}"
+    fi
   fi
 }
 
@@ -445,11 +447,11 @@ unit_test() {
       [[ ${path} && ! ${path} -ef ${dest} ]] && err='different path'
     fi
     result=('name' "${name}" 'path' "${path}" 'dest' "${dest}" 'type' "${key}" 'stat' "${err-pass}")
-    for i in {1..7..2}; do
+    for ((i = 1; i < ${#result[@]}; i += 2)); do
       case "${result[i]}" in
         '') result[i]='null' ;;
         *[[:cntrl:]\\\"]*) result[i]="$(jq -cn --arg s "${result[i]}" '$s')" ;;
-        *) ((i < 7)) && result[i]="\"${result[i]}\"" ;;
+        *) result[i]="\"${result[i]}\"" ;;
       esac
     done
     if [[ ${err} ]]; then
