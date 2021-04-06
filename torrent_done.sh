@@ -422,28 +422,28 @@ unit_test() {
   }
 
   _examine_test() {
-    local key="$1" name="$2" path="$3" i err color result
+    local key="$1" name="$2" path="$3" dest err i color result
     case "${key}" in
       default) color=0 ;;
       av) color=32 ;;
       film) color=33 ;;
-      tv) color=34 ;;
+      tv) color=94 ;;
       music) color=35 ;;
       '') err='runtime error' ;;
       *) err='invalid type' ;;
     esac
-    [[ -z ${err} && ${path} && ! ${path} -ef ${locations[${key}]} ]] && err='different path'
-
-    result=("name" "${name}" "path" "${path}" "dest" "${locations[${key}]}" "type" "${key}" "stat" "${err-pass}") 2>/dev/null
-    for i in {1..7..2}; do # some simple quoting
-      if [[ -z ${result[i]} ]]; then
-        result[i]='null'
-      elif ((i <= 5)); then
-        [[ ${result[i]} == *$'\n'* ]] && result[i]="${result[i]//$'\n'/\\\n}"
-        result[i]="\"${result[i]//\"/\\\"}\""
-      fi
+    if [[ -z ${err} ]]; then
+      dest="${locations[${key}]}"
+      [[ ${path} && ! ${path} -ef ${dest} ]] && err='different path'
+    fi
+    result=('name' "${name}" 'path' "${path}" 'dest' "${dest}" 'type' "${key}" 'stat' "${err-pass}")
+    for i in {1..7..2}; do
+      case "${result[i]}" in
+        '') result[i]='null' ;;
+        *[\\\"$'\t\n\r\f\v'[:cntrl:]]*) result[i]="$(jq -cn --arg s "${result[i]}" '$s')" ;;
+        *) ((i < 7)) && result[i]="\"${result[i]}\"" ;;
+      esac
     done
-
     if [[ ${err} ]]; then
       error+=("${result[@]}")
       color=31
