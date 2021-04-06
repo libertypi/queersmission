@@ -128,6 +128,7 @@ init() {
   # init variables
   seed_dir="$(normpath "${seed_dir}")"
   tr_header='' tr_maindata='' tr_totalsize='' tr_paused='' logs=() dryrun=0 savejson=''
+  declare -Ag tr_names=()
 
   # parse arguments
   while getopts 'hdsf:j:q:t:' i; do
@@ -244,7 +245,6 @@ copy_finished() {
 # https://github.com/transmission/transmission/blob/master/libtransmission/transmission.h#L1658
 process_maindata() {
   local name result
-  declare -A tr_names=()
 
   tr_maindata="$(
     request_tr '{"arguments":{"fields":["activityDate","id","name","percentDone","sizeWhenDone","status"]},"method":"torrent-get"}'
@@ -268,8 +268,6 @@ process_maindata() {
 
   printf 'torrents: %d, total size: %d GiB, paused: %d\n' \
     "${#tr_names[@]}" "$((tr_totalsize / GiB))" "${tr_paused}" 1>&2
-
-  clean_disk
 }
 
 # Clean junk files in seed_dir and watch_dir. This function runs in a subshell.
@@ -514,6 +512,7 @@ unit_test() {
 init "$@"
 copy_finished
 process_maindata
+clean_disk
 remove_inactive
 resume_paused
 exit 0
