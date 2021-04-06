@@ -448,7 +448,7 @@ unit_test() {
     for i in {1..7..2}; do
       case "${result[i]}" in
         '') result[i]='null' ;;
-        *[[:cntrl:]$'\t\n\r\f\v'\\\"]*) result[i]="$(jq -cn --arg s "${result[i]}" '$s')" ;;
+        *[[:cntrl:]\\\"]*) result[i]="$(jq -cn --arg s "${result[i]}" '$s')" ;;
         *) ((i < 7)) && result[i]="\"${result[i]}\"" ;;
       esac
     done
@@ -469,7 +469,7 @@ unit_test() {
   [[ $1 == 'all' ]] && set -- tr tv film
   if [[ -t 1 ]]; then isatty=1; else isatty=0; fi
 
-  printf '%s:\n' "Result"
+  printf '%s:\n' "result"
   for arg; do
     case "${arg}" in
       tr) _test_tr ;;
@@ -495,7 +495,7 @@ unit_test() {
   done
 
   if ((arg = ${#error[@]})); then
-    printf '%s:\n' 'Error'
+    printf '%s:\n' 'error'
     for ((i = 0; i < arg; i += 10)); do
       printf -- "- %s: %s\n" "${error[@]:i:2}"
       printf -- "  %s: %s\n" "${error[@]:i+2:8}"
