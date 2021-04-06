@@ -439,7 +439,7 @@ unit_test() {
       case "${result[i],,}" in
         '') result[i]='null' ;;
         *$'\n'*) result[i]="${result[i]//$'\n'/\\\n}" ;&
-        [{}\[\],\&*\#\|\<\>!%@]* | [:?=~-] | 'yes' | 'no' | 'true' | 'false' | 'null') result[i]="\"${result[i]//\"/\\\"}\"" ;;
+        [{}\[\],\&\*\#\|\<\>\!%@]* | [:?=~-] | 'yes' | 'no' | 'true' | 'false' | 'null') result[i]="\"${result[i]//\"/\\\"}\"" ;;
         *) [[ ${result[i]} =~ ^[[:digit:]]+$ ]] && result[i]="\"${result[i]}\"" ;;
       esac
     done
