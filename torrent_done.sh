@@ -447,11 +447,11 @@ unit_test() {
       [[ ${path} && ! ${path} -ef ${dest} ]] && err='different path'
     fi
     result=('name' "${name}" 'path' "${path}" 'dest' "${dest}" 'type' "${key}" 'stat' "${err-pass}")
-    for ((i = 1; i < ${#result[@]}; i += 2)); do
+    for i in {1..7..2}; do
       case "${result[i]}" in
         '') result[i]='null' ;;
         *[[:cntrl:]\\\"]*) result[i]="$(jq -cn --arg s "${result[i]}" '$s')" ;;
-        *) result[i]="\"${result[i]}\"" ;;
+        *) ((i < 7)) && result[i]="\"${result[i]}\"" ;;
       esac
     done
     if [[ ${err} ]]; then
@@ -471,7 +471,7 @@ unit_test() {
   [[ $1 == 'all' ]] && set -- tr tv film
   if [[ -t 1 ]]; then isatty=1; else isatty=0; fi
 
-  printf '%s:\n' "result"
+  printf '%s:\n' "results"
   for arg; do
     case "${arg}" in
       tr) _test_tr ;;
@@ -497,7 +497,7 @@ unit_test() {
   done
 
   if ((arg = ${#error[@]})); then
-    printf '%s:\n' 'error'
+    printf '%s:\n' 'errors'
     for ((i = 0; i < arg; i += 10)); do
       printf -- "- %s: %s\n" "${error[@]:i:2}"
       printf -- "  %s: %s\n" "${error[@]:i+2:8}"
