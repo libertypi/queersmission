@@ -434,14 +434,14 @@ unit_test() {
     esac
     [[ -z ${err} && ${path} && ! ${path} -ef ${locations[${key}]} ]] && err='different path'
 
-    result=("name" "${name}" "path" "${path}" "type" "${key}" "dest" "${locations[${key}]}" "stat" "${err-pass}") 2>/dev/null
-    for ((i = 1; i < ${#result[@]}; i += 2)); do # some simple quoting
-      case "${result[i],,}" in
-        '') result[i]='null' ;;
-        *$'\n'*) result[i]="${result[i]//$'\n'/\\\n}" ;&
-        [{}\[\],\&\*\#\|\<\>\!%@]* | [:?=~-] | 'yes' | 'no' | 'true' | 'false' | 'null') result[i]="\"${result[i]//\"/\\\"}\"" ;;
-        *) [[ ${result[i]} =~ ^[[:digit:]]+$ ]] && result[i]="\"${result[i]}\"" ;;
-      esac
+    result=("name" "${name}" "path" "${path}" "dest" "${locations[${key}]}" "type" "${key}" "stat" "${err-pass}") 2>/dev/null
+    for i in {1..7..2}; do # some simple quoting
+      if [[ -z ${result[i]} ]]; then
+        result[i]='null'
+      elif ((i <= 5)); then
+        [[ ${result[i]} == *$'\n'* ]] && result[i]="${result[i]//$'\n'/\\\n}"
+        result[i]="\"${result[i]//\"/\\\"}\""
+      fi
     done
 
     if [[ ${err} ]]; then
