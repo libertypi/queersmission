@@ -391,11 +391,12 @@ write_log() {
 
 unit_test() {
 
+  shopt -s extglob
+
   _test_tr() {
     local name files key
     set_tr_header || die "Connecting failed."
     while IFS=/ read -r -d '' name files; do
-      printf 'Name: %s\n' "${name}" 1>&2
       key="$(
         printf '%s' "${files}" |
           jq -j '.[]|"\(.name)\u0000\(.length)\u0000"' |
@@ -409,10 +410,9 @@ unit_test() {
   }
 
   _test_dir() {
-    local name="$1" root="$2" key
-    printf 'Name: %s\n' "${name}" 1>&2
+    local name="$1" path="$2" key
     key="$(
-      if [[ ${root} ]] && { [[ ${PWD} == "${root}" ]] || cd "${root}" 1>/dev/null 2>&1; }; then
+      if [[ ${path} ]] && { [[ ${PWD} == "${path}" ]] || cd "${path}" 1>/dev/null 2>&1; }; then
         find "${name}" -name '[.#@]*' -prune -o -type f -printf '%p\0%s\0'
       else
         printf '%s\0%d\0' "${name}" 0
@@ -422,46 +422,59 @@ unit_test() {
   }
 
   _examine_test() {
-    local key="$1" name="$2" root="$3" color
+    local key="$1" name="$2" path="$3" i err color result
     case "${key}" in
       default) color=0 ;;
       av) color=32 ;;
       film) color=33 ;;
       tv) color=34 ;;
       music) color=35 ;;
-      '')
-        error+=("Runtime Error: '${name}'")
-        color=31
-        ;;
-      *)
-        error+=("Invalid type: '${name}' -> '${key}'")
-        color=31
-        ;;
+      '') err='runtime error' ;;
+      *) err='invalid type' ;;
     esac
-    if [[ ${color} != 31 && ${root} && ! ${root} -ef ${locations[${key}]} ]]; then
-      error+=("Differ: '${root}/${name}' -> '${locations[${key}]}' (${key})")
+    [[ -z ${err} && ${path} && ! ${path} -ef ${locations[${key}]} ]] && err='different path'
+
+    result=("name" "${name}" "path" "${path}" "type" "${key}" "dest" "${locations[${key}]}" "stat" "${err-pass}") 2>/dev/null
+    for ((i = 1; i < ${#result[@]}; i += 2)); do # some simple quoting
+      case "${result[i],,}" in
+        '') result[i]='null' ;;
+        *$'\n'*) result[i]="${result[i]//$'\n'/\\\n}" ;&
+        [{}\[\],\&*\#\|\<\>!%@]* | [:?=~-] | 'yes' | 'no' | 'true' | 'false' | 'null') result[i]="\"${result[i]//\"/\\\"}\"" ;;
+        *) [[ ${result[i]} =~ ^[[:digit:]]+$ ]] && result[i]="\"${result[i]}\"" ;;
+      esac
+    done
+
+    if [[ ${err} ]]; then
+      error+=("${result[@]}")
       color=31
     fi
-    printf "\033[${color}m%s\n%s\033[0m\n---\n" "Type: ${key}" "Root: ${locations[${key}]}" 1>&2
+    if ((isatty)); then
+      color="%s: \033[${color}m%s\033[0m\n"
+    else
+      color='%s: %s\n'
+    fi
+    printf -- "- ${color}" "${result[@]::2}"
+    printf -- "  ${color}" "${result[@]:2}"
   }
 
-  local arg name error=()
+  local arg i isatty error=()
   [[ $1 == 'all' ]] && set -- tr tv film
+  if [[ -t 1 ]]; then isatty=1; else isatty=0; fi
 
+  printf '%s:\n' "Result"
   for arg; do
-    printf '=== %s ===\n' "${arg}" 1>&2
     case "${arg}" in
       tr) _test_tr ;;
       tv | film)
         pushd "${locations[${arg}]}" 1>/dev/null 2>&1 || die "Unable to enter: '${locations[${arg}]}'"
         shopt -s nullglob
-        for name in [^.\#@]*; do
-          _test_dir "${name}" "${PWD}"
+        for i in [^.\#@]*; do
+          _test_dir "${i}" "${PWD}"
         done
         shopt -u nullglob
         popd 1>/dev/null 2>&1
         ;;
-      *)
+      ?*)
         if [[ -e ${arg} ]]; then
           _test_dir "$(basename "${arg}")" "$(dirname "${arg}")"
         else
@@ -471,13 +484,15 @@ unit_test() {
     esac
   done
 
-  if ((${#error})); then
-    printf '%s\n' "Errors (${#error[@]}):" "${error[@]}" 1>&2
+  if ((arg = ${#error[@]})); then
+    printf '%s:\n' 'Error'
+    for ((i = 0; i < arg; i += 10)); do
+      printf -- '- %s: %s\n' "${error[@]:i:2}"
+      printf -- '  %s: %s\n' "${error[@]:i+2:8}"
+    done
     exit 1
-  else
-    printf '%s\n' 'Finished.' 1>&2
-    exit 0
   fi
+  exit 0
 }
 
 ################################################################################
