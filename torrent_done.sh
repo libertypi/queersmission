@@ -266,7 +266,7 @@ process_maindata() {
       "\(.arguments.torrents[].name)\u0000"'
   ) || die "Parsing json failed. Status: '${result}'"
 
-  printf 'Torrents: %d, size: %d GiB, paused: %d\n' \
+  printf 'torrents: %d, total size: %d GiB, paused: %d\n' \
     "${#tr_names[@]}" "$((tr_totalsize / GiB))" "${tr_paused}" 1>&2
 
   clean_disk
@@ -319,10 +319,10 @@ remove_inactive() {
   }
 
   if ((m = quota + tr_totalsize - disksize, n = quota - freespace, (target = m > n ? m : n) > 0)); then
-    printf 'Free space: %d GiB, will free up: %d GiB\n' \
+    printf 'free space: %d GiB, will free up: %d GiB\n' \
       "$((freespace / GiB))" "$((target / GiB))" 1>&2
   else
-    printf 'Free space: %d GiB, avail space: %d GiB. System is healthy.\n' \
+    printf 'free space: %d GiB, avail space: %d GiB. System is healthy.\n' \
       "$((freespace / GiB))" "$((-target / GiB))" 1>&2
     return 0
   fi
