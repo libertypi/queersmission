@@ -107,8 +107,8 @@ show_tr_list() {
       jq -j '.arguments.torrents[]|"\(.id)/\(.percentDone * 100)/\(.name)/\(.downloadDir)\u0000"'
   )
 
-  printf "%${w1}s  %4s  %-${w2}s  %s\n" 'ID' 'PCT' 'LOCATION' 'NAME'
-  printf "%${w1}d  %3.0f%%  %-${w2}s  %s\n" "${arr[@]}"
+  printf "%${w1}s  %5s  %-${w2}s  %s\n" 'ID' 'PCT' 'LOCATION' 'NAME'
+  printf "%${w1}d  %5.1f  %-${w2}s  %s\n" "${arr[@]}"
   exit
 }
 
@@ -440,7 +440,7 @@ unit_test() {
     for i in {1..7..2}; do
       case "${result[i]}" in
         '') result[i]='null' ;;
-        *[\\\"$'\t\n\r\f\v'[:cntrl:]]*) result[i]="$(jq -cn --arg s "${result[i]}" '$s')" ;;
+        *[[:cntrl:]$'\t\n\r\f\v'\\\"]*) result[i]="$(jq -cn --arg s "${result[i]}" '$s')" ;;
         *) ((i < 7)) && result[i]="\"${result[i]}\"" ;;
       esac
     done
