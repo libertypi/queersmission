@@ -23,7 +23,9 @@ cd "${BASH_SOURCE[0]%/*}" || die 'Unable to enter script directory.'
 readonly -- \
   logfile="${PWD}/logfile.log" \
   categorizer="${PWD}/component/categorizer.awk" \
-  regexfile="${PWD}/component/regex.txt"
+  regexfile="${PWD}/component/regex.txt" \
+  RED='\e[31m' GREEN='\e[32m' YELLOW='\e[33m' BLUE='\e[94m' \
+  MAGENTA='\e[95m' ENDCOLOR='\e[0m'
 
 ################################################################################
 #                                  Functions                                   #
@@ -43,7 +45,8 @@ optional arguments:
   -f ID      force copy torrent ID, like "script-torrent-done"
   -j FILE    save json format data to FILE
   -q NUM     set disk quota to NUM GiB, override config file
-  -t TEST    unit test, TEST: "all", "tr", "tv", "film" or custom path
+  -t TEST    test categorizer. TEST: "all", "tr", "tv", "film",
+             torrent ID or custom path
 EOF
   exit 0
 }
@@ -108,7 +111,11 @@ show_tr_list() {
   )
 
   printf "%${w1}s  %5s  %-${w2}s  %s\n" 'ID' 'PCT' 'LOCATION' 'NAME'
-  printf "%${w1}d  %5.1f  %-${w2}s  %s\n" "${arr[@]}"
+  if [[ -t 1 ]]; then
+    printf "%${w1}d  ${MAGENTA}%5.1f  %-${w2}s  ${YELLOW}%s${ENDCOLOR}\n" "${arr[@]}"
+  else
+    printf "%${w1}d  %5.1f  %-${w2}s  %s\n" "${arr[@]}"
+  fi
   exit
 }
 
@@ -394,7 +401,7 @@ unit_test() {
   shopt -s extglob
 
   _test_tr() {
-    local name files key
+    local id="$1" name files key
     set_tr_header || die "Connecting failed."
     while IFS=/ read -r -d '' name files; do
       key="$(
@@ -404,8 +411,11 @@ unit_test() {
       )"
       _examine_test "${key}" "${name}"
     done < <(
-      request_tr '{"arguments":{"fields":["name","files"]},"method":"torrent-get"}' |
-        jq -j '.arguments.torrents[]|"\(.name)/\(.files)\u0000"'
+      if [[ ${id} ]]; then
+        request_tr "{\"arguments\":{\"fields\":[\"name\",\"files\"],\"ids\":[${id}]},\"method\":\"torrent-get\"}"
+      else
+        request_tr '{"arguments":{"fields":["name","files"]},"method":"torrent-get"}'
+      fi | jq -j '.arguments.torrents[]|"\(.name)/\(.files)\u0000"'
     )
   }
 
@@ -422,13 +432,13 @@ unit_test() {
   }
 
   _examine_test() {
-    local key="$1" name="$2" path="$3" dest err i color result
+    local key="$1" name="$2" path="$3" dest err i fmt result
     case "${key}" in
-      default) color=0 ;;
-      av) color=32 ;;
-      film) color=33 ;;
-      tv) color=94 ;;
-      music) color=35 ;;
+      av) fmt="${YELLOW}" ;;
+      film) fmt="${BLUE}" ;;
+      tv) fmt="${MAGENTA}" ;;
+      music) fmt="${GREEN}" ;;
+      default) ;;
       '') err='runtime error' ;;
       *) err='invalid type' ;;
     esac
@@ -446,15 +456,15 @@ unit_test() {
     done
     if [[ ${err} ]]; then
       error+=("${result[@]}")
-      color=31
+      fmt="${RED}"
     fi
     if ((isatty)); then
-      color="%s: \033[${color}m%s\033[0m\n"
+      fmt="%s: ${fmt}%s${ENDCOLOR}\n"
     else
-      color='%s: %s\n'
+      fmt='%s: %s\n'
     fi
-    printf -- "- ${color}" "${result[@]::2}"
-    printf -- "  ${color}" "${result[@]:2}"
+    printf -- "- ${fmt}" "${result[@]::2}"
+    printf -- "  ${fmt}" "${result[@]:2}"
   }
 
   local arg i isatty error=()
@@ -475,10 +485,12 @@ unit_test() {
         popd 1>/dev/null 2>&1
         ;;
       ?*)
-        if [[ -e ${arg} ]]; then
+        if [[ ${arg} =~ ^[0-9]+$ ]]; then
+          _test_tr "${arg}"
+        elif [[ -e ${arg} ]]; then
           _test_dir "$(basename "${arg}")" "$(dirname "${arg}")"
         else
-          _test_dir "$(normpath "${arg}")"
+          _test_dir "${arg}"
         fi
         ;;
     esac
@@ -487,8 +499,8 @@ unit_test() {
   if ((arg = ${#error[@]})); then
     printf '%s:\n' 'Error'
     for ((i = 0; i < arg; i += 10)); do
-      printf -- '- %s: %s\n' "${error[@]:i:2}"
-      printf -- '  %s: %s\n' "${error[@]:i+2:8}"
+      printf -- "- %s: %s\n" "${error[@]:i:2}"
+      printf -- "  %s: %s\n" "${error[@]:i+2:8}"
     done
     exit 1
   fi
