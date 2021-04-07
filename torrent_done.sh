@@ -137,7 +137,7 @@ init() {
       h) print_help ;;
       d) dryrun=1 ;;
       s) show_tr_list ;;
-      f) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'ID should be integer >= 0' && TR_TORRENT_ID="${OPTARG}" ;;
+      f) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'ID must be integer >= 0' && TR_TORRENT_ID="${OPTARG}" ;;
       j) [[ ${OPTARG} ]] || die 'Empty json filename.' && savejson="${OPTARG}" ;;
       q) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'QUOTA must be integer >= 0.' && ((quota = OPTARG * GiB)) ;;
       t) [[ ${OPTARG} ]] || die 'Empty TEST argument.' && unit_test "${OPTARG}" ;;
