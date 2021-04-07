@@ -138,9 +138,9 @@ init() {
       d) dryrun=1 ;;
       s) show_tr_list ;;
       f) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'ID should be integer >= 0' && TR_TORRENT_ID="${OPTARG}" ;;
-      j) [[ ${OPTARG} && ! -d ${OPTARG} ]] || die 'Invalid json filename.' && savejson="$(normpath "${OPTARG}")" ;;
+      j) [[ ${OPTARG} ]] || die 'Empty json filename.' && savejson="${OPTARG}" ;;
       q) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'QUOTA must be integer >= 0.' && ((quota = OPTARG * GiB)) ;;
-      t) unit_test "${OPTARG}" ;;
+      t) [[ ${OPTARG} ]] || die 'Empty TEST argument.' && unit_test "${OPTARG}" ;;
       *) die "Try '${BASH_SOURCE[0]} -h' for more information" ;;
     esac
   done
@@ -286,13 +286,10 @@ clean_disk() {
     else
       printf 'Skip seed_dir cleanup: "%s"\n' "${seed_dir}" 1>&2
     fi
-
     if [[ ${watch_dir} ]]; then
       for i in "${watch_dir}/"*.torrent; do
         [[ -s ${i} ]] || obsolete+=("${i}")
       done
-    else
-      printf 'Skip watch_dir cleanup: "%s"\n' "${watch_dir}" 1>&2
     fi
 
     if ((n = ${#obsolete[@]})); then
@@ -470,12 +467,9 @@ unit_test() {
     printf -- "  ${fmt}" "${result[@]:2}"
   }
 
-  case "$1" in
-    'all') set -- tr tv film ;;
-    '') die 'Empty TEST argument.' ;;
-  esac
   local arg i isatty error=()
   if [[ -t 1 ]]; then isatty=1; else isatty=0; fi
+  [[ $1 == 'all' ]] && set -- tr tv film
 
   printf '%s:\n' "results"
   for arg; do
