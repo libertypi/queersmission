@@ -226,8 +226,11 @@ copy_finished() {
   fi
 
   # copy file
+  {
+    if ((use_rsync)); then printf 'Syncing'; else printf 'Copying'; fi
+    printf ': "%s" -> "%s/"\n' "${src}" "${dest}"
+  } 1>&2
   append_log 'Error' "${logdir}" "${TR_TORRENT_NAME}"
-  printf 'Copying: "%s" -> "%s/"\n' "${src}" "${dest}" 1>&2
   if ((dryrun)) || _copy_to_dest; then
     unset 'logs[-1]'
     append_log 'Finish' "${logdir}" "${TR_TORRENT_NAME}"
