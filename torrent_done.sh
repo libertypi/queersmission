@@ -15,7 +15,7 @@ die() {
 export LC_ALL=C LANG=C
 unset IFS seed_dir locations tr_api quota watch_dir GiB
 
-((BASH_VERSINFO[0] >= 4)) 1>/dev/null 2>&1 || die 'Bash >=4 required.'
+((BASH_VERSINFO >= 4)) 1>/dev/null 2>&1 || die 'Bash >=4 required.'
 hash curl jq || die 'Curl and jq required.'
 cd -- "${BASH_SOURCE[0]%/*}" || die 'Unable to enter script directory.'
 
@@ -209,7 +209,7 @@ clean_disk() {
     shopt -s nullglob dotglob || exit 1
     obsolete=()
 
-    if ((${#tr_names[@]})) && cd "${seed_dir}"; then
+    if ((${#tr_names[@]})) && cd -- "${seed_dir}"; then
       for i in *; do
         [[ ${tr_names["${i}"]} || ${tr_names["${i%.part}"]} ]] ||
           obsolete+=("${PWD:?}/${i}")
@@ -417,7 +417,7 @@ unit_test() {
   _test_dir() {
     local name="$1" path="$2" key
     key="$(
-      if [[ ${path} ]] && { [[ ${PWD} == "${path}" ]] || cd "${path}" 1>/dev/null 2>&1; }; then
+      if [[ ${path} ]] && { [[ ${PWD} == "${path}" ]] || cd -- "${path}" 1>/dev/null 2>&1; }; then
         find "${name}" -name '[.#@]*' -prune -o -type f -printf '%p\0%s\0'
       else
         printf '%s\0%d\0' "${name}" 1
