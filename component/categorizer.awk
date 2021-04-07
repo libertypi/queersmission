@@ -30,12 +30,7 @@ NR % 2 {  # path
     next
 }
 
-! /^[0-9]+$/ {
-    printf("[AWK] Warning: Skip record: ('%s', '%s')\n", path, $0) > "/dev/stderr"
-    next
-}
-
-{   # size
+/^[0-9]+$/ {  # size
     if ($0 >= size_thresh) {
         if (! size_reached) {
             delete sizedict
@@ -48,6 +43,11 @@ NR % 2 {  # path
     sub(/\/bdmv\/stream\/[^/]+\.m2ts$/, "/bdmv.m2ts", path) ||
     sub(/\/[^/]*vts[0-9_]+\.vob$/, "/video_ts.vob", path)
     sizedict[path] += $0  # {path: size}
+    next
+}
+
+{
+    printf("[AWK] Warning: Bad record: ('%s', '%s')\n", path, $0) > "/dev/stderr"    
 }
 
 END {
