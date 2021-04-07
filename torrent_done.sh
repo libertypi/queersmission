@@ -109,6 +109,7 @@ show_tr_list() {
     request_tr '{"arguments":{"fields":["id","percentDone","name","downloadDir"]},"method":"torrent-get"}' |
       jq -j '.arguments.torrents[]|"\(.id)/\(.percentDone * 100)/\(.name)/\(.downloadDir)\u0000"'
   )
+  ((${#arr[@]})) || exit 1
 
   printf "%${w1}s  %5s  %-${w2}s  %s\n" 'ID' 'PCT' 'LOCATION' 'NAME'
   if [[ -t 1 ]]; then
@@ -117,7 +118,7 @@ show_tr_list() {
     w1="%${w1}d  %5.1f  %-${w2}s  %s\n"
   fi
   printf "${w1}" "${arr[@]//[[:cntrl:]]/ }"
-  exit
+  exit 0
 }
 
 init() {
@@ -256,16 +257,16 @@ process_maindata() {
   fi
 
   {
-    IFS=/ read -r -d '' tr_totalsize tr_paused result &&
-      [[ ${result} == 'success' ]] &&
-      while IFS= read -r -d '' name; do
-        tr_names["${name}"]=1
-      done
+    IFS=/ read -r -d '' tr_totalsize tr_paused result
+    [[ ${result} == 'success' ]] || die "Parsing json failed. Status: '${result}'"
+    while IFS= read -r -d '' name; do
+      tr_names["${name}"]=1
+    done
   } < <(
     printf '%s' "${tr_maindata}" | jq -j '
       "\([.arguments.torrents[].sizeWhenDone]|add)/\(.arguments.torrents|map(select(.status == 0))|length)/\(.result)\u0000",
       "\(.arguments.torrents[].name)\u0000"'
-  ) || die "Parsing json failed. Status: '${result}'"
+  )
 
   printf 'torrents: %d, total size: %d GiB, paused: %d\n' \
     "${#tr_names[@]}" "$((tr_totalsize / GiB))" "${tr_paused}" 1>&2
@@ -291,7 +292,7 @@ clean_disk() {
         [[ -s ${i} ]] || obsolete+=("${i}")
       done
     else
-      printf 'Skip watch_dir cleanup "%s"\n' "${watch_dir}" 1>&2
+      printf 'Skip watch_dir cleanup: "%s"\n' "${watch_dir}" 1>&2
     fi
 
     if ((n = ${#obsolete[@]})); then
@@ -309,7 +310,7 @@ remove_inactive() {
 
   {
     read -r _
-    read -r 'disksize' 'freespace'
+    read -r disksize freespace
   } < <(df --block-size=1 --output='size,avail' -- "${seed_dir}") &&
     [[ ${disksize} =~ ^[0-9]+$ && ${freespace} =~ ^[0-9]+$ ]] || {
     printf 'Reading disk stat failed.\n' 1>&2
@@ -398,8 +399,6 @@ write_log() {
 
 unit_test() {
 
-  shopt -s extglob
-
   _test_tr() {
     local id="$1" name files key
     set_tr_header || die "Connecting failed."
@@ -433,6 +432,7 @@ unit_test() {
 
   _examine_test() {
     local key="$1" name="$2" path="$3" dest err i fmt result
+
     case "${key}" in
       av) fmt="${YELLOW}" ;;
       film) fmt="${BLUE}" ;;
@@ -446,7 +446,8 @@ unit_test() {
       dest="${locations[${key}]}"
       [[ ${path} && ! ${path} -ef ${dest} ]] && err='different path'
     fi
-    result=('name' "${name}" 'path' "${path}" 'dest' "${dest}" 'type' "${key}" 'stat' "${err-pass}")
+
+    result=('name' "${name}" 'path' "${path}" 'dest' "${dest}" 'type' "${key}" 'stat' "${err:-pass}")
     for i in {1..7..2}; do
       case "${result[i]}" in
         '') result[i]='null' ;;
@@ -454,6 +455,7 @@ unit_test() {
         *) ((i < 7)) && result[i]="\"${result[i]}\"" ;;
       esac
     done
+
     if [[ ${err} ]]; then
       error+=("${result[@]}")
       fmt="${RED}"
@@ -463,13 +465,17 @@ unit_test() {
     else
       fmt='%s: %s\n'
     fi
+
     printf -- "- ${fmt}" "${result[@]::2}"
     printf -- "  ${fmt}" "${result[@]:2}"
   }
 
   local arg i isatty error=()
-  [[ $1 == 'all' ]] && set -- tr tv film
   if [[ -t 1 ]]; then isatty=1; else isatty=0; fi
+  case $1 in
+    'all') set -- tr tv film ;;
+    '') die 'Empty argument.' ;;
+  esac
 
   printf '%s:\n' "results"
   for arg; do
@@ -484,7 +490,7 @@ unit_test() {
         shopt -u nullglob
         popd 1>/dev/null 2>&1
         ;;
-      ?*)
+      *)
         if [[ ${arg} =~ ^[0-9]+$ ]]; then
           _test_tr "${arg}"
         elif [[ -e ${arg} ]]; then

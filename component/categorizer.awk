@@ -45,7 +45,7 @@ NR % 2 {  # path
         next
     }
     path = tolower(path)
-    sub(/\/bdmv\/stream\/[^/]+\.m2ts$/, "/bdmv/stream.m2ts", path) ||
+    sub(/\/bdmv\/stream\/[^/]+\.m2ts$/, "/bdmv.m2ts", path) ||
     sub(/\/[^/]*vts[0-9_]+\.vob$/, "/video_ts.vob", path)
     sizedict[path] += $0  # {path: size}
 }
