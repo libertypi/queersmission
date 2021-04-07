@@ -12,20 +12,16 @@ die() {
   exit 1
 }
 
-unset IFS tr_api seed_dir watch_dir GiB quota locations
 export LC_ALL=C LANG=C
+unset IFS seed_dir locations tr_api quota watch_dir GiB
 
 ((BASH_VERSINFO[0] >= 4)) 1>/dev/null 2>&1 || die 'Bash >=4 required.'
 hash curl jq || die 'Curl and jq required.'
-cd "${BASH_SOURCE[0]%/*}" || die 'Unable to enter script directory.'
-. ./config || die "Loading config file failed."
+cd -- "${BASH_SOURCE[0]%/*}" || die 'Unable to enter script directory.'
 
-readonly -- \
-  logfile="${PWD}/logfile.log" \
-  categorizer="${PWD}/component/categorizer.awk" \
-  regexfile="${PWD}/component/regex.txt" \
-  RED='\e[31m' GREEN='\e[32m' YELLOW='\e[33m' BLUE='\e[94m' \
-  MAGENTA='\e[95m' ENDCOLOR='\e[0m'
+. ./config || die "Loading config file failed."
+[[ ${seed_dir} == /* && ${locations['default']} == /* && ${tr_api} == http* && ${quota} -ge 0 ]] ||
+  die 'Invalid configuration.'
 
 ################################################################################
 #                                  Functions                                   #
@@ -51,85 +47,19 @@ EOF
   exit 0
 }
 
-# Normalize path, eliminating double slashes, etc.
-# Usage: new_path="$(normpath "${old_path}")"
-# Translated from Python's posixpath.normpath:
-# https://github.com/python/cpython/blob/master/Lib/posixpath.py#L337
-normpath() {
-  local IFS=/ c s cs=()
-  if [[ $1 == /* ]]; then
-    s='/'
-    [[ $1 == //* && $1 != ///* ]] && s='//'
-  fi
-  for c in $1; do
-    [[ -z ${c} || ${c} == '.' ]] && continue
-    if [[ ${c} != '..' || (-z ${s} && ${#cs[@]} -eq 0) || (${#cs[@]} -gt 0 && ${cs[-1]} == '..') ]]; then
-      cs+=("${c}")
-    elif ((${#cs[@]})); then
-      unset 'cs[-1]'
-    fi
-  done
-  c="${s}${cs[*]}"
-  printf '%s' "${c:-.}"
-}
-
-set_tr_header() {
-  if [[ "$(curl -s -I -- "${tr_api}")" =~ 'X-Transmission-Session-Id:'[[:blank:]]*[[:alnum:]]+ ]]; then
-    tr_header="${BASH_REMATCH[0]}"
-    return 0
-  fi
-  return 1
-}
-
-# Send an API request.
-# $1: data to send
-request_tr() {
-  local i
-  for i in {1..4}; do
-    if curl -s -f --header "${tr_header}" -d "$1" -- "${tr_api}"; then
-      return 0
-    elif ((i < 4)); then
-      set_tr_header
-    fi
-  done
-  printf 'API request failed: url: "%s", data: "%s"\n' "${tr_api}" "$1" 1>&2
-  return 1
-}
-
-show_tr_list() {
-  local id name pct dir w1=2 w2=8 arr=()
-  set_tr_header || die 'Connection failed.'
-
-  while IFS=/ read -r -d '' id pct name dir; do
-    arr+=("${id}" "${pct}" "${dir}" "${name}")
-    ((${#id} > w1)) && w1="${#id}"
-    ((${#dir} > w2)) && w2="${#dir}"
-  done < <(
-    request_tr '{"arguments":{"fields":["id","percentDone","name","downloadDir"]},"method":"torrent-get"}' |
-      jq -j '.arguments.torrents[]|"\(.id)/\(.percentDone * 100)/\(.name)/\(.downloadDir)\u0000"'
-  )
-  ((${#arr[@]})) || exit 1
-
-  printf "%${w1}s  %5s  %-${w2}s  %s\n" 'ID' 'PCT' 'LOCATION' 'NAME'
-  if [[ -t 1 ]]; then
-    w1="%${w1}d  ${MAGENTA}%5.1f  %-${w2}s  ${YELLOW}%s${ENDCOLOR}\n"
-  else
-    w1="%${w1}d  %5.1f  %-${w2}s  %s\n"
-  fi
-  printf "${w1}" "${arr[@]//[[:cntrl:]]/ }"
-  exit 0
-}
-
 init() {
-  local i
-  # verify configurations
-  [[ ${seed_dir} == /* && ${locations['default']} == /* && ${tr_api} == http* && ${quota} -ge 0 ]] ||
-    die 'Invalid configuration.'
-
   # init variables
-  seed_dir="$(normpath "${seed_dir}")"
-  tr_header='' tr_maindata='' tr_totalsize='' tr_paused='' logs=() dryrun=0 savejson=''
+  local i
+  readonly -- \
+    locations tr_api watch_dir GiB \
+    seed_dir="$(normpath "${seed_dir}")" \
+    logfile="${PWD}/logfile.log" \
+    categorizer="${PWD}/component/categorizer.awk" \
+    regexfile="${PWD}/component/regex.txt" \
+    RED='\e[31m' GREEN='\e[32m' YELLOW='\e[33m' BLUE='\e[94m' \
+    MAGENTA='\e[95m' ENDCOLOR='\e[0m'
   declare -Ag tr_names=()
+  tr_header='' tr_maindata='' tr_totalsize='' tr_paused='' savejson='' dryrun=0 logs=()
 
   # parse arguments
   while getopts 'hdsf:j:q:t:' i; do
@@ -144,18 +74,16 @@ init() {
       *) die "Try '${BASH_SOURCE[0]} -h' for more information" ;;
     esac
   done
+  readonly -- dryrun savejson quota
 
-  # acquire lock
-  exec {i}<"${BASH_SOURCE[0]##*/}"
+  # acuire lock
+  exec {i}<"./${BASH_SOURCE[0]##*/}"
   if [[ ${TR_TORRENT_ID} ]]; then
     flock -x "${i}"
   elif ! flock -x -n "${i}"; then
     die "Unable to acquire lock, another instance running?"
   fi
-
   trap 'write_log' EXIT
-  readonly -- tr_api seed_dir watch_dir GiB quota locations dryrun savejson
-  set_tr_header
 }
 
 # Copy finished downloads to destination. This function only runs when the
@@ -356,6 +284,51 @@ resume_paused() {
   fi
 }
 
+# Normalize path, eliminating double slashes, etc.
+# Usage: new_path="$(normpath "${old_path}")"
+# Translated from Python's posixpath.normpath:
+# https://github.com/python/cpython/blob/master/Lib/posixpath.py#L337
+normpath() {
+  local IFS=/ c s cs=()
+  if [[ $1 == /* ]]; then
+    s='/'
+    [[ $1 == //* && $1 != ///* ]] && s='//'
+  fi
+  for c in $1; do
+    [[ -z ${c} || ${c} == '.' ]] && continue
+    if [[ ${c} != '..' || (-z ${s} && ${#cs[@]} -eq 0) || (${#cs[@]} -gt 0 && ${cs[-1]} == '..') ]]; then
+      cs+=("${c}")
+    elif ((${#cs[@]})); then
+      unset 'cs[-1]'
+    fi
+  done
+  c="${s}${cs[*]}"
+  printf '%s' "${c:-.}"
+}
+
+set_tr_header() {
+  if [[ "$(curl -s -I -- "${tr_api}")" =~ 'X-Transmission-Session-Id:'[[:blank:]]*[[:alnum:]]+ ]]; then
+    tr_header="${BASH_REMATCH[0]}"
+    return 0
+  fi
+  return 1
+}
+
+# Send an API request.
+# $1: data to send
+request_tr() {
+  local i
+  for i in {1..4}; do
+    if curl -s -f --header "${tr_header}" -d "$1" -- "${tr_api}"; then
+      return 0
+    elif ((i < 4)); then
+      set_tr_header
+    fi
+  done
+  printf 'API request failed. url: "%s", data: "%s"\n' "${tr_api}" "$1" 1>&2
+  return 1
+}
+
 # Record one line of log.
 # columns & arguments, width:
 #   --: mm/dd/yy hh:mm:ss     (17)
@@ -394,6 +367,30 @@ write_log() {
       } >"${logfile}"
     fi
   fi
+}
+
+show_tr_list() {
+  local id name pct dir w1=2 w2=8 arr=()
+  set_tr_header || die 'Connection failed.'
+
+  while IFS=/ read -r -d '' id pct name dir; do
+    arr+=("${id}" "${pct}" "${dir}" "${name}")
+    ((${#id} > w1)) && w1="${#id}"
+    ((${#dir} > w2)) && w2="${#dir}"
+  done < <(
+    request_tr '{"arguments":{"fields":["id","percentDone","name","downloadDir"]},"method":"torrent-get"}' |
+      jq -j '.arguments.torrents[]|"\(.id)/\(.percentDone * 100)/\(.name)/\(.downloadDir)\u0000"'
+  )
+  ((${#arr[@]})) || exit 1
+
+  printf "%${w1}s  %5s  %-${w2}s  %s\n" 'ID' 'PCT' 'LOCATION' 'NAME'
+  if [[ -t 1 ]]; then
+    w1="%${w1}d  ${MAGENTA}%5.1f  %-${w2}s  ${YELLOW}%s${ENDCOLOR}\n"
+  else
+    w1="%${w1}d  %5.1f  %-${w2}s  %s\n"
+  fi
+  printf "${w1}" "${arr[@]//[[:cntrl:]]/ }"
+  exit 0
 }
 
 unit_test() {
@@ -514,6 +511,7 @@ unit_test() {
 ################################################################################
 
 init "$@"
+set_tr_header
 copy_finished
 process_maindata
 clean_disk
