@@ -360,18 +360,17 @@ resume_paused() {
 #   $2: location              (30)
 #   $3: name
 append_log() {
-  local loc
-  if ((${#2} <= 30)); then loc="$2"; else loc="${2::27}..."; fi
-  printf -v "logs[${#logs[@]}]" '%(%D %T)T  %-6s  %-30s  %s' -1 "$1" "${loc}" "$3"
+  printf -v "logs[${#logs[@]}]" '%(%D %T)T  %-6.6s  %-30.30s  %s\n' \
+    -1 "$1" "${2//[[:cntrl:]]/ }" "${3//[[:cntrl:]]/ }"
 }
 
 # Print logs in reversed order.
 print_log() {
   local i
-  printf -v i '%0.s-' {1..80} # sep-line length: 80
+  printf -v i '%.0s-' {1..80} # sep-line length: 80
   printf '%-17s  %-6s  %-30s  %s\n%s\n' 'Date' 'Status' 'Location' 'Name' "${i}"
   for ((i = ${#logs[@]} - 1; i >= 0; i--)); do
-    printf '%s\n' "${logs[i]//[[:cntrl:]]/ }"
+    printf '%s' "${logs[i]}"
   done
 }
 
