@@ -78,7 +78,6 @@ set_tr_header() {
     tr_header="${BASH_REMATCH[0]}"
     return 0
   fi
-  printf 'Getting API header failed.\n' 1>&2
   return 1
 }
 
@@ -93,7 +92,7 @@ request_tr() {
       set_tr_header
     fi
   done
-  printf 'Querying API failed: url: "%s", data: "%s"\n' "${tr_api}" "$1" 1>&2
+  printf 'API request failed: url: "%s", data: "%s"\n' "${tr_api}" "$1" 1>&2
   return 1
 }
 
@@ -141,7 +140,7 @@ init() {
       f) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'ID should be integer >= 0' && TR_TORRENT_ID="${OPTARG}" ;;
       j) [[ ${OPTARG} && ! -d ${OPTARG} ]] || die 'Invalid json filename.' && savejson="$(normpath "${OPTARG}")" ;;
       q) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'QUOTA must be integer >= 0.' && ((quota = OPTARG * GiB)) ;;
-      t) [[ ${OPTARG} ]] || die "Empty TEST." && unit_test "${OPTARG}" ;;
+      t) unit_test "${OPTARG}" ;;
       *) die "Try '${BASH_SOURCE[0]} -h' for more information" ;;
     esac
   done
@@ -252,13 +251,14 @@ process_maindata() {
     request_tr '{"arguments":{"fields":["activityDate","id","name","percentDone","sizeWhenDone","status"]},"method":"torrent-get"}'
   )" || exit 1
   if [[ ${savejson} ]]; then
-    printf 'Save json to: "%s"\n' "${savejson}" 1>&2
-    printf '%s' "${tr_maindata}" | jq '.' >"${savejson}"
+    printf '%s' "${tr_maindata}" | jq '.' >"${savejson}" &&
+      printf 'Json data saved to: "%s"\n' "${savejson}" 1>&2
   fi
 
   {
-    IFS=/ read -r -d '' tr_totalsize tr_paused result
-    [[ ${result} == 'success' ]] || die "Parsing json failed. Status: '${result}'"
+    IFS=/ read -r -d '' tr_totalsize tr_paused result &&
+      [[ ${result} == 'success' ]] ||
+      die "Parsing maindata failed. Status: '${result}'"
     while IFS= read -r -d '' name; do
       tr_names["${name}"]=1
     done
@@ -296,7 +296,7 @@ clean_disk() {
     fi
 
     if ((n = ${#obsolete[@]})); then
-      printf 'Delete: %s\n' "${obsolete[@]//[[:cntrl:]]/ }" 1>&2
+      printf 'Cleanup: %s\n' "${obsolete[@]}" 1>&2
       ((dryrun)) || for ((i = 0; i < n; i += 100)); do
         rm -r -f -- "${obsolete[@]:i:100}"
       done
@@ -339,7 +339,7 @@ remove_inactive() {
   )
 
   if ((${#names[@]})); then
-    printf 'Remove %d torrents.\n' "${#names[@]}" 1>&2
+    printf 'Remove: %s\n' "${names[@]}" 1>&2
     ((dryrun)) ||
       request_tr "{\"arguments\":{\"ids\":[${ids%,}],\"delete-local-data\":true},\"method\":\"torrent-remove\"}" >/dev/null &&
       for name in "${names[@]}"; do
@@ -424,7 +424,7 @@ unit_test() {
       if [[ ${path} ]] && { [[ ${PWD} == "${path}" ]] || cd "${path}" 1>/dev/null 2>&1; }; then
         find "${name}" -name '[.#@]*' -prune -o -type f -printf '%p\0%s\0'
       else
-        printf '%s\0%d\0' "${name}" 0
+        printf '%s\0%d\0' "${name}" 1
       fi | awk -v regexfile="${regexfile}" -f "${categorizer}"
     )"
     _examine_test "${key}" "$@"
@@ -470,12 +470,12 @@ unit_test() {
     printf -- "  ${fmt}" "${result[@]:2}"
   }
 
+  case "$1" in
+    'all') set -- tr tv film ;;
+    '') die 'Empty TEST argument.' ;;
+  esac
   local arg i isatty error=()
   if [[ -t 1 ]]; then isatty=1; else isatty=0; fi
-  case $1 in
-    'all') set -- tr tv film ;;
-    '') die 'Empty argument.' ;;
-  esac
 
   printf '%s:\n' "results"
   for arg; do
