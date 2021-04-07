@@ -106,26 +106,27 @@ copy_finished() {
     return 0
   }
 
-  local src dest logdir to_seeddir=0 use_rsync=0
-  # query torrent path by id
+  local src dest logdir data to_seeddir=0 use_rsync=0
+
   [[ ${TR_TORRENT_NAME} && ${TR_TORRENT_DIR} ]] || {
+    data="$(query_tr_by_id "${TR_TORRENT_ID}")" || die "Connecting failed."
     IFS=/ read -r -d '' TR_TORRENT_NAME TR_TORRENT_DIR < <(
-      request_tr "{\"arguments\":{\"fields\":[\"name\",\"downloadDir\"],\"ids\":[${TR_TORRENT_ID}]},\"method\":\"torrent-get\"}" |
+      printf '%s' "${data}" |
         jq -j '.arguments.torrents[]|"\(.name)/\(.downloadDir)\u0000"'
     ) && [[ ${TR_TORRENT_NAME} && ${TR_TORRENT_DIR} ]] ||
-      die "Invalid torrent ID: ${TR_TORRENT_ID}. Run '${BASH_SOURCE[0]} -s' to show torrent list."
+      die "Invalid torrent ID '${TR_TORRENT_ID}'. Run '${BASH_SOURCE[0]} -s' to show torrent list."
   }
   src="$(normpath "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}")"
 
   # decide the destination
   if [[ ${TR_TORRENT_DIR} -ef ${seed_dir} ]]; then # source: seed_dir
-    logdir="${locations[$(
-      request_tr "{\"arguments\":{\"fields\":[\"files\"],\"ids\":[${TR_TORRENT_ID}]},\"method\":\"torrent-get\"}" |
+    logdir="$(
+      if [[ ${data} ]]; then printf '%s' "${data}"; else query_tr_by_id "${TR_TORRENT_ID}"; fi |
         jq -j '.arguments.torrents[].files[]|"\(.name)\u0000\(.length)\u0000"' |
         awk -v regexfile="${regexfile}" -f "${categorizer}"
-    )]}"
+    )"
     # fallback to default if failed
-    logdir="$(normpath "${logdir:-${locations['default']}}")"
+    logdir="$(normpath "${locations[${logdir:-default}]:-${locations[default]}}")"
     # if source is not a dir, append a sub-directory
     if [[ -d ${src} ]]; then
       dest="${logdir}"
@@ -154,10 +155,8 @@ copy_finished() {
   fi
 
   # copy file
-  {
-    if ((use_rsync)); then printf 'Syncing'; else printf 'Copying'; fi
-    printf ': "%s" -> "%s/"\n' "${src}" "${dest}"
-  } 1>&2
+  if ((use_rsync)); then data='Syncing'; else data='Copying'; fi
+  printf '%s: "%s" -> "%s/"\n' "${data}" "${src}" "${dest}" 1>&2
   append_log 'Error' "${logdir}" "${TR_TORRENT_NAME}"
   if ((dryrun)) || _copy_to_dest; then
     unset 'logs[-1]'
@@ -329,6 +328,11 @@ request_tr() {
   return 1
 }
 
+# query torrent info by id
+query_tr_by_id() {
+  request_tr "{\"arguments\":{\"fields\":[\"name\",\"downloadDir\",\"files\"],\"ids\":[${1:?}]},\"method\":\"torrent-get\"}"
+}
+
 # Record one line of log.
 # columns & arguments, width:
 #   --: mm/dd/yy hh:mm:ss     (17)
@@ -407,7 +411,7 @@ unit_test() {
       _examine_test "${key}" "${name}"
     done < <(
       if [[ ${id} ]]; then
-        request_tr "{\"arguments\":{\"fields\":[\"name\",\"files\"],\"ids\":[${id}]},\"method\":\"torrent-get\"}"
+        query_tr_by_id "${id}"
       else
         request_tr '{"arguments":{"fields":["name","files"]},"method":"torrent-get"}'
       fi | jq -j '.arguments.torrents[]|"\(.name)/\(.files)\u0000"'
