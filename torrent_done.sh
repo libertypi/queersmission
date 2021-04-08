@@ -111,8 +111,7 @@ copy_finished() {
   [[ ${TR_TORRENT_NAME} && ${TR_TORRENT_DIR} ]] || {
     data="$(query_tr_by_id "${TR_TORRENT_ID}")" || die "Connecting failed."
     IFS=/ read -r -d '' TR_TORRENT_NAME TR_TORRENT_DIR < <(
-      printf '%s' "${data}" |
-        jq -j '.arguments.torrents[]|"\(.name)/\(.downloadDir)\u0000"'
+      printf '%s' "${data}" | jq -j '.arguments.torrents[]|"\(.name)/\(.downloadDir)\u0000"'
     ) && [[ ${TR_TORRENT_NAME} && ${TR_TORRENT_DIR} ]] ||
       die "Invalid torrent ID '${TR_TORRENT_ID}'. Run '${BASH_SOURCE[0]} -s' to show torrent list."
   }
@@ -155,9 +154,9 @@ copy_finished() {
   fi
 
   # copy file
+  append_log 'Error' "${logdir}" "${TR_TORRENT_NAME}"
   if ((use_rsync)); then data='Syncing'; else data='Copying'; fi
   printf '%s: "%s" -> "%s/"\n' "${data}" "${src}" "${dest}" 1>&2
-  append_log 'Error' "${logdir}" "${TR_TORRENT_NAME}"
   if ((dryrun)) || _copy_to_dest; then
     unset 'logs[-1]'
     append_log 'Finish' "${logdir}" "${TR_TORRENT_NAME}"
