@@ -58,8 +58,7 @@ init() {
     regexfile="${PWD}/component/regex.txt" \
     RED='\e[31m' GREEN='\e[32m' YELLOW='\e[33m' BLUE='\e[94m' \
     MAGENTA='\e[95m' ENDCOLOR='\e[0m'
-  declare -Ag tr_names=()
-  tr_header='' tr_maindata='' tr_totalsize='' tr_paused='' savejson='' dryrun=0 logs=()
+  tr_header='' savejson='' dryrun=0 logs=()
 
   # parse arguments
   while getopts 'hdsf:j:q:t:' i; do
@@ -97,7 +96,7 @@ copy_finished() {
     else
       [[ -e ${dest} ]] || mkdir -p -- "${dest}" && cp -a -f -- "${src}" "${dest}/"
     fi || return 1
-    if ((to_seeddir)); then
+    if [[ ${dest} == "${seed_dir}" ]]; then
       request_tr "$(
         jq -acn --argjson i "${TR_TORRENT_ID}" --arg d "${seed_dir}" \
           '{"arguments":{"ids":[$i],"location":$d},"method":"torrent-set-location"}'
@@ -106,7 +105,7 @@ copy_finished() {
     return 0
   }
 
-  local src dest logdir data to_seeddir=0 use_rsync=0
+  local src dest logdir data use_rsync=0
 
   [[ ${TR_TORRENT_NAME} && ${TR_TORRENT_DIR} ]] || {
     data="$(query_tr_by_id "${TR_TORRENT_ID}")" || die "Connecting failed."
@@ -148,7 +147,6 @@ copy_finished() {
       fi
     fi
   else # dest: seed_dir
-    to_seeddir=1
     logdir="${TR_TORRENT_DIR}"
     dest="${seed_dir}"
   fi
@@ -164,9 +162,6 @@ copy_finished() {
     return 0
   fi
   printf 'Failed.\n' 1>&2
-  if [[ ${to_seeddir} -eq 1 && -e "${seed_dir}/${TR_TORRENT_NAME}" ]]; then
-    rm -r -f -- "${seed_dir:?}/${TR_TORRENT_NAME:?}"
-  fi
   return 1
 }
 
@@ -174,10 +169,11 @@ copy_finished() {
 # torrent status number:
 # https://github.com/transmission/transmission/blob/master/libtransmission/transmission.h#L1658
 process_maindata() {
-  local name result
+  local count pct size name dir
+  declare -Ag tr_names=()
 
   tr_maindata="$(
-    request_tr '{"arguments":{"fields":["activityDate","id","name","percentDone","sizeWhenDone","status"]},"method":"torrent-get"}'
+    request_tr '{"arguments":{"fields":["activityDate","downloadDir","id","name","percentDone","sizeWhenDone","status"]},"method":"torrent-get"}'
   )" || die 'Unable to connect to transmission API.'
   if [[ ${savejson} ]]; then
     printf '%s' "${tr_maindata}" | jq '.' >"${savejson}" &&
@@ -185,20 +181,26 @@ process_maindata() {
   fi
 
   {
-    IFS=/ read -r -d '' tr_totalsize tr_paused result &&
-      [[ ${result} == 'success' ]] ||
-      die "Parsing maindata failed. Status: '${result}'"
-    while IFS= read -r -d '' name; do
-      tr_names["${name}"]=1
+    IFS=/ read -r -d '' count tr_totalsize tr_paused || die "Invalid json response."
+    while IFS=/ read -r -d '' pct size name dir; do
+      if [[ ${seed_dir} == "${dir}" || ${seed_dir} -ef ${dir} ]]; then
+        tr_names["${name}"]=1
+      elif [[ ${pct} == 1 ]]; then
+        # finished torrents outside seed_dir are excluded from size calculation
+        ((tr_totalsize -= size))
+      fi
     done
   } < <(
     printf '%s' "${tr_maindata}" | jq -j '
-      "\([.arguments.torrents[].sizeWhenDone]|add)/\(.arguments.torrents|map(select(.status == 0))|length)/\(.result)\u0000",
-      "\(.arguments.torrents[].name)\u0000"'
+      if .result == "success" then
+      .arguments.torrents|
+      ("\(length)/\([.[].sizeWhenDone]|add)/\(map(select(.status == 0))|length)\u0000"),
+      (.[]|"\(.percentDone)/\(.sizeWhenDone)/\(.name)/\(.downloadDir)\u0000")
+      else empty end'
   )
 
-  printf 'torrents: %d, total size: %d GiB, paused: %d\n' \
-    "${#tr_names[@]}" "$((tr_totalsize / GiB))" "${tr_paused}" 1>&2
+  printf 'torrents: %d, paused: %d, size: %d GiB\n' \
+    "${count}" "${tr_paused}" "$((tr_totalsize / GiB))" 1>&2
 }
 
 # Clean junk files in seed_dir and watch_dir. This function runs in a subshell.
@@ -210,7 +212,7 @@ clean_disk() {
     if ((${#tr_names[@]})) && cd -- "${seed_dir}"; then
       for i in *; do
         [[ ${tr_names["${i}"]} || ${tr_names["${i%.part}"]} ]] ||
-          obsolete+=("${PWD:?}/${i}")
+          obsolete+=("${PWD:-${seed_dir}}/${i}")
       done
     else
       printf 'Skip cleanup: "%s"\n' "${seed_dir}" 1>&2
@@ -232,7 +234,7 @@ clean_disk() {
 
 # Remove inactive torrents if disk space was bellow $quota.
 remove_inactive() {
-  local disksize freespace target m n id size name ids names
+  local disksize freespace target m n id size ids names
 
   {
     read -r _
@@ -246,14 +248,15 @@ remove_inactive() {
   if ((m = quota + tr_totalsize - disksize, n = quota - freespace, (target = m > n ? m : n) > 0)); then
     printf 'disk free space: %d GiB, will remove: %d GiB\n' "$((freespace / GiB))" "$((target / GiB))" 1>&2
   else
-    printf 'disk free space: %d GiB, estimated availability: %d GiB. System is healthy.\n' \
+    printf 'disk free space: %d GiB, availability: %d GiB. System is healthy.\n' \
       "$((freespace / GiB))" "$((-target / GiB))" 1>&2
     return 0
   fi
 
-  while IFS=/ read -r -d '' id size name; do
+  while IFS=/ read -r -d '' id size n; do
+    [[ ${tr_names["${n}"]} ]] || continue
     ids+="${id},"
-    names+=("${name}")
+    names+=("${n}")
     (((target -= size) <= 0)) && break
   done < <(
     printf '%s' "${tr_maindata}" | jq -j '
@@ -267,8 +270,8 @@ remove_inactive() {
     printf 'Remove: %s\n' "${names[@]}" 1>&2
     ((dryrun)) ||
       request_tr "{\"arguments\":{\"ids\":[${ids%,}],\"delete-local-data\":true},\"method\":\"torrent-remove\"}" >/dev/null &&
-      for name in "${names[@]}"; do
-        append_log 'Remove' "${seed_dir}" "${name}"
+      for n in "${names[@]}"; do
+        append_log 'Remove' "${seed_dir}" "${n}"
       done
   fi
 }
