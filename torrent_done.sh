@@ -169,7 +169,7 @@ copy_finished() {
 # torrent status number:
 # https://github.com/transmission/transmission/blob/master/libtransmission/transmission.h#L1658
 process_maindata() {
-  local count pct size name dir
+  local i name dir
   declare -Ag tr_names=()
 
   tr_maindata="$(
@@ -181,26 +181,20 @@ process_maindata() {
   fi
 
   {
-    IFS=/ read -r -d '' count tr_totalsize tr_paused || die "Invalid json response."
-    while IFS=/ read -r -d '' pct size name dir; do
-      if [[ ${seed_dir} == "${dir}" || ${seed_dir} -ef ${dir} ]]; then
-        tr_names["${name}"]=1
-      elif [[ ${pct} == 1 ]]; then
-        # finished torrents outside seed_dir are excluded from size calculation
-        ((tr_totalsize -= size))
-      fi
+    IFS=/ read -r -d '' i tr_totalsize tr_paused || die "Invalid json response."
+    while IFS=/ read -r -d '' name dir; do
+      [[ ${seed_dir} == "${dir}" || ${seed_dir} -ef ${dir} ]] && tr_names["${name}"]=1
     done
   } < <(
     printf '%s' "${tr_maindata}" | jq -j '
       if .result == "success" then
       .arguments.torrents|
       ("\(length)/\([.[].sizeWhenDone]|add)/\(map(select(.status == 0))|length)\u0000"),
-      (.[]|"\(.percentDone)/\(.sizeWhenDone)/\(.name)/\(.downloadDir)\u0000")
+      (.[]|"\(.name)/\(.downloadDir)\u0000")
       else empty end'
   )
 
-  printf 'torrents: %d, paused: %d, size: %d GiB\n' \
-    "${count}" "${tr_paused}" "$((tr_totalsize / GiB))" 1>&2
+  printf 'torrents: %d, paused: %d, size: %d GiB\n' "${i}" "${tr_paused}" "$((tr_totalsize / GiB))" 1>&2
 }
 
 # Clean junk files in seed_dir and watch_dir. This function runs in a subshell.
