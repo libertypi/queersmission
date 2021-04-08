@@ -13,7 +13,8 @@ die() {
 }
 
 export LC_ALL=C LANG=C
-unset IFS seed_dir locations tr_api quota watch_dir GiB
+unset IFS seed_dir locations tr_api quota watch_dir
+GiB=1073741824
 
 ((BASH_VERSINFO >= 4)) 1>/dev/null 2>&1 || die 'Bash >=4 required.'
 hash curl jq || die 'Curl and jq required.'
