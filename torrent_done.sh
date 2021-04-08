@@ -244,10 +244,9 @@ remove_inactive() {
   }
 
   if ((m = quota + tr_totalsize - disksize, n = quota - freespace, (target = m > n ? m : n) > 0)); then
-    printf 'free space: %d GiB, will free up: %d GiB\n' \
-      "$((freespace / GiB))" "$((target / GiB))" 1>&2
+    printf 'disk free space: %d GiB, will remove: %d GiB\n' "$((freespace / GiB))" "$((target / GiB))" 1>&2
   else
-    printf 'free space: %d GiB, avail space: %d GiB. System is healthy.\n' \
+    printf 'disk free space: %d GiB, estimated availability: %d GiB. System is healthy.\n' \
       "$((freespace / GiB))" "$((-target / GiB))" 1>&2
     return 0
   fi
