@@ -15,7 +15,7 @@ BEGIN {
     RS = "\0"
     raise_exit = size_reached = 0
     size_thresh = 52428800  # 50 MiB
-    split("", sizedict)
+    delete sizedict
 
     if (regexfile != "" && (getline av_regex < regexfile) > 0 && av_regex ~ /[^[:space:]]/) {
         gsub(/^[[:space:]]+|[[:space:]]+$/, "", av_regex)

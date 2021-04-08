@@ -8,20 +8,20 @@
 ################################################################################
 
 die() {
-  printf 'Error: %s\n' "$1" 1>&2
+  printf 'Fatal: %s\n' "$1" 1>&2
   exit 1
 }
 
 export LC_ALL=C LANG=C
 unset IFS seed_dir locations tr_api quota watch_dir
-GiB=1073741824
 
 ((BASH_VERSINFO >= 4)) 1>/dev/null 2>&1 || die 'Bash >=4 required.'
 hash curl jq || die 'Curl and jq required.'
 cd -- "${BASH_SOURCE[0]%/*}" || die 'Unable to enter script directory.'
 
+readonly GiB=1073741824
 . ./config || die "Loading config file failed."
-[[ ${seed_dir} == /* && ${locations['default']} == /* && ${tr_api} == http* && ${quota} -ge 0 ]] ||
+[[ ${tr_api} == http* && ${seed_dir} == /* && ${quota} -ge 0 && ${locations['default']} == /* ]] ||
   die 'Invalid configuration.'
 
 ################################################################################
@@ -51,8 +51,7 @@ EOF
 init() {
   # init variables
   local i
-  readonly -- \
-    locations tr_api watch_dir GiB \
+  readonly -- locations tr_api watch_dir \
     seed_dir="$(normpath "${seed_dir}")" \
     logfile="${PWD}/logfile.log" \
     categorizer="${PWD}/component/categorizer.awk" \
@@ -75,7 +74,7 @@ init() {
       *) die "Try '${BASH_SOURCE[0]} -h' for more information" ;;
     esac
   done
-  readonly -- dryrun savejson quota
+  readonly -- quota dryrun savejson
 
   # acuire lock
   exec {i}<"./${BASH_SOURCE[0]##*/}"
@@ -179,7 +178,7 @@ process_maindata() {
 
   tr_maindata="$(
     request_tr '{"arguments":{"fields":["activityDate","id","name","percentDone","sizeWhenDone","status"]},"method":"torrent-get"}'
-  )" || exit 1
+  )" || die 'Unable to connect to transmission API.'
   if [[ ${savejson} ]]; then
     printf '%s' "${tr_maindata}" | jq '.' >"${savejson}" &&
       printf 'Json data saved to: "%s"\n' "${savejson}" 1>&2
@@ -214,7 +213,7 @@ clean_disk() {
           obsolete+=("${PWD:?}/${i}")
       done
     else
-      printf 'Skip seed_dir cleanup: "%s"\n' "${seed_dir}" 1>&2
+      printf 'Skip cleanup: "%s"\n' "${seed_dir}" 1>&2
     fi
     if [[ ${watch_dir} ]]; then
       for i in "${watch_dir}/"*.torrent; do
@@ -222,9 +221,9 @@ clean_disk() {
       done
     fi
 
-    if ((n = ${#obsolete[@]})); then
+    if ((${#obsolete[@]})); then
       printf 'Cleanup: %s\n' "${obsolete[@]}" 1>&2
-      ((dryrun)) || for ((i = 0; i < n; i += 100)); do
+      ((dryrun)) || for ((i = 0; i < ${#obsolete[@]}; i += 100)); do
         rm -r -f -- "${obsolete[@]:i:100}"
       done
     fi
@@ -324,7 +323,7 @@ request_tr() {
       set_tr_header
     fi
   done
-  printf 'API request failed. url: "%s", data: "%s"\n' "${tr_api}" "$1" 1>&2
+  printf 'Connection failure. url: \047%s\047, request: \047%s\047\n' "${tr_api}" "$1" 1>&2
   return 1
 }
 
@@ -401,7 +400,7 @@ unit_test() {
 
   _test_tr() {
     local id="$1" name files key
-    set_tr_header || die "Connecting failed."
+    set_tr_header || die 'Unable to connect to transmission API.'
     while IFS=/ read -r -d '' name files; do
       key="$(
         printf '%s' "${files}" |
@@ -479,7 +478,8 @@ unit_test() {
     case "${arg}" in
       tr) _test_tr ;;
       tv | film)
-        pushd "${locations[${arg}]}" 1>/dev/null 2>&1 || die "Unable to enter: '${locations[${arg}]}'"
+        pushd -- "${locations[${arg}]}" 1>/dev/null 2>&1 ||
+          die "Unable to enter: '${locations[${arg}]}'"
         shopt -s nullglob
         for i in [^.\#@]*; do
           _test_dir "${i}" "${PWD}"
