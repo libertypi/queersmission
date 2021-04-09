@@ -432,15 +432,15 @@ show_tr_info() {
   local data files \
     kfmt="${MAGENTA}%s${ENDCOLOR}:" \
     strings=("name" "downloadDir" "hashString" "id" "status") \
-    precents=("percentDone") \
+    percents=("percentDone") \
     sizes=("totalSize" "sizeWhenDone" "downloadedEver" "uploadedEver") \
     dates=("addedDate" "activityDate")
-  printf -v data '"%s",' "${strings[@]}" "${precents[@]}" "${dates[@]}" "${sizes[@]}" "files"
+  printf -v data '"%s",' "${strings[@]}" "${percents[@]}" "${dates[@]}" "${sizes[@]}" "files"
   printf -v data '{"arguments":{"fields":[%s],"ids":[%d]},"method":"torrent-get"}' "${data%,}" "$1"
 
   {
     _format_read "%s" "${strings[@]}"
-    _format_read "%.2f%%" "${precents[@]}"
+    _format_read "%.2f%%" "${percents[@]}"
     _format_read "%.2f GiB" "${sizes[@]}"
     _format_read "%(%c)T" "${dates[@]}"
     mapfile -t files
