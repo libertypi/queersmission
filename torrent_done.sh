@@ -514,12 +514,11 @@ unit_test() {
       error+=("${result[@]}")
       fmt="${RED}"
     fi
-    fmt="${kfmt} ${fmt}%s${ENDCOLOR}\n"
-
     if ((empty)); then
       printf "${kfmt}\n" "results"
       empty=0
     fi
+    fmt="${kfmt} ${fmt}%s${ENDCOLOR}\n"
     printf -- "- ${fmt}" "${result[@]::2}"
     printf -- "  ${fmt}" "${result[@]:2}"
   }
