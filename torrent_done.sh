@@ -58,14 +58,6 @@ init() {
     regexfile="${PWD}/component/regex.txt"
   tr_header='' savejson='' dryrun=0 logs=()
 
-  # colors
-  if [[ -t 1 ]]; then
-    readonly -- RED='\e[31m' GREEN='\e[32m' YELLOW='\e[33m' BLUE='\e[94m' \
-      MAGENTA='\e[95m' CYAN='\e[36m' ENDCOLOR='\e[0m'
-  else
-    readonly -- RED='' GREEN='' YELLOW='' BLUE='' MAGENTA='' CYAN='' ENDCOLOR=''
-  fi
-
   # parse arguments
   while getopts 'hdsf:j:q:t:' i; do
     case "${i}" in
@@ -375,9 +367,19 @@ write_log() {
   fi
 }
 
+set_colors() {
+  if [[ -t 1 ]]; then
+    readonly -- RED='\e[31m' GREEN='\e[32m' YELLOW='\e[33m' BLUE='\e[94m' \
+      MAGENTA='\e[95m' CYAN='\e[36m' ENDCOLOR='\e[0m'
+  else
+    readonly -- RED='' GREEN='' YELLOW='' BLUE='' MAGENTA='' CYAN='' ENDCOLOR=''
+  fi
+}
+
 show_tr_list() {
-  local id name pct dir w1=2 w2=8 arr=()
+  set_colors
   set_tr_header || die 'Connection failed.'
+  local id name pct dir w1=2 w2=8 arr=()
 
   while IFS=/ read -r -d '' id pct name dir; do
     arr+=("${id}" "${pct}" "${dir}" "${name}")
@@ -467,8 +469,9 @@ unit_test() {
     printf -- "  ${fmt}" "${result[@]:2}"
   }
 
-  local arg i kfmt="${MAGENTA}%s${ENDCOLOR}:" empty=1 error=()
+  set_colors
   [[ $1 == 'all' ]] && set -- tr tv film
+  local arg i kfmt="${MAGENTA}%s${ENDCOLOR}:" empty=1 error=()
 
   for arg; do
     case "${arg}" in
