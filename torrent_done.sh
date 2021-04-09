@@ -456,7 +456,7 @@ show_tr_info() {
     printf "${kfmt}\n" 'files'
     printf -- "- ${YELLOW}%s%.0s${ENDCOLOR}\n" "${files[@]}"
     printf "${kfmt} ${YELLOW}%s${ENDCOLOR}\n" 'category' \
-      $(printf '%s\n' "${files[@]}" | jq -j '"\(.)\u0000"' | awk -v regexfile="${regexfile}" -f "${categorizer}")
+      "$(printf '%s\n' "${files[@]}" | jq -j '"\(.)\u0000"' | awk -v regexfile="${regexfile}" -f "${categorizer}")"
   fi
   exit 0
 }
