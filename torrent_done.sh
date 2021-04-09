@@ -417,11 +417,11 @@ show_tr_list() {
 
 show_tr_info() {
   _format_read() {
-    local fmt="${kfmt} ${YELLOW}${1}${ENDCOLOR}\n" k
+    local fmt="${kfmt} ${YELLOW}${1}${ENDCOLOR}\n" k v
     shift
     for k; do
-      read -r || exit 1
-      printf "${fmt}" "${k}" "${REPLY}"
+      IFS= read -r v || exit 1
+      printf "${fmt}" "${k}" "${v}"
     done
   }
 
