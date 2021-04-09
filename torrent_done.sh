@@ -550,16 +550,14 @@ unit_test() {
     esac
   done
 
-  if ((empty)); then
-    printf "${kfmt} []\n" 'results'
-  elif ((${#error[@]})); then
+  if ((${#error[@]})); then
     printf "${kfmt}\n" 'errors'
     arg="${kfmt} ${RED}%s${ENDCOLOR}\n"
     for ((i = 0; i < ${#error[@]}; i += 10)); do
       printf -- "- ${arg}" "${error[@]:i:2}"
       printf -- "  ${arg}" "${error[@]:i+2:8}"
     done
-  else
+  elif ((!empty)); then
     exit 0
   fi
   exit 1
