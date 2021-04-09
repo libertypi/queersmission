@@ -48,10 +48,16 @@ Miscellaneous:
   -d         perform a dry run with no changes made
   -h         show this message and exit
   -t TEST    categorizer unit test. TEST: "all", "tr", "tv",
-             "film" or custom path
+             "film" or any path
 EOF
   exit 0
 }
+
+arg_error() {
+  [[ $1 ]] && printf '%s: %s\n' "${BASH_SOURCE[0]}" "$1"
+  printf "Try '%s -h' for more information.\n" "${BASH_SOURCE[0]}"
+  exit 1
+} 1>&2
 
 init() {
   # init variables
@@ -68,31 +74,36 @@ init() {
     case "${i}" in
       h) print_help ;;
       d) dryrun=1 ;;
-      [jt]) [[ ${OPTARG} ]] || die "Option requires a non-empty argument -- '${i}'" ;;&
-      [qfs]) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die "Option requires a positive integer argument -- '${i}'" ;;&
-      [flst]) [[ ${opt} && ${opt} != "${i}" ]] && die "Mutual exclusive options -- '${opt}', '${i}'" ;;&
+      [jt]) [[ ${OPTARG} ]] || arg_error "requires a non-empty argument -- ${i}" ;;&
+      [qfs]) [[ ${OPTARG} =~ ^[0-9]+$ ]] || arg_error "requires a positive integer argument -- ${i}" ;;&
+      [flst]) [[ ${opt} && ${opt} != "${i}" ]] && arg_error "options are mutual exclusive -- ${opt}, ${i}" ;;&
       j) savejson="${OPTARG}" ;;
       q) ((quota = OPTARG * GiB)) ;;
       f) opt="${i}" TR_TORRENT_ID="${OPTARG}" ;;
       [lst]) opt="${i}" arg="${OPTARG}" ;;
-      *) die "Try '${BASH_SOURCE[0]} -h' for more information." ;;
+      *) arg_error ;;
     esac
   done
   readonly -- quota dryrun savejson
 
-  if [[ ${TR_TORRENT_ID} ]]; then
-    exec {i}<"./${BASH_SOURCE[0]##*/}" && flock -x "${i}"
-  elif [[ ${opt} == [lst] ]]; then
-    set_tr_header
+  # stand-alone functions
+  if [[ ${opt} == [lst] ]]; then
     set_colors
+    set_tr_header || die 'Unable to connect to transmission API.'
     case "${opt}" in
       l) show_tr_list ;;
       s) show_tr_info "${arg}" ;;
       t) unit_test "${arg}" ;;
     esac
-  else
-    exec {i}<"./${BASH_SOURCE[0]##*/}" && flock -x -n "${i}" ||
-      die "Unable to acquire lock, another instance running?"
+    exit
+  fi
+
+  # acquire lock
+  exec {i}<"./${BASH_SOURCE[0]##*/}"
+  if [[ ${TR_TORRENT_ID} ]]; then
+    flock -x "${i}"
+  elif ! flock -x -n "${i}"; then
+    die "Unable to acquire lock, another instance running?"
   fi
   trap 'write_log' EXIT
 }
@@ -182,6 +193,7 @@ copy_finished() {
 }
 
 # Query and parse API maindata.
+# Global variables: tr_maindata, tr_totalsize, tr_paused, tr_names
 # torrent status number:
 # https://github.com/transmission/transmission/blob/master/libtransmission/transmission.h#L1658
 process_maindata() {
@@ -248,7 +260,7 @@ remove_inactive() {
   local disksize freespace target m n id size ids names
 
   {
-    read -r _
+    read
     read -r disksize freespace
   } < <(df --block-size=1 --output='size,avail' -- "${seed_dir}") &&
     [[ ${disksize} =~ ^[0-9]+$ && ${freespace} =~ ^[0-9]+$ ]] || {
@@ -408,8 +420,45 @@ show_tr_list() {
 }
 
 show_tr_info() {
-  printf 'TODO\n' 1>&2
-  exit 1
+  _format_read() {
+    local fmt="${kfmt} ${YELLOW}${1}${ENDCOLOR}\n" k
+    shift
+    for k; do
+      read -r || exit 1
+      printf "${fmt}" "${k}" "${REPLY}"
+    done
+  }
+
+  local data files \
+    kfmt="${MAGENTA}%s${ENDCOLOR}:" \
+    strings=("name" "downloadDir" "hashString" "id" "status") \
+    precents=("percentDone") \
+    sizes=("totalSize" "sizeWhenDone" "downloadedEver" "uploadedEver") \
+    dates=("addedDate" "activityDate")
+  printf -v data '"%s",' "${strings[@]}" "${precents[@]}" "${dates[@]}" "${sizes[@]}" "files"
+  printf -v data '{"arguments":{"fields":[%s],"ids":[%d]},"method":"torrent-get"}' "${data%,}" "$1"
+
+  {
+    _format_read "%s" "${strings[@]}"
+    _format_read "%.2f%%" "${precents[@]}"
+    _format_read "%.2f GiB" "${sizes[@]}"
+    _format_read "%(%c)T" "${dates[@]}"
+    mapfile -t files
+  } < <(request_tr "${data}" | jq --argjson g "${GiB}" -r '
+    .arguments.torrents[] |
+    (.name, .downloadDir, .hashString, .id, .status,
+    .percentDone * 100,
+    .totalSize/$g, .sizeWhenDone/$g, .downloadedEver/$g, .uploadedEver/$g,
+    .addedDate, .activityDate),
+    (.files[]|.name, .length) | @json')
+
+  if ((${#files[@]})); then
+    printf "${kfmt}\n" 'files'
+    printf -- "- ${YELLOW}%s%.0s${ENDCOLOR}\n" "${files[@]}"
+    printf "${kfmt} ${YELLOW}%s${ENDCOLOR}\n" 'category' \
+      $(printf '%s\n' "${files[@]}" | jq -j '"\(.)\u0000"' | awk -v regexfile="${regexfile}" -f "${categorizer}")
+  fi
+  exit 0
 }
 
 unit_test() {
@@ -486,10 +535,7 @@ unit_test() {
 
   for arg; do
     case "${arg}" in
-      tr)
-        [[ ${tr_header} ]] || die 'Unable to connect to transmission API.'
-        _test_tr
-        ;;
+      tr) _test_tr ;;
       tv | film)
         pushd -- "${locations[${arg}]}" 1>/dev/null 2>&1 ||
           die "Unable to enter: '${locations[${arg}]}'"
