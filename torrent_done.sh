@@ -458,14 +458,17 @@ unit_test() {
     fi
     fmt="${MAGENTA}%s${ENDCOLOR}: ${fmt}%s${ENDCOLOR}\n"
 
+    if ((empty)); then
+      printf "${MAGENTA}%s${ENDCOLOR}:\n" "results"
+      empty=0
+    fi
     printf -- "- ${fmt}" "${result[@]::2}"
     printf -- "  ${fmt}" "${result[@]:2}"
   }
 
-  local arg i error=()
+  local arg i empty=1 error=()
   [[ $1 == 'all' ]] && set -- tr tv film
 
-  printf "${MAGENTA}%s${ENDCOLOR}:\n" "results"
   for arg; do
     case "${arg}" in
       tr) _test_tr ;;
@@ -491,16 +494,19 @@ unit_test() {
     esac
   done
 
-  if ((${#error[@]})); then
+  if ((empty)); then
+    printf "${MAGENTA}results${ENDCOLOR}: []\n"
+  elif ((${#error[@]})); then
     printf "${MAGENTA}%s${ENDCOLOR}:\n" 'errors'
     arg="${MAGENTA}%s${ENDCOLOR}: ${RED}%s${ENDCOLOR}\n"
     for ((i = 0; i < ${#error[@]}; i += 10)); do
       printf -- "- ${arg}" "${error[@]:i:2}"
       printf -- "  ${arg}" "${error[@]:i+2:8}"
     done
-    exit 1
+  else
+    exit 0
   fi
-  exit 0
+  exit 1
 }
 
 ################################################################################
