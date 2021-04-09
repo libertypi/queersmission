@@ -457,17 +457,17 @@ unit_test() {
       error+=("${result[@]}")
       fmt="${RED}"
     fi
-    fmt="${MAGENTA}%s${ENDCOLOR}: ${fmt}%s${ENDCOLOR}\n"
+    fmt="${kfmt} ${fmt}%s${ENDCOLOR}\n"
 
     if ((empty)); then
-      printf "${MAGENTA}%s${ENDCOLOR}:\n" "results"
+      printf "${kfmt}\n" "results"
       empty=0
     fi
     printf -- "- ${fmt}" "${result[@]::2}"
     printf -- "  ${fmt}" "${result[@]:2}"
   }
 
-  local arg i empty=1 error=()
+  local arg i kfmt="${MAGENTA}%s${ENDCOLOR}:" empty=1 error=()
   [[ $1 == 'all' ]] && set -- tr tv film
 
   for arg; do
@@ -496,10 +496,10 @@ unit_test() {
   done
 
   if ((empty)); then
-    printf "${MAGENTA}results${ENDCOLOR}: []\n"
+    printf "${kfmt} []\n" 'Result'
   elif ((${#error[@]})); then
-    printf "${MAGENTA}%s${ENDCOLOR}:\n" 'errors'
-    arg="${MAGENTA}%s${ENDCOLOR}: ${RED}%s${ENDCOLOR}\n"
+    printf "${kfmt}\n" 'errors'
+    arg="${kfmt} ${RED}%s${ENDCOLOR}\n"
     for ((i = 0; i < ${#error[@]}; i += 10)); do
       printf -- "- ${arg}" "${error[@]:i:2}"
       printf -- "  ${arg}" "${error[@]:i+2:8}"
