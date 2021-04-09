@@ -32,53 +32,67 @@ print_help() {
   cat <<EOF 1>&2
 usage: ${BASH_SOURCE[0]} [OPTION]...
 
-Transmission Maintenance Tool
+Transmission maintenance and management tool.
 Author: David Pi
 
-optional arguments:
-  -h         show this message and exit
-  -d         perform a trial run with no changes made
-  -s         show transmission torrent list
-  -f ID      force copy torrent ID, like "script-torrent-done"
+Transmission maintenance:
   -j FILE    save json format data to FILE
   -q NUM     set disk quota to NUM GiB, override config file
-  -t TEST    test categorizer. TEST: "all", "tr", "tv", "film",
-             torrent ID or custom path
+
+Torrent management:
+  -f ID      force copy torrent ID, like "script-torrent-done"
+  -l         show transmission torrent list
+  -s ID      show detail information of torrent ID
+
+Miscellaneous:
+  -d         perform a dry run with no changes made
+  -h         show this message and exit
+  -t TEST    categorizer unit test. TEST: "all", "tr", "tv",
+             "film" or custom path
 EOF
   exit 0
 }
 
 init() {
   # init variables
-  local i
   readonly -- locations tr_api watch_dir \
     seed_dir="$(normpath "${seed_dir}")" \
     logfile="${PWD}/logfile.log" \
     categorizer="${PWD}/component/categorizer.awk" \
     regexfile="${PWD}/component/regex.txt"
   tr_header='' savejson='' dryrun=0 logs=()
+  local i opt arg
 
   # parse arguments
-  while getopts 'hdsf:j:q:t:' i; do
+  while getopts 'j:q:f:ls:dht:' i; do
     case "${i}" in
       h) print_help ;;
       d) dryrun=1 ;;
-      s) show_tr_list ;;
-      f) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'ID must be integer >= 0' && TR_TORRENT_ID="${OPTARG}" ;;
-      j) [[ ${OPTARG} ]] || die 'Empty json filename.' && savejson="${OPTARG}" ;;
-      q) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die 'QUOTA must be integer >= 0.' && ((quota = OPTARG * GiB)) ;;
-      t) [[ ${OPTARG} ]] || die 'Empty TEST argument.' && unit_test "${OPTARG}" ;;
-      *) die "Try '${BASH_SOURCE[0]} -h' for more information" ;;
+      [jt]) [[ ${OPTARG} ]] || die "Option requires a non-empty argument -- '${i}'" ;;&
+      [qfs]) [[ ${OPTARG} =~ ^[0-9]+$ ]] || die "Option requires a positive integer argument -- '${i}'" ;;&
+      [flst]) [[ ${opt} && ${opt} != "${i}" ]] && die "Mutual exclusive options -- '${opt}', '${i}'" ;;&
+      j) savejson="${OPTARG}" ;;
+      q) ((quota = OPTARG * GiB)) ;;
+      f) opt="${i}" TR_TORRENT_ID="${OPTARG}" ;;
+      [lst]) opt="${i}" arg="${OPTARG}" ;;
+      *) die "Try '${BASH_SOURCE[0]} -h' for more information." ;;
     esac
   done
   readonly -- quota dryrun savejson
 
-  # acuire lock
-  exec {i}<"./${BASH_SOURCE[0]##*/}"
   if [[ ${TR_TORRENT_ID} ]]; then
-    flock -x "${i}"
-  elif ! flock -x -n "${i}"; then
-    die "Unable to acquire lock, another instance running?"
+    exec {i}<"./${BASH_SOURCE[0]##*/}" && flock -x "${i}"
+  elif [[ ${opt} == [lst] ]]; then
+    set_tr_header
+    set_colors
+    case "${opt}" in
+      l) show_tr_list ;;
+      s) show_tr_info "${arg}" ;;
+      t) unit_test "${arg}" ;;
+    esac
+  else
+    exec {i}<"./${BASH_SOURCE[0]##*/}" && flock -x -n "${i}" ||
+      die "Unable to acquire lock, another instance running?"
   fi
   trap 'write_log' EXIT
 }
@@ -103,10 +117,14 @@ copy_finished() {
     return 0
   }
 
+  _query_tr_id() {
+    request_tr "{\"arguments\":{\"fields\":[\"name\",\"downloadDir\",\"files\"],\"ids\":[${1:?}]},\"method\":\"torrent-get\"}"
+  }
+
   local src dest logdir data use_rsync=0
 
   [[ ${TR_TORRENT_NAME} && ${TR_TORRENT_DIR} ]] || {
-    data="$(query_tr_by_id "${TR_TORRENT_ID}")" || die "Connecting failed."
+    data="$(_query_tr_id "${TR_TORRENT_ID}")" || die "Connecting failed."
     IFS=/ read -r -d '' TR_TORRENT_NAME TR_TORRENT_DIR < <(
       printf '%s' "${data}" | jq -j '.arguments.torrents[]|"\(.name)/\(.downloadDir)\u0000"'
     ) && [[ ${TR_TORRENT_NAME} && ${TR_TORRENT_DIR} ]] ||
@@ -117,7 +135,7 @@ copy_finished() {
   # decide the destination
   if [[ ${TR_TORRENT_DIR} -ef ${seed_dir} ]]; then # source: seed_dir
     logdir="$(
-      if [[ ${data} ]]; then printf '%s' "${data}"; else query_tr_by_id "${TR_TORRENT_ID}"; fi |
+      if [[ ${data} ]]; then printf '%s' "${data}"; else _query_tr_id "${TR_TORRENT_ID}"; fi |
         jq -j '.arguments.torrents[].files[]|"\(.name)\u0000\(.length)\u0000"' |
         awk -v regexfile="${regexfile}" -f "${categorizer}"
     )"
@@ -322,11 +340,6 @@ request_tr() {
   return 1
 }
 
-# query torrent info by id
-query_tr_by_id() {
-  request_tr "{\"arguments\":{\"fields\":[\"name\",\"downloadDir\",\"files\"],\"ids\":[${1:?}]},\"method\":\"torrent-get\"}"
-}
-
 # Record one line of log.
 # columns & arguments, width:
 #   --: mm/dd/yy hh:mm:ss     (17)
@@ -377,8 +390,6 @@ set_colors() {
 }
 
 show_tr_list() {
-  set_colors
-  set_tr_header || die 'Connection failed.'
   local id pct name dir w1=2 w2=8 arr=()
 
   while IFS=/ read -r -d '' id pct name dir; do
@@ -396,11 +407,15 @@ show_tr_list() {
   exit 0
 }
 
+show_tr_info() {
+  printf 'TODO\n' 1>&2
+  exit 1
+}
+
 unit_test() {
 
   _test_tr() {
-    local id="$1" name files key
-    set_tr_header || die 'Unable to connect to transmission API.'
+    local name files key
     while IFS=/ read -r -d '' name files; do
       key="$(
         printf '%s' "${files}" |
@@ -409,11 +424,8 @@ unit_test() {
       )"
       _examine_test "${key}" "${name}"
     done < <(
-      if [[ ${id} ]]; then
-        query_tr_by_id "${id}"
-      else
-        request_tr '{"arguments":{"fields":["name","files"]},"method":"torrent-get"}'
-      fi | jq -j '.arguments.torrents[]|"\(.name)/\(.files)\u0000"'
+      request_tr '{"arguments":{"fields":["name","files"]},"method":"torrent-get"}' |
+        jq -j '.arguments.torrents[]|"\(.name)/\(.files)\u0000"'
     )
   }
 
@@ -469,13 +481,15 @@ unit_test() {
     printf -- "  ${fmt}" "${result[@]:2}"
   }
 
-  set_colors
   [[ $1 == 'all' ]] && set -- tr tv film
   local arg i kfmt="${MAGENTA}%s${ENDCOLOR}:" empty=1 error=()
 
   for arg; do
     case "${arg}" in
-      tr) _test_tr ;;
+      tr)
+        [[ ${tr_header} ]] || die 'Unable to connect to transmission API.'
+        _test_tr
+        ;;
       tv | film)
         pushd -- "${locations[${arg}]}" 1>/dev/null 2>&1 ||
           die "Unable to enter: '${locations[${arg}]}'"
@@ -487,9 +501,7 @@ unit_test() {
         popd 1>/dev/null 2>&1
         ;;
       ?*)
-        if [[ ${arg} =~ ^[0-9]+$ ]]; then
-          _test_tr "${arg}"
-        elif [[ -e ${arg} ]]; then
+        if [[ -e ${arg} ]]; then
           _test_dir "$(basename "${arg}")" "$(dirname "${arg}")"
         else
           _test_dir "${arg}"
@@ -499,7 +511,7 @@ unit_test() {
   done
 
   if ((empty)); then
-    printf "${kfmt} []\n" 'Result'
+    printf "${kfmt} []\n" 'results'
   elif ((${#error[@]})); then
     printf "${kfmt}\n" 'errors'
     arg="${kfmt} ${RED}%s${ENDCOLOR}\n"
