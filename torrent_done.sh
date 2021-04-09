@@ -55,10 +55,16 @@ init() {
     seed_dir="$(normpath "${seed_dir}")" \
     logfile="${PWD}/logfile.log" \
     categorizer="${PWD}/component/categorizer.awk" \
-    regexfile="${PWD}/component/regex.txt" \
-    RED='\e[31m' GREEN='\e[32m' YELLOW='\e[33m' BLUE='\e[94m' \
-    MAGENTA='\e[95m' ENDCOLOR='\e[0m'
+    regexfile="${PWD}/component/regex.txt"
   tr_header='' savejson='' dryrun=0 logs=()
+
+  # colors
+  if [[ -t 1 ]]; then
+    readonly -- RED='\e[31m' GREEN='\e[32m' YELLOW='\e[33m' BLUE='\e[94m' \
+      MAGENTA='\e[95m' CYAN='\e[36m' ENDCOLOR='\e[0m'
+  else
+    readonly -- RED='' GREEN='' YELLOW='' BLUE='' MAGENTA='' CYAN='' ENDCOLOR=''
+  fi
 
   # parse arguments
   while getopts 'hdsf:j:q:t:' i; do
@@ -383,12 +389,7 @@ show_tr_list() {
   ((${#arr[@]})) || exit 1
 
   printf "%${w1}s  %5s  %-${w2}s  %s\n" 'ID' 'PCT' 'LOCATION' 'NAME'
-  if [[ -t 1 ]]; then
-    w1="%${w1}d  ${MAGENTA}%5.1f  %-${w2}s  ${YELLOW}%s${ENDCOLOR}\n"
-  else
-    w1="%${w1}d  %5.1f  %-${w2}s  %s\n"
-  fi
-  printf "${w1}" "${arr[@]//[[:cntrl:]]/ }"
+  printf "%${w1}d  ${MAGENTA}%5.1f  %-${w2}s  ${YELLOW}%s${ENDCOLOR}\n" "${arr[@]//[[:cntrl:]]/ }"
   exit 0
 }
 
@@ -431,7 +432,7 @@ unit_test() {
     case "${key}" in
       av) fmt="${YELLOW}" ;;
       film) fmt="${BLUE}" ;;
-      tv) fmt="${MAGENTA}" ;;
+      tv) fmt="${CYAN}" ;;
       music) fmt="${GREEN}" ;;
       default) ;;
       '') err='runtime error' ;;
@@ -455,21 +456,16 @@ unit_test() {
       error+=("${result[@]}")
       fmt="${RED}"
     fi
-    if ((isatty)); then
-      fmt="%s: ${fmt}%s${ENDCOLOR}\n"
-    else
-      fmt='%s: %s\n'
-    fi
+    fmt="${MAGENTA}%s${ENDCOLOR}: ${fmt}%s${ENDCOLOR}\n"
 
     printf -- "- ${fmt}" "${result[@]::2}"
     printf -- "  ${fmt}" "${result[@]:2}"
   }
 
-  local arg i isatty error=()
-  if [[ -t 1 ]]; then isatty=1; else isatty=0; fi
+  local arg i error=()
   [[ $1 == 'all' ]] && set -- tr tv film
 
-  printf '%s:\n' "results"
+  printf "${MAGENTA}%s${ENDCOLOR}:\n" "results"
   for arg; do
     case "${arg}" in
       tr) _test_tr ;;
@@ -495,11 +491,12 @@ unit_test() {
     esac
   done
 
-  if ((arg = ${#error[@]})); then
-    printf '%s:\n' 'errors'
-    for ((i = 0; i < arg; i += 10)); do
-      printf -- "- %s: %s\n" "${error[@]:i:2}"
-      printf -- "  %s: %s\n" "${error[@]:i+2:8}"
+  if ((${#error[@]})); then
+    printf "${MAGENTA}%s${ENDCOLOR}:\n" 'errors'
+    arg="${MAGENTA}%s${ENDCOLOR}: ${RED}%s${ENDCOLOR}\n"
+    for ((i = 0; i < ${#error[@]}; i += 10)); do
+      printf -- "- ${arg}" "${error[@]:i:2}"
+      printf -- "  ${arg}" "${error[@]:i+2:8}"
     done
     exit 1
   fi
