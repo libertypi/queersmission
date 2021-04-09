@@ -175,7 +175,7 @@ copy_finished() {
 # torrent status number:
 # https://github.com/transmission/transmission/blob/master/libtransmission/transmission.h#L1658
 process_maindata() {
-  local i name dir
+  local total name dir
   declare -Ag tr_names=()
 
   tr_maindata="$(
@@ -187,7 +187,7 @@ process_maindata() {
   fi
 
   {
-    IFS=/ read -r -d '' i tr_totalsize tr_paused || die "Invalid json response."
+    IFS=/ read -r -d '' total tr_totalsize tr_paused || die "Invalid json response."
     while IFS=/ read -r -d '' name dir; do
       [[ ${seed_dir} == "${dir}" || ${seed_dir} -ef ${dir} ]] && tr_names["${name}"]=1
     done
@@ -200,33 +200,34 @@ process_maindata() {
       else empty end'
   )
 
-  printf 'torrents: %d, paused: %d, size: %d GiB\n' "${i}" "${tr_paused}" "$((tr_totalsize / GiB))" 1>&2
+  printf 'torrents: %d, paused: %d, size: %d GiB\n' \
+    "${total}" "${tr_paused}" "$((tr_totalsize / GiB))" 1>&2
 }
 
 # Clean junk files in seed_dir and watch_dir. This function runs in a subshell.
 clean_disk() {
   (
     shopt -s nullglob dotglob || exit 1
-    obsolete=()
+    arr=()
 
     if ((${#tr_names[@]})) && cd -- "${seed_dir}"; then
       for i in *; do
         [[ ${tr_names["${i}"]} || ${tr_names["${i%.part}"]} ]] ||
-          obsolete+=("${PWD:-${seed_dir}}/${i}")
+          arr+=("${PWD:-${seed_dir}}/${i}")
       done
     else
       printf 'Skip cleanup: "%s"\n' "${seed_dir}" 1>&2
     fi
     if [[ ${watch_dir} ]]; then
       for i in "${watch_dir}/"*.torrent; do
-        [[ -s ${i} ]] || obsolete+=("${i}")
+        [[ -s ${i} ]] || arr+=("${i}")
       done
     fi
 
-    if ((${#obsolete[@]})); then
-      printf 'Cleanup: %s\n' "${obsolete[@]}" 1>&2
-      ((dryrun)) || for ((i = 0; i < ${#obsolete[@]}; i += 100)); do
-        rm -r -f -- "${obsolete[@]:i:100}"
+    if ((${#arr[@]})); then
+      printf 'Cleanup: %s\n' "${arr[@]}" 1>&2
+      ((dryrun)) || for ((i = 0; i < ${#arr[@]}; i += 100)); do
+        rm -r -f -- "${arr[@]:i:100}"
       done
     fi
   )
@@ -482,7 +483,7 @@ unit_test() {
         shopt -u nullglob
         popd 1>/dev/null 2>&1
         ;;
-      *)
+      ?*)
         if [[ ${arg} =~ ^[0-9]+$ ]]; then
           _test_tr "${arg}"
         elif [[ -e ${arg} ]]; then
