@@ -58,6 +58,14 @@ init() {
     regexfile="${PWD}/component/regex.txt"
   tr_header='' savejson='' dryrun=0 logs=()
 
+  # colors
+  if [[ -t 1 ]]; then
+    readonly -- RED='\e[31m' GREEN='\e[32m' YELLOW='\e[33m' BLUE='\e[94m' \
+      MAGENTA='\e[95m' CYAN='\e[36m' ENDCOLOR='\e[0m'
+  else
+    readonly -- RED='' GREEN='' YELLOW='' BLUE='' MAGENTA='' CYAN='' ENDCOLOR=''
+  fi
+
   # parse arguments
   while getopts 'hdsf:j:q:t:' i; do
     case "${i}" in
@@ -276,15 +284,6 @@ resume_paused() {
   fi
 }
 
-set_colors() {
-  if [[ -t 1 ]]; then
-    readonly -- RED='\e[31m' GREEN='\e[32m' YELLOW='\e[33m' BLUE='\e[94m' \
-      MAGENTA='\e[95m' CYAN='\e[36m' ENDCOLOR='\e[0m'
-  else
-    readonly -- RED='' GREEN='' YELLOW='' BLUE='' MAGENTA='' CYAN='' ENDCOLOR=''
-  fi
-}
-
 # Normalize path, eliminating double slashes, etc.
 # Usage: new_path="$(normpath "${old_path}")"
 # Translated from Python's posixpath.normpath:
@@ -377,7 +376,6 @@ write_log() {
 
 show_tr_list() {
   local id name pct dir w1=2 w2=8 arr=()
-  set_colors
   set_tr_header || die 'Connection failed.'
 
   while IFS=/ read -r -d '' id pct name dir; do
@@ -469,7 +467,6 @@ unit_test() {
   }
 
   local arg i empty=1 error=()
-  set_colors
   [[ $1 == 'all' ]] && set -- tr tv film
 
   for arg; do
