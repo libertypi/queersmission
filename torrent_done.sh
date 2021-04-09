@@ -120,10 +120,8 @@ copy_finished() {
       [[ -e ${dest} ]] || mkdir -p -- "${dest}" && cp -a -f -- "${src}" "${dest}/"
     fi || return 1
     if [[ ${dest} == "${seed_dir}" ]]; then
-      request_tr "$(
-        jq -acn --argjson i "${TR_TORRENT_ID}" --arg d "${seed_dir}" \
-          '{"arguments":{"ids":[$i],"location":$d},"method":"torrent-set-location"}'
-      )" >/dev/null || return 1
+      request_tr "$(jq -acn --argjson i "${TR_TORRENT_ID}" --arg d "${seed_dir}" \
+        '{"arguments":{"ids":[$i],"location":$d},"method":"torrent-set-location"}')" >/dev/null || return 1
     fi
     return 0
   }
@@ -213,14 +211,12 @@ process_maindata() {
     while IFS=/ read -r -d '' name dir; do
       [[ ${seed_dir} == "${dir}" || ${seed_dir} -ef ${dir} ]] && tr_names["${name}"]=1
     done
-  } < <(
-    printf '%s' "${tr_maindata}" | jq -j '
-      if .result == "success" then
-      .arguments.torrents|
-      ("\(length)/\([.[].sizeWhenDone]|add)/\(map(select(.status == 0))|length)\u0000"),
-      (.[]|"\(.name)/\(.downloadDir)\u0000")
-      else empty end'
-  )
+  } < <(printf '%s' "${tr_maindata}" | jq -j '
+    if .result == "success" then
+    .arguments.torrents|
+    ("\(length)/\([.[].sizeWhenDone]|add)/\(map(select(.status == 0))|length)\u0000"),
+    (.[]|"\(.name)/\(.downloadDir)\u0000")
+    else empty end')
 
   printf 'torrents: %d, paused: %d, size: %d GiB\n' \
     "${total}" "${tr_paused}" "$((tr_totalsize / GiB))" 1>&2
@@ -435,7 +431,7 @@ show_tr_info() {
     percents=("percentDone") \
     sizes=("totalSize" "sizeWhenDone" "downloadedEver" "uploadedEver") \
     dates=("addedDate" "activityDate")
-  printf -v data '"%s",' "${strings[@]}" "${percents[@]}" "${dates[@]}" "${sizes[@]}" "files"
+  printf -v data '"%s",' "${strings[@]}" "${percents[@]}" "${sizes[@]}" "${dates[@]}" "files"
   printf -v data '{"arguments":{"fields":[%s],"ids":[%d]},"method":"torrent-get"}' "${data%,}" "$1"
 
   {
@@ -466,11 +462,9 @@ unit_test() {
   _test_tr() {
     local name files key
     while IFS=/ read -r -d '' name files; do
-      key="$(
-        printf '%s' "${files}" |
-          jq -j '.[]|"\(.name)\u0000\(.length)\u0000"' |
-          awk -v regexfile="${regexfile}" -f "${categorizer}"
-      )"
+      key="$(printf '%s' "${files}" |
+        jq -j '.[]|"\(.name)\u0000\(.length)\u0000"' |
+        awk -v regexfile="${regexfile}" -f "${categorizer}")"
       _examine_test "${key}" "${name}"
     done < <(
       request_tr '{"arguments":{"fields":["name","files"]},"method":"torrent-get"}' |
