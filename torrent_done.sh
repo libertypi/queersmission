@@ -379,7 +379,7 @@ set_colors() {
 show_tr_list() {
   set_colors
   set_tr_header || die 'Connection failed.'
-  local id name pct dir w1=2 w2=8 arr=()
+  local id pct name dir w1=2 w2=8 arr=()
 
   while IFS=/ read -r -d '' id pct name dir; do
     arr+=("${id}" "${pct}" "${dir}" "${name}")
