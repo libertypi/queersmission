@@ -326,7 +326,7 @@ normpath() {
 }
 
 set_tr_header() {
-  if [[ "$(curl -sI "${tr_auth[@]}" -- "${rpc_url}")" =~ 'X-Transmission-Session-Id:'[[:blank:]]*[[:alnum:]]+ ]]; then
+  if [[ "$(curl -sI "${tr_auth[@]}" -- "${rpc_url}")" =~ X-Transmission-Session-Id:[[:blank:]]*[[:alnum:]]+ ]]; then
     tr_header="${BASH_REMATCH[0]}"
     return 0
   fi
@@ -336,11 +336,11 @@ set_tr_header() {
 # Send an API request.
 # $1: data to send
 request_tr() {
-  local i
-  for i in {1..4}; do
+  local retry
+  for retry in {1..3}; do
     if curl -sf "${tr_auth[@]}" --header "${tr_header}" -d "$1" -- "${rpc_url}"; then
       return 0
-    elif ((i < 4)); then
+    elif ((retry < 3)); then
       set_tr_header
     fi
   done
