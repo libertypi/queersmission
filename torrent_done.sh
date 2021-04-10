@@ -407,7 +407,7 @@ show_tr_list() {
     arr+=("${id}" "${size}" "${pct}" "${name//[[:cntrl:]]/ }")
   done < <(
     request_tr '{"arguments":{"fields":["id","sizeWhenDone","percentDone","name"]},"method":"torrent-get"}' |
-      jq --argjson g "${GiB}" -j '.arguments.torrents[]|"\(.id)/\(.sizeWhenDone/$g)/\(.percentDone*100)/\(.name)\u0000"'
+      jq -j --argjson g "${GiB}" '.arguments.torrents[]|"\(.id)/\(.sizeWhenDone/$g)/\(.percentDone*100)/\(.name)\u0000"'
   )
   ((${#arr[@]})) || exit 1
 
@@ -444,7 +444,7 @@ show_tr_info() {
     _format_read '%.2f GiB' "${sizes[@]}"
     _format_read '%(%c)T' "${dates[@]}"
     mapfile -t files
-  } < <(request_tr "${data}" | jq --argjson g "${GiB}" -r "${jqprog}")
+  } < <(request_tr "${data}" | jq -r --argjson g "${GiB}" "${jqprog}")
 
   if ((${#files[@]})); then
     printf "${kfmt}\n" 'files'
@@ -458,10 +458,10 @@ show_tr_info() {
 unit_test() {
 
   _test_tr() {
-    local name files key
+    local name files
     while IFS=/ read -r -d '' name files; do
-      key="$(printf '%s' "${files}" | jq -j '.[]|"\(.name)\u0000\(.length)\u0000"' | awk "${categorizer[@]}")"
-      _examine_test "${key}" "${name}"
+      _examine_test "$(printf '%s' "${files}" |
+        jq -j '.[]|"\(.name)\u0000\(.length)\u0000"' | awk "${categorizer[@]}")" "${name}"
     done < <(
       request_tr '{"arguments":{"fields":["name","files"]},"method":"torrent-get"}' |
         jq -j '.arguments.torrents[]|"\(.name)/\(.files)\u0000"'
@@ -469,15 +469,14 @@ unit_test() {
   }
 
   _test_dir() {
-    local name="$1" path="$2" key
-    key="$(
+    local name="$1" path="$2"
+    _examine_test "$(
       if [[ ${path} ]] && { [[ ${PWD} == "${path}" ]] || cd -- "${path}" 1>/dev/null 2>&1; }; then
         find "${name}" -name '[.#@]*' -prune -o -type f -printf '%p\0%s\0'
       else
         printf '%s\0' "${name}" 1
       fi | awk "${categorizer[@]}"
-    )"
-    _examine_test "${key}" "$@"
+    )" "$@"
   }
 
   _examine_test() {
