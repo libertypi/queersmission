@@ -137,7 +137,7 @@ copy_finished() {
     IFS=/ read -r -d '' TR_TORRENT_NAME TR_TORRENT_DIR < <(
       printf '%s' "${data}" | jq -j '.arguments.torrents[]|"\(.name)/\(.downloadDir)\u0000"'
     ) && [[ ${TR_TORRENT_NAME} && ${TR_TORRENT_DIR} ]] ||
-      die "Invalid torrent ID '${TR_TORRENT_ID}'. Run '${BASH_SOURCE[0]} -s' to show torrent list."
+      die "Invalid torrent ID '${TR_TORRENT_ID}'. Run '${BASH_SOURCE[0]} -l' to show torrent list."
   }
   src="$(normpath "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}")"
 
@@ -398,20 +398,21 @@ set_colors() {
 }
 
 show_tr_list() {
-  local id pct name dir w1=2 w2=8 arr=()
+  local id size pct name w0=2 w1=4 gap='  ' arr=()
 
-  while IFS=/ read -r -d '' id pct name dir; do
-    arr+=("${id}" "${pct}" "${dir}" "${name}")
-    ((${#id} > w1)) && w1="${#id}"
-    ((${#dir} > w2)) && w2="${#dir}"
+  while IFS=/ read -r -d '' id size pct name; do
+    printf -v size '%.1fG' "${size}"
+    ((${#id} > w0)) && w0="${#id}"
+    ((${#size} > w1)) && w1="${#size}"
+    arr+=("${id}" "${size}" "${pct}" "${name//[[:cntrl:]]/ }")
   done < <(
-    request_tr '{"arguments":{"fields":["id","percentDone","name","downloadDir"]},"method":"torrent-get"}' |
-      jq -j '.arguments.torrents[]|"\(.id)/\(.percentDone * 100)/\(.name)/\(.downloadDir)\u0000"'
+    request_tr '{"arguments":{"fields":["id","sizeWhenDone","percentDone","name"]},"method":"torrent-get"}' |
+      jq --argjson g "${GiB}" -j '.arguments.torrents[]|"\(.id)/\(.sizeWhenDone/$g)/\(.percentDone*100)/\(.name)\u0000"'
   )
   ((${#arr[@]})) || exit 1
 
-  printf "%${w1}s  %5s  %-${w2}s  %s\n" 'ID' 'PCT' 'LOCATION' 'NAME'
-  printf "%${w1}d  ${MAGENTA}%5.1f  %-${w2}s  ${YELLOW}%s${ENDCOLOR}\n" "${arr[@]//[[:cntrl:]]/ }"
+  printf "%${w0}s${gap}%${w1}s${gap}%5s${gap}%s\n" 'ID' 'SIZE' 'PCT' 'NAME'
+  printf "%${w0}d${gap}${MAGENTA}%${w1}s${gap}%5.1f${gap}${YELLOW}%s${ENDCOLOR}\n" "${arr[@]}"
   exit 0
 }
 
