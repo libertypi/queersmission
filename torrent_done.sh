@@ -426,14 +426,17 @@ show_tr_info() {
     done
   }
 
-  local data files \
+  local data jqprog files \
     kfmt="${MAGENTA}%s${ENDCOLOR}:" \
     strings=('name' 'downloadDir' 'hashString' 'id' 'status') \
     percents=('percentDone') \
     sizes=('totalSize' 'sizeWhenDone' 'downloadedEver' 'uploadedEver') \
     dates=('addedDate' 'activityDate')
+
   printf -v data '"%s",' "${strings[@]}" "${percents[@]}" "${sizes[@]}" "${dates[@]}" 'files'
   printf -v data '{"arguments":{"fields":[%s],"ids":[%d]},"method":"torrent-get"}' "${data%,}" "$1"
+  jqprog=("${strings[@]}" "${percents[@]/%/'*100'}" "${sizes[@]/%/'/$g'}" "${dates[@]}")
+  IFS=',' eval 'jqprog=".arguments.torrents[]|(${jqprog[*]/#/.}),(.files[]|.name,.length)|@json"'
 
   {
     _format_read '%s' "${strings[@]}"
@@ -441,13 +444,7 @@ show_tr_info() {
     _format_read '%.2f GiB' "${sizes[@]}"
     _format_read '%(%c)T' "${dates[@]}"
     mapfile -t files
-  } < <(request_tr "${data}" | jq --argjson g "${GiB}" -r '
-    .arguments.torrents[] |
-    (.name, .downloadDir, .hashString, .id, .status,
-    .percentDone * 100,
-    .totalSize/$g, .sizeWhenDone/$g, .downloadedEver/$g, .uploadedEver/$g,
-    .addedDate, .activityDate),
-    (.files[]|.name, .length) | @json')
+  } < <(request_tr "${data}" | jq --argjson g "${GiB}" -r "${jqprog}")
 
   if ((${#files[@]})); then
     printf "${kfmt}\n" 'files'
