@@ -256,7 +256,7 @@ remove_inactive() {
   local disksize freespace target m n id size ids names
 
   {
-    read
+    read -r _
     read -r disksize freespace
   } < <(df --block-size=1 --output='size,avail' -- "${seed_dir}") &&
     [[ ${disksize} =~ ^[0-9]+$ && ${freespace} =~ ^[0-9]+$ ]] || {
