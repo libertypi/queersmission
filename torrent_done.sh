@@ -13,7 +13,8 @@ die() {
 }
 
 export LC_ALL=C LANG=C
-unset IFS seed_dir locations tr_api quota watch_dir
+unset IFS rpc_url rpc_username rpc_password download_dir watch_dir space_thresh \
+  locations tr_auth tr_header savejson
 
 ((BASH_VERSINFO >= 4)) 1>/dev/null 2>&1 || die 'Bash >=4 required.'
 hash curl jq || die 'Curl and jq required.'
@@ -21,7 +22,7 @@ cd -- "${BASH_SOURCE[0]%/*}" || die 'Unable to enter script directory.'
 
 readonly GiB=1073741824
 . ./config || die "Loading config file failed."
-[[ ${tr_api} == http* && ${seed_dir} == /* && ${quota} -ge 0 && ${locations['default']} == /* ]] ||
+[[ ${rpc_url} == http* && ${download_dir} == /* && ${space_thresh} -ge 0 && ${locations['default']} == /* ]] ||
   die 'Invalid configuration.'
 
 ################################################################################
@@ -37,7 +38,7 @@ Author: David Pi
 
 Transmission maintenance:
   -j FILE    save json format data to FILE
-  -q NUM     set disk quota to NUM GiB, override config file
+  -q NUM     set space thresh to NUM GiB, override config file
 
 Torrent management:
   -f ID      force copy torrent ID, like "script-torrent-done"
@@ -61,12 +62,11 @@ arg_error() {
 
 init() {
   # init variables
-  readonly -- locations tr_api watch_dir \
-    seed_dir="$(normpath "${seed_dir}")" \
-    logfile="${PWD}/logfile.log" \
-    categorizer="${PWD}/component/categorizer.awk" \
-    regexfile="${PWD}/component/regex.txt"
-  tr_header='' savejson='' dryrun=0 logs=()
+  [[ ${rpc_username} ]] && tr_auth=(--anyauth --user "${rpc_username}:${rpc_password}")
+  readonly -- rpc_url tr_auth watch_dir locations \
+    download_dir="$(normpath "${download_dir}")" logfile="${PWD}/logfile.log" \
+    categorizer=(-v regexfile="${PWD}/component/regex.txt" -f "${PWD}/component/categorizer.awk")
+  dryrun=0 logs=()
   local i opt arg
 
   # parse arguments
@@ -78,13 +78,13 @@ init() {
       [qfs]) [[ ${OPTARG} =~ ^[0-9]+$ ]] || arg_error "requires a positive integer argument -- ${i}" ;;&
       [flst]) [[ ${opt} && ${opt} != "${i}" ]] && arg_error "options are mutual exclusive -- ${opt}, ${i}" ;;&
       j) savejson="${OPTARG}" ;;
-      q) ((quota = OPTARG * GiB)) ;;
+      q) ((space_thresh = OPTARG * GiB)) ;;
       f) opt="${i}" TR_TORRENT_ID="${OPTARG}" ;;
       [lst]) opt="${i}" arg="${OPTARG}" ;;
       *) arg_error ;;
     esac
   done
-  readonly -- quota dryrun savejson
+  readonly -- dryrun savejson space_thresh
 
   # stand-alone functions
   if [[ ${opt} == [lst] ]]; then
@@ -119,8 +119,8 @@ copy_finished() {
     else
       [[ -e ${dest} ]] || mkdir -p -- "${dest}" && cp -a -f -- "${src}" "${dest}/"
     fi || return 1
-    if [[ ${dest} == "${seed_dir}" ]]; then
-      request_tr "$(jq -acn --argjson i "${TR_TORRENT_ID}" --arg d "${seed_dir}" \
+    if [[ ${dest} == "${download_dir}" ]]; then
+      request_tr "$(jq -acn --argjson i "${TR_TORRENT_ID}" --arg d "${download_dir}" \
         '{"arguments":{"ids":[$i],"location":$d},"method":"torrent-set-location"}')" >/dev/null || return 1
     fi
     return 0
@@ -142,11 +142,11 @@ copy_finished() {
   src="$(normpath "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}")"
 
   # decide the destination
-  if [[ ${TR_TORRENT_DIR} -ef ${seed_dir} ]]; then # source: seed_dir
+  if [[ ${TR_TORRENT_DIR} -ef ${download_dir} ]]; then # source: download_dir
     logdir="$(
       if [[ ${data} ]]; then printf '%s' "${data}"; else _query_tr_id "${TR_TORRENT_ID}"; fi |
         jq -j '.arguments.torrents[].files[]|"\(.name)\u0000\(.length)\u0000"' |
-        awk -v regexfile="${regexfile}" -f "${categorizer}"
+        awk "${categorizer[@]}"
     )"
     # fallback to default if failed
     logdir="$(normpath "${locations[${logdir:-default}]:-${locations[default]}}")"
@@ -171,9 +171,9 @@ copy_finished() {
         use_rsync=1
       fi
     fi
-  else # dest: seed_dir
+  else # dest: download_dir
     logdir="${TR_TORRENT_DIR}"
-    dest="${seed_dir}"
+    dest="${download_dir}"
   fi
 
   # copy file
@@ -209,7 +209,7 @@ process_maindata() {
   {
     IFS=/ read -r -d '' total tr_totalsize tr_paused || die "Invalid json response."
     while IFS=/ read -r -d '' name dir; do
-      [[ ${seed_dir} == "${dir}" || ${seed_dir} -ef ${dir} ]] && tr_names["${name}"]=1
+      [[ ${download_dir} == "${dir}" || ${download_dir} -ef ${dir} ]] && tr_names["${name}"]=1
     done
   } < <(printf '%s' "${tr_maindata}" | jq -j '
     if .result == "success" then
@@ -222,19 +222,19 @@ process_maindata() {
     "${total}" "${tr_paused}" "$((tr_totalsize / GiB))" 1>&2
 }
 
-# Clean junk files in seed_dir and watch_dir. This function runs in a subshell.
+# Clean junk files in download_dir and watch_dir. This function runs in a subshell.
 clean_disk() {
   (
     shopt -s nullglob dotglob || exit 1
     arr=()
 
-    if ((${#tr_names[@]})) && cd -- "${seed_dir}"; then
+    if ((${#tr_names[@]})) && cd -- "${download_dir}"; then
       for i in *; do
         [[ ${tr_names["${i}"]} || ${tr_names["${i%.part}"]} ]] ||
-          arr+=("${PWD:-${seed_dir}}/${i}")
+          arr+=("${PWD:-${download_dir}}/${i}")
       done
     else
-      printf 'Skip cleanup: "%s"\n' "${seed_dir}" 1>&2
+      printf 'Skip cleanup: "%s"\n' "${download_dir}" 1>&2
     fi
     if [[ ${watch_dir} ]]; then
       for i in "${watch_dir}/"*.torrent; do
@@ -251,20 +251,20 @@ clean_disk() {
   )
 }
 
-# Remove inactive torrents if disk space was bellow $quota.
+# Remove inactive torrents if disk space was bellow $space_thresh.
 remove_inactive() {
   local disksize freespace target m n id size ids names
 
   {
     read -r _
     read -r disksize freespace
-  } < <(df --block-size=1 --output='size,avail' -- "${seed_dir}") &&
+  } < <(df --block-size=1 --output='size,avail' -- "${download_dir}") &&
     [[ ${disksize} =~ ^[0-9]+$ && ${freespace} =~ ^[0-9]+$ ]] || {
     printf 'Reading disk stat failed.\n' 1>&2
     return 1
   }
 
-  if ((m = quota + tr_totalsize - disksize, n = quota - freespace, (target = m > n ? m : n) > 0)); then
+  if ((m = space_thresh + tr_totalsize - disksize, n = space_thresh - freespace, (target = m > n ? m : n) > 0)); then
     printf 'disk free space: %d GiB, will remove: %d GiB\n' "$((freespace / GiB))" "$((target / GiB))" 1>&2
   else
     printf 'disk free space: %d GiB, availability: %d GiB. System is healthy.\n' \
@@ -290,7 +290,7 @@ remove_inactive() {
     ((dryrun)) ||
       request_tr "{\"arguments\":{\"ids\":[${ids%,}],\"delete-local-data\":true},\"method\":\"torrent-remove\"}" >/dev/null &&
       for n in "${names[@]}"; do
-        append_log 'Remove' "${seed_dir}" "${n}"
+        append_log 'Remove' "${download_dir}" "${n}"
       done
   fi
 }
@@ -326,7 +326,7 @@ normpath() {
 }
 
 set_tr_header() {
-  if [[ "$(curl -s -I -- "${tr_api}")" =~ 'X-Transmission-Session-Id:'[[:blank:]]*[[:alnum:]]+ ]]; then
+  if [[ "$(curl -sI "${tr_auth[@]}" -- "${rpc_url}")" =~ 'X-Transmission-Session-Id:'[[:blank:]]*[[:alnum:]]+ ]]; then
     tr_header="${BASH_REMATCH[0]}"
     return 0
   fi
@@ -338,13 +338,13 @@ set_tr_header() {
 request_tr() {
   local i
   for i in {1..4}; do
-    if curl -s -f --header "${tr_header}" -d "$1" -- "${tr_api}"; then
+    if curl -sf "${tr_auth[@]}" --header "${tr_header}" -d "$1" -- "${rpc_url}"; then
       return 0
     elif ((i < 4)); then
       set_tr_header
     fi
   done
-  printf 'Connection failure. url: \047%s\047, request: \047%s\047\n' "${tr_api}" "$1" 1>&2
+  printf 'Connection failure. url: \047%s\047, request: \047%s\047\n' "${rpc_url}" "$1" 1>&2
   return 1
 }
 
@@ -450,7 +450,7 @@ show_tr_info() {
     printf "${kfmt}\n" 'files'
     printf -- "- ${YELLOW}%s%.0s${ENDCOLOR}\n" "${files[@]}"
     printf "${kfmt} ${YELLOW}%s${ENDCOLOR}\n" 'category' "$(printf '%s\n' "${files[@]}" |
-      jq -j '"\(.)\u0000"' | awk -v regexfile="${regexfile}" -f "${categorizer}")"
+      jq -j '"\(.)\u0000"' | awk "${categorizer[@]}")"
   fi
   exit 0
 }
@@ -460,9 +460,7 @@ unit_test() {
   _test_tr() {
     local name files key
     while IFS=/ read -r -d '' name files; do
-      key="$(printf '%s' "${files}" |
-        jq -j '.[]|"\(.name)\u0000\(.length)\u0000"' |
-        awk -v regexfile="${regexfile}" -f "${categorizer}")"
+      key="$(printf '%s' "${files}" | jq -j '.[]|"\(.name)\u0000\(.length)\u0000"' | awk "${categorizer[@]}")"
       _examine_test "${key}" "${name}"
     done < <(
       request_tr '{"arguments":{"fields":["name","files"]},"method":"torrent-get"}' |
@@ -477,7 +475,7 @@ unit_test() {
         find "${name}" -name '[.#@]*' -prune -o -type f -printf '%p\0%s\0'
       else
         printf '%s\0' "${name}" 1
-      fi | awk -v regexfile="${regexfile}" -f "${categorizer}"
+      fi | awk "${categorizer[@]}"
     )"
     _examine_test "${key}" "$@"
   }
