@@ -476,7 +476,7 @@ unit_test() {
       if [[ ${path} ]] && { [[ ${PWD} == "${path}" ]] || cd -- "${path}" 1>/dev/null 2>&1; }; then
         find "${name}" -name '[.#@]*' -prune -o -type f -printf '%p\0%s\0'
       else
-        printf '%s\0%d\0' "${name}" 1
+        printf '%s\0' "${name}" 1
       fi | awk -v regexfile="${regexfile}" -f "${categorizer}"
     )"
     _examine_test "${key}" "$@"
