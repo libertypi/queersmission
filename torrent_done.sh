@@ -127,13 +127,13 @@ copy_finished() {
   }
 
   _query_tr_id() {
-    request_tr "{\"arguments\":{\"fields\":[\"name\",\"downloadDir\",\"files\"],\"ids\":[${1:?}]},\"method\":\"torrent-get\"}"
+    request_tr "{\"arguments\":{\"fields\":[\"name\",\"downloadDir\",\"files\"],\"ids\":[${TR_TORRENT_ID}]},\"method\":\"torrent-get\"}"
   }
 
   local src dest logdir data use_rsync=0
 
   [[ ${TR_TORRENT_NAME} && ${TR_TORRENT_DIR} ]] || {
-    data="$(_query_tr_id "${TR_TORRENT_ID}")" || die "Connecting failed."
+    data="$(_query_tr_id)" || die "Connecting failed."
     IFS=/ read -r -d '' TR_TORRENT_NAME TR_TORRENT_DIR < <(
       printf '%s' "${data}" | jq -j '.arguments.torrents[]|"\(.name)/\(.downloadDir)\u0000"'
     ) && [[ ${TR_TORRENT_NAME} && ${TR_TORRENT_DIR} ]] ||
@@ -144,7 +144,7 @@ copy_finished() {
   # decide the destination
   if [[ ${TR_TORRENT_DIR} -ef ${download_dir} ]]; then # source: download_dir
     logdir="$(
-      if [[ ${data} ]]; then printf '%s' "${data}"; else _query_tr_id "${TR_TORRENT_ID}"; fi |
+      if [[ ${data} ]]; then printf '%s' "${data}"; else _query_tr_id; fi |
         jq -j '.arguments.torrents[].files[]|"\(.name)\u0000\(.length)\u0000"' |
         awk "${categorizer[@]}"
     )"
