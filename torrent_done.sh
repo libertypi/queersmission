@@ -40,7 +40,7 @@ EOF
 }
 
 arg_error() {
-  [[ $1 ]] && printf '%s: %s\n' "${BASH_SOURCE[0]}" "$1"
+  [[ $1 ]] && printf '%s: %s -- %s\n' "${BASH_SOURCE[0]}" "$1" "$2"
   printf "Try '%s -h' for more information.\n" "${BASH_SOURCE[0]}"
   exit 1
 } 1>&2
@@ -290,11 +290,12 @@ remove_inactive() {
     'freespace')
       {
         read -r _
-        read -r m n && [[ ${m} =~ ^[0-9]+$ && ${n} =~ ^[0-9]+$ ]] # disksize freespace
-      } < <(df --block-size=1 --output='size,avail' -- "${download_dir}") || {
-        printf 'Reading disk stat failed.\n' 1>&2
-        return 1
-      }
+        # disksize, freespace
+        read -r m n && [[ ${m} =~ ^[0-9]+$ && ${n} =~ ^[0-9]+$ ]] || {
+          printf 'Reading disk stat failed.\n' 1>&2
+          return 1
+        }
+      } < <(df --block-size=1 --output='size,avail' -- "${download_dir}")
       ((i = n / GiB, m = rm_thresh + tr_totalsize - m, n = rm_thresh - n, target = m > n ? m : n))
       m='free space'
       ;;
@@ -312,7 +313,8 @@ remove_inactive() {
     return 0
   fi
 
-  while IFS=/ read -r -d '' i m n; do # id, size, name
+  while IFS=/ read -r -d '' i m n; do
+    # id, size, name
     [[ ${tr_names["${n}"]} ]] || continue
     ids+="${i},"
     names+=("${n}")
@@ -342,7 +344,7 @@ resume_paused() {
 }
 
 show_tr_list() {
-  local id size pct name w0=2 w1=4 gap='  ' arr=()
+  local id size pct name arr w0=2 w1=4 gap='  '
 
   while IFS=/ read -r -d '' id size pct name; do
     printf -v size '%.1fG' "${size}"
@@ -390,13 +392,12 @@ show_tr_info() {
     _format_read '%(%c)T' "${dates[@]}"
     mapfile -t files
   } < <(request_tr "${data}" | jq -r --argjson g "${GiB}" "${jqprog}")
+  ((${#files[@]})) || exit 1
 
-  if ((${#files[@]})); then
-    printf "${kfmt}\n" 'files'
-    printf -- "- ${YELLOW}%s%.0s${ENDCOLOR}\n" "${files[@]}"
-    printf "${kfmt} ${YELLOW}%s${ENDCOLOR}\n" 'category' "$(printf '%s\n' "${files[@]}" |
-      jq -j '"\(.)\u0000"' | awk "${categorizer[@]}")"
-  fi
+  printf "${kfmt}\n" 'files'
+  printf -- "- ${YELLOW}%s%.0s${ENDCOLOR}\n" "${files[@]}"
+  printf "${kfmt} ${YELLOW}%s${ENDCOLOR}\n" 'category' \
+    "$(printf '%s\n' "${files[@]}" | jq -j '"\(.)\u0000"' | awk "${categorizer[@]}")"
 }
 
 unit_test() {
@@ -496,10 +497,10 @@ unit_test() {
       printf -- "- ${arg}" "${error[@]:i:2}"
       printf -- "  ${arg}" "${error[@]:i+2:8}"
     done
-  elif ((!empty)); then
-    exit 0
+    exit 1
+  elif ((empty)); then
+    exit 1
   fi
-  exit 1
 }
 
 ################################################################################
@@ -509,18 +510,18 @@ unit_test() {
 # init variables
 unset IFS rpc_url rpc_username rpc_password download_dir watch_dir rm_strategy \
   rm_thresh locations tr_auth tr_header logs dryrun savejson _opt _arg
+readonly GiB=1073741824
 
 # dependencies
 hash curl jq || die 'Curl and jq required.'
 
 # read config file
 cd -- "${BASH_SOURCE[0]%/*}" || die 'Unable to enter script directory.'
-readonly GiB=1073741824
 source ./config || die "Reading config file failed."
 
 # verify configurations
-[[ ${rpc_url} == http* && ${download_dir} == /* && ${locations['default']} == /* && \
-${rm_thresh} -gt 0 && (${rm_strategy} == 'freespace' || ${rm_strategy} == 'sum') ]] ||
+[[ ${rpc_url} == http* && ${download_dir} == /?* && ${locations['default']} == /?* && \
+${rm_thresh} =~ ^[0-9]+$ && (${rm_strategy} == 'freespace' || ${rm_strategy} == 'sum') ]] ||
   die 'Error in config file.'
 
 # parse arguments
@@ -528,9 +529,9 @@ while getopts 'j:q:f:ls:dht:' i; do
   case "${i}" in
     h) print_help ;;
     d) dryrun=1 ;;
-    [jt]) [[ ${OPTARG} ]] || arg_error "requires a non-empty argument -- ${i}" ;;&
-    [qfs]) [[ ${OPTARG} =~ ^[0-9]+$ ]] || arg_error "requires a positive integer argument -- ${i}" ;;&
-    [flst]) [[ ${_opt} && ${_opt} != "${i}" ]] && arg_error "options are mutual exclusive -- ${_opt}, ${i}" ;;&
+    [jt]) [[ ${OPTARG} ]] || arg_error "requires a non-empty argument" "${i}" ;;&
+    [qfs]) [[ ${OPTARG} =~ ^[0-9]+$ ]] || arg_error "requires a non-negative integer argument" "${i}" ;;&
+    [flst]) [[ ${_opt} && ${_opt} != "${i}" ]] && arg_error "options are mutual exclusive" "${_opt}, ${i}" ;;&
     j) savejson="${OPTARG}" ;;
     q) ((rm_thresh = OPTARG * GiB)) ;;
     f) _opt="${i}" TR_TORRENT_ID="${OPTARG}" ;;
