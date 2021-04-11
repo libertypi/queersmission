@@ -45,202 +45,6 @@ arg_error() {
   exit 1
 } 1>&2
 
-# Copy finished downloads to destination.
-copy_finished() {
-
-  _copy_to_dest() {
-    if ((use_rsync)); then
-      rsync -a --exclude='*.part' --progress -- "${src}" "${dest}/"
-    else
-      [[ -e ${dest} ]] || mkdir -p -- "${dest}" && cp -a -f -- "${src}" "${dest}/"
-    fi || return 1
-    if [[ ${dest} == "${download_dir}" ]]; then
-      request_tr "$(jq -acn --argjson i "${TR_TORRENT_ID}" --arg d "${download_dir}" \
-        '{"arguments":{"ids":[$i],"location":$d},"method":"torrent-set-location"}')" >/dev/null || return 1
-    fi
-    return 0
-  }
-
-  _query_tr_id() {
-    request_tr "{\"arguments\":{\"fields\":[\"name\",\"downloadDir\",\"files\"],\"ids\":[${TR_TORRENT_ID}]},\"method\":\"torrent-get\"}"
-  }
-
-  ### begin ###
-  local src dest logdir data use_rsync=0
-  [[ ${TR_TORRENT_ID} ]] || die 'Torrent ID not set.'
-
-  [[ ${TR_TORRENT_NAME} && ${TR_TORRENT_DIR} ]] || {
-    data="$(_query_tr_id)" || die "Connection failed."
-    IFS=/ read -r -d '' TR_TORRENT_NAME TR_TORRENT_DIR < <(
-      printf '%s' "${data}" | jq -j '.arguments.torrents[]|"\(.name)/\(.downloadDir)\u0000"'
-    ) && [[ ${TR_TORRENT_NAME} && ${TR_TORRENT_DIR} ]] ||
-      die "Invalid torrent ID '${TR_TORRENT_ID}'. Run '${BASH_SOURCE[0]} -l' to show torrent list."
-  }
-  src="$(normpath "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}")"
-
-  # decide the destination
-  if [[ ${TR_TORRENT_DIR} -ef ${download_dir} ]]; then # source: download_dir
-    logdir="$(
-      if [[ ${data} ]]; then printf '%s' "${data}"; else _query_tr_id; fi |
-        jq -j '.arguments.torrents[].files[]|"\(.name)\u0000\(.length)\u0000"' |
-        awk "${categorizer[@]}"
-    )"
-    # fallback to default if failed
-    logdir="$(normpath "${locations[${logdir:-default}]:-${locations[default]}}")"
-    # if source is not a dir, append a sub-directory
-    if [[ -d ${src} ]]; then
-      dest="${logdir}"
-    elif [[ ${TR_TORRENT_NAME} =~ (.*[^.].*)\.[^.]*$ ]]; then
-      dest="${logdir}/${BASH_REMATCH[1]}"
-    else
-      dest="${logdir}/${TR_TORRENT_NAME}"
-    fi
-    # whether to use rsync
-    if hash rsync 1>/dev/null 2>&1; then
-      if [[ ${dest} == "${logdir}" ]]; then
-        (
-          shopt -s nullglob globstar || exit 1
-          for f in "${dest}/${TR_TORRENT_NAME}/"**; do [[ -f ${f} ]] && exit 0; done
-          for f in "${src}/"**/*.part; do [[ -f ${f} ]] && exit 0; done
-          exit 1
-        ) && use_rsync=1
-      elif [[ -e "${dest}/${TR_TORRENT_NAME}" ]]; then
-        use_rsync=1
-      fi
-    fi
-  else # dest: download_dir
-    logdir="${TR_TORRENT_DIR}"
-    dest="${download_dir}"
-  fi
-
-  # copy file
-  append_log 'Error' "${logdir}" "${TR_TORRENT_NAME}"
-  if ((use_rsync)); then data='Syncing'; else data='Copying'; fi
-  printf '%s: "%s" -> "%s/"\n' "${data}" "${src}" "${dest}" 1>&2
-  if ((dryrun)) || _copy_to_dest; then
-    unset 'logs[-1]'
-    append_log 'Finish' "${logdir}" "${TR_TORRENT_NAME}"
-    printf 'Done.\n' 1>&2
-    return 0
-  fi
-  printf 'Failed.\n' 1>&2
-  return 1
-}
-
-# Query and parse API maindata.
-# Global variables: tr_maindata, tr_totalsize, tr_paused, tr_names
-# torrent status code:
-# https://github.com/transmission/transmission/blob/master/libtransmission/transmission.h#L1658
-process_maindata() {
-  local total name dir
-  declare -Ag tr_names=()
-
-  tr_maindata="$(
-    request_tr '{"arguments":{"fields":["activityDate","downloadDir","id","name","percentDone","sizeWhenDone","status"]},"method":"torrent-get"}'
-  )" || die 'Unable to connect to transmission API.'
-  if [[ ${savejson} ]]; then
-    printf '%s' "${tr_maindata}" | jq '.' >"${savejson}" &&
-      printf 'Json data saved to: "%s"\n' "${savejson}" 1>&2
-  fi
-
-  {
-    IFS=/ read -r -d '' total tr_totalsize tr_paused || die "Invalid json response."
-    while IFS=/ read -r -d '' name dir; do
-      [[ ${download_dir} == "${dir}" || ${download_dir} -ef ${dir} ]] && tr_names["${name}"]=1
-    done
-  } < <(printf '%s' "${tr_maindata}" | jq -j '
-    if .result == "success" then
-    .arguments.torrents|
-    ("\(length)/\([.[].sizeWhenDone]|add)/\(map(select(.status == 0))|length)\u0000"),
-    (.[]|"\(.name)/\(.downloadDir)\u0000")
-    else empty end')
-
-  printf 'torrents: %d, paused: %d, size: %d GiB\n' \
-    "${total}" "${tr_paused}" "$((tr_totalsize / GiB))" 1>&2
-}
-
-# Clean junk files in download_dir and watch_dir. This function runs in a
-# subshell.
-clean_disk() {
-  (
-    shopt -s nullglob dotglob || exit 1
-    arr=()
-
-    if ((${#tr_names[@]})) && cd -- "${download_dir}"; then
-      for i in *; do
-        [[ ${tr_names["${i}"]} || ${tr_names["${i%.part}"]} ]] ||
-          arr+=("${PWD:-${download_dir}}/${i}")
-      done
-    else
-      printf 'Skip cleanup: "%s"\n' "${download_dir}" 1>&2
-    fi
-    if [[ ${watch_dir} ]]; then
-      for i in "${watch_dir}/"*.torrent; do
-        [[ -s ${i} ]] || arr+=("${i}")
-      done
-    fi
-
-    if ((${#arr[@]})); then
-      printf 'Cleanup: %s\n' "${arr[@]}" 1>&2
-      ((dryrun)) || for ((i = 0; i < ${#arr[@]}; i += 100)); do
-        rm -r -f -- "${arr[@]:i:100}"
-      done
-    fi
-  )
-}
-
-# Remove inactive torrents if disk space was bellow $space_thresh.
-remove_inactive() {
-  local disksize freespace target m n id size ids names
-
-  {
-    read -r _
-    read -r disksize freespace
-  } < <(df --block-size=1 --output='size,avail' -- "${download_dir}") &&
-    [[ ${disksize} =~ ^[0-9]+$ && ${freespace} =~ ^[0-9]+$ ]] || {
-    printf 'Reading disk stat failed.\n' 1>&2
-    return 1
-  }
-
-  if ((m = space_thresh + tr_totalsize - disksize, n = space_thresh - freespace, (target = m > n ? m : n) > 0)); then
-    printf 'disk free space: %d GiB, will remove: %d GiB\n' "$((freespace / GiB))" "$((target / GiB))" 1>&2
-  else
-    printf 'disk free space: %d GiB, availability: %d GiB. System is healthy.\n' \
-      "$((freespace / GiB))" "$((-target / GiB))" 1>&2
-    return 0
-  fi
-
-  while IFS=/ read -r -d '' id size n; do
-    [[ ${tr_names["${n}"]} ]] || continue
-    ids+="${id},"
-    names+=("${n}")
-    (((target -= size) <= 0)) && break
-  done < <(
-    printf '%s' "${tr_maindata}" | jq -j '
-      .arguments.torrents|
-      sort_by(.activityDate)[]|
-      select(.percentDone == 1)|
-      "\(.id)/\(.sizeWhenDone)/\(.name)\u0000"'
-  )
-
-  if ((${#names[@]})); then
-    printf 'Remove: %s\n' "${names[@]}" 1>&2
-    ((dryrun)) ||
-      request_tr "{\"arguments\":{\"ids\":[${ids%,}],\"delete-local-data\":true},\"method\":\"torrent-remove\"}" >/dev/null &&
-      for n in "${names[@]}"; do
-        append_log 'Remove' "${download_dir}" "${n}"
-      done
-  fi
-}
-
-# Restart paused torrents, if any.
-resume_paused() {
-  if ((tr_paused > 0)); then
-    printf 'Resume torrents.\n' 1>&2
-    ((dryrun)) || request_tr '{"method":"torrent-start"}' >/dev/null
-  fi
-}
-
 # Normalize path, eliminating double slashes, etc.
 # Usage: new_path="$(normpath "${old_path}")"
 # Translated from Python's posixpath.normpath:
@@ -335,6 +139,201 @@ set_colors() {
   fi
 }
 
+# Copy finished downloads to destination.
+copy_finished() {
+
+  _copy_to_dest() {
+    if ((use_rsync)); then
+      rsync -a --exclude='*.part' --progress -- "${src}" "${dest}/"
+    else
+      [[ -e ${dest} ]] || mkdir -p -- "${dest}" && cp -a -f -- "${src}" "${dest}/"
+    fi || return 1
+    if [[ ${dest} == "${download_dir}" ]]; then
+      request_tr "$(jq -acn --argjson i "${TR_TORRENT_ID}" --arg d "${download_dir}" \
+        '{"arguments":{"ids":[$i],"location":$d},"method":"torrent-set-location"}')" >/dev/null || return 1
+    fi
+    return 0
+  }
+
+  _query_tr_id() {
+    request_tr "{\"arguments\":{\"fields\":[\"name\",\"downloadDir\",\"files\"],\"ids\":[${TR_TORRENT_ID}]},\"method\":\"torrent-get\"}"
+  }
+
+  ### begin ###
+  local src dest logdir data use_rsync=0
+  [[ ${TR_TORRENT_ID} ]] || die 'Torrent ID is not set.'
+
+  [[ ${TR_TORRENT_NAME} && ${TR_TORRENT_DIR} ]] || {
+    data="$(_query_tr_id)" || die "Connection failed."
+    IFS=/ read -r -d '' TR_TORRENT_NAME TR_TORRENT_DIR < <(
+      printf '%s' "${data}" | jq -j '.arguments.torrents[]|"\(.name)/\(.downloadDir)\u0000"'
+    ) && [[ ${TR_TORRENT_NAME} && ${TR_TORRENT_DIR} ]] ||
+      die "Invalid torrent ID '${TR_TORRENT_ID}'. Run '${BASH_SOURCE[0]} -l' to show torrent list."
+  }
+  src="$(normpath "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}")"
+
+  # decide the destination
+  if [[ ${TR_TORRENT_DIR} -ef ${download_dir} ]]; then # source: download_dir
+    logdir="$(
+      if [[ ${data} ]]; then printf '%s' "${data}"; else _query_tr_id; fi |
+        jq -j '.arguments.torrents[].files[]|"\(.name)\u0000\(.length)\u0000"' |
+        awk "${categorizer[@]}"
+    )"
+    # fallback to default if failed
+    logdir="$(normpath "${locations[${logdir:-default}]:-${locations[default]}}")"
+    # if source is not a dir, append a sub-directory
+    if [[ -d ${src} ]]; then
+      dest="${logdir}"
+    elif [[ ${TR_TORRENT_NAME} =~ (.*[^.].*)\.[^.]*$ ]]; then
+      dest="${logdir}/${BASH_REMATCH[1]}"
+    else
+      dest="${logdir}/${TR_TORRENT_NAME}"
+    fi
+    # whether to use rsync
+    if hash rsync 1>/dev/null 2>&1; then
+      if [[ ${dest} == "${logdir}" ]]; then
+        (
+          shopt -s nullglob globstar || exit 1
+          for f in "${dest}/${TR_TORRENT_NAME}/"**; do [[ -f ${f} ]] && exit 0; done
+          for f in "${src}/"**/*.part; do [[ -f ${f} ]] && exit 0; done
+          exit 1
+        ) && use_rsync=1
+      elif [[ -e "${dest}/${TR_TORRENT_NAME}" ]]; then
+        use_rsync=1
+      fi
+    fi
+  else # dest: download_dir
+    logdir="${TR_TORRENT_DIR}"
+    dest="${download_dir}"
+  fi
+
+  # copy file
+  append_log 'Error' "${logdir}" "${TR_TORRENT_NAME}"
+  if ((use_rsync)); then data='Syncing'; else data='Copying'; fi
+  printf '%s: "%s" -> "%s/"\n' "${data}" "${src}" "${dest}" 1>&2
+  if ((dryrun)) || _copy_to_dest; then
+    unset 'logs[-1]'
+    append_log 'Finish' "${logdir}" "${TR_TORRENT_NAME}"
+    printf 'Done.\n' 1>&2
+    return 0
+  fi
+  printf 'Failed.\n' 1>&2
+  return 1
+}
+
+# Query and parse API maindata.
+# Global variables: tr_maindata, tr_totalsize, tr_paused, tr_names
+# torrent status code:
+# https://github.com/transmission/transmission/blob/master/libtransmission/transmission.h#L1658
+process_maindata() {
+  local total name dir
+  declare -Ag tr_names=()
+
+  tr_maindata="$(
+    request_tr '{"arguments":{"fields":["activityDate","downloadDir","id","name","percentDone","sizeWhenDone","status"]},"method":"torrent-get"}'
+  )" || die 'Unable to connect to transmission API.'
+  if [[ ${savejson} ]]; then
+    printf '%s' "${tr_maindata}" | jq '.' >"${savejson}" &&
+      printf 'Json data saved to: "%s"\n' "${savejson}" 1>&2
+  fi
+
+  {
+    IFS=/ read -r -d '' total tr_totalsize tr_paused || die "Invalid json response."
+    while IFS=/ read -r -d '' name dir; do
+      [[ ${download_dir} == "${dir}" || ${download_dir} -ef ${dir} ]] && tr_names["${name}"]=1
+    done
+  } < <(printf '%s' "${tr_maindata}" | jq -j '
+    if .result == "success" then
+    .arguments.torrents|
+    ("\(length)/\([.[].sizeWhenDone]|add)/\(map(select(.status == 0))|length)\u0000"),
+    (.[]|"\(.name)/\(.downloadDir)\u0000")
+    else empty end')
+
+  printf 'torrents: %d, paused: %d, size: %d GiB\n' "${total}" "${tr_paused}" "$((tr_totalsize / GiB))" 1>&2
+}
+
+# Clean junk files in download_dir and watch_dir. This function runs in a
+# subshell.
+clean_junk() {
+  (
+    shopt -s nullglob dotglob || exit 1
+    arr=()
+
+    if ((${#tr_names[@]})) && cd -- "${download_dir}"; then
+      for i in *; do
+        [[ ${tr_names["${i}"]} || ${tr_names["${i%.part}"]} ]] ||
+          arr+=("${PWD:-${download_dir}}/${i}")
+      done
+    else
+      printf 'Skip cleanup: "%s"\n' "${download_dir}" 1>&2
+    fi
+    if [[ ${watch_dir} ]]; then
+      for i in "${watch_dir}/"*.torrent; do
+        [[ -s ${i} ]] || arr+=("${i}")
+      done
+    fi
+
+    if ((${#arr[@]})); then
+      printf 'Cleanup: %s\n' "${arr[@]}" 1>&2
+      ((dryrun)) || for ((i = 0; i < ${#arr[@]}; i += 100)); do
+        rm -r -f -- "${arr[@]:i:100}"
+      done
+    fi
+  )
+}
+
+# Remove inactive torrents if disk space was bellow $space_thresh.
+remove_inactive() {
+  local disksize freespace target m n id size ids names
+
+  {
+    read -r _
+    read -r disksize freespace
+  } < <(df --block-size=1 --output='size,avail' -- "${download_dir}") &&
+    [[ ${disksize} =~ ^[0-9]+$ && ${freespace} =~ ^[0-9]+$ ]] || {
+    printf 'Reading disk stat failed.\n' 1>&2
+    return 1
+  }
+
+  if ((m = space_thresh + tr_totalsize - disksize, n = space_thresh - freespace, (target = m > n ? m : n) > 0)); then
+    printf 'disk free space: %d GiB, will remove: %d GiB\n' "$((freespace / GiB))" "$((target / GiB))" 1>&2
+  else
+    printf 'disk free space: %d GiB, availability: %d GiB. System is healthy.\n' \
+      "$((freespace / GiB))" "$((-target / GiB))" 1>&2
+    return 0
+  fi
+
+  while IFS=/ read -r -d '' id size n; do
+    [[ ${tr_names["${n}"]} ]] || continue
+    ids+="${id},"
+    names+=("${n}")
+    (((target -= size) <= 0)) && break
+  done < <(
+    printf '%s' "${tr_maindata}" | jq -j '
+      .arguments.torrents|
+      sort_by(.activityDate)[]|
+      select(.percentDone == 1)|
+      "\(.id)/\(.sizeWhenDone)/\(.name)\u0000"'
+  )
+
+  if ((${#names[@]})); then
+    printf 'Remove: %s\n' "${names[@]}" 1>&2
+    ((dryrun)) ||
+      request_tr "{\"arguments\":{\"ids\":[${ids%,}],\"delete-local-data\":true},\"method\":\"torrent-remove\"}" >/dev/null &&
+      for n in "${names[@]}"; do
+        append_log 'Remove' "${download_dir}" "${n}"
+      done
+  fi
+}
+
+# Restart paused torrents, if any.
+resume_paused() {
+  if ((tr_paused > 0)); then
+    printf 'Resume torrents.\n' 1>&2
+    ((dryrun)) || request_tr '{"method":"torrent-start"}' >/dev/null
+  fi
+}
+
 show_tr_list() {
   local id size pct name w0=2 w1=4 gap='  ' arr=()
 
@@ -351,7 +350,6 @@ show_tr_list() {
 
   printf "%${w0}s${gap}%${w1}s${gap}%5s${gap}%s\n" 'ID' 'SIZE' 'PCT' 'NAME'
   printf "%${w0}d${gap}${MAGENTA}%${w1}s${gap}%5.1f${gap}${YELLOW}%s${ENDCOLOR}\n" "${arr[@]}"
-  exit 0
 }
 
 show_tr_info() {
@@ -392,7 +390,6 @@ show_tr_info() {
     printf "${kfmt} ${YELLOW}%s${ENDCOLOR}\n" 'category' "$(printf '%s\n' "${files[@]}" |
       jq -j '"\(.)\u0000"' | awk "${categorizer[@]}")"
   fi
-  exit 0
 }
 
 unit_test() {
@@ -503,8 +500,8 @@ unit_test() {
 ################################################################################
 
 # init variables
-unset IFS rpc_url rpc_username rpc_password download_dir watch_dir space_thresh \
-  locations tr_auth tr_header savejson opt arg
+unset IFS rpc_url rpc_username rpc_password download_dir watch_dir \
+  space_thresh locations tr_auth tr_header logs dryrun savejson _opt _arg
 
 # dependencies
 hash curl jq || die 'Curl and jq required.'
@@ -516,14 +513,6 @@ source ./config || die "Reading config file failed."
 [[ ${rpc_url} == http* && ${download_dir} == /* && ${space_thresh} -ge 0 && ${locations['default']} == /* ]] ||
   die 'Error in configuration file.'
 
-# assign variables
-logs=()
-logfile="${PWD}/logfile.log"
-categorizer=(-v regexfile="${PWD}/component/regex.txt" -f "${PWD}/component/categorizer.awk")
-[[ ${rpc_username} ]] && tr_auth=(--anyauth --user "${rpc_username}${rpc_password:+${rpc_password/#/:}}")
-download_dir="$(normpath "${download_dir}")"
-dryrun=0
-
 # parse arguments
 while getopts 'j:q:f:ls:dht:' i; do
   case "${i}" in
@@ -531,27 +520,33 @@ while getopts 'j:q:f:ls:dht:' i; do
     d) dryrun=1 ;;
     [jt]) [[ ${OPTARG} ]] || arg_error "requires a non-empty argument -- ${i}" ;;&
     [qfs]) [[ ${OPTARG} =~ ^[0-9]+$ ]] || arg_error "requires a positive integer argument -- ${i}" ;;&
-    [flst]) [[ ${opt} && ${opt} != "${i}" ]] && arg_error "options are mutual exclusive -- ${opt}, ${i}" ;;&
+    [flst]) [[ ${_opt} && ${_opt} != "${i}" ]] && arg_error "options are mutual exclusive -- ${_opt}, ${i}" ;;&
     j) savejson="${OPTARG}" ;;
     q) ((space_thresh = OPTARG * GiB)) ;;
-    f) opt="${i}" TR_TORRENT_ID="${OPTARG}" ;;
-    [lst]) opt="${i}" arg="${OPTARG}" ;;
+    f) _opt="${i}" TR_TORRENT_ID="${OPTARG}" ;;
+    [lst]) _opt="${i}" _arg="${OPTARG}" ;;
     *) arg_error ;;
   esac
 done
-readonly -- rpc_url download_dir watch_dir space_thresh locations tr_auth \
-  categorizer logfile dryrun savejson
 
-if [[ ${opt} == [lst] ]]; then
+# constants
+[[ ${rpc_username} ]] && tr_auth=(--anyauth --user "${rpc_username}${rpc_password:+${rpc_password/#/:}}")
+readonly -- rpc_url watch_dir space_thresh locations tr_auth dryrun savejson \
+  download_dir="$(normpath "${download_dir}")" \
+  logfile="${PWD}/logfile.log" \
+  categorizer=(-v regexfile="${PWD}/component/regex.txt" -f "${PWD}/component/categorizer.awk")
+
+# begin
+if [[ ${_opt} == [lst] ]]; then
 
   # stand-alone functions
   set_colors
   set_tr_header || die 'Unable to connect to transmission API.'
 
-  case "${opt}" in
+  case "${_opt}" in
     l) show_tr_list ;;
-    s) show_tr_info "${arg}" ;;
-    t) unit_test "${arg}" ;;
+    s) show_tr_info "${_arg}" ;;
+    t) unit_test "${_arg}" ;;
   esac
 
 else
@@ -571,7 +566,7 @@ else
 
   # maintenance
   process_maindata
-  clean_disk
+  clean_junk
   remove_inactive
   resume_paused
 
