@@ -62,12 +62,12 @@ arg_error() {
 
 init() {
   # init variables
-  [[ ${rpc_username} ]] && tr_auth=(--anyauth --user "${rpc_username}:${rpc_password}")
-  readonly -- rpc_url tr_auth watch_dir locations \
-    download_dir="$(normpath "${download_dir}")" logfile="${PWD}/logfile.log" \
-    categorizer=(-v regexfile="${PWD}/component/regex.txt" -f "${PWD}/component/categorizer.awk")
-  dryrun=0 logs=()
   local i opt arg
+  logfile="${PWD}/logfile.log"
+  categorizer=(-v regexfile="${PWD}/component/regex.txt" -f "${PWD}/component/categorizer.awk")
+  [[ ${rpc_username} ]] && tr_auth=(--anyauth --user "${rpc_username}${rpc_password:+${rpc_password/#/:}}")
+  download_dir="$(normpath "${download_dir}")"
+  logs=() dryrun=0
 
   # parse arguments
   while getopts 'j:q:f:ls:dht:' i; do
@@ -84,7 +84,7 @@ init() {
       *) arg_error ;;
     esac
   done
-  readonly -- dryrun savejson space_thresh
+  readonly -- rpc_url download_dir watch_dir space_thresh locations tr_auth categorizer logfile dryrun savejson
 
   # stand-alone functions
   if [[ ${opt} == [lst] ]]; then
@@ -133,7 +133,7 @@ copy_finished() {
   local src dest logdir data use_rsync=0
 
   [[ ${TR_TORRENT_NAME} && ${TR_TORRENT_DIR} ]] || {
-    data="$(_query_tr_id)" || die "Connecting failed."
+    data="$(_query_tr_id)" || die "Connection failed."
     IFS=/ read -r -d '' TR_TORRENT_NAME TR_TORRENT_DIR < <(
       printf '%s' "${data}" | jq -j '.arguments.torrents[]|"\(.name)/\(.downloadDir)\u0000"'
     ) && [[ ${TR_TORRENT_NAME} && ${TR_TORRENT_DIR} ]] ||
@@ -460,8 +460,8 @@ unit_test() {
   _test_tr() {
     local name files
     while IFS=/ read -r -d '' name files; do
-      _examine_test "$(printf '%s' "${files}" |
-        jq -j '.[]|"\(.name)\u0000\(.length)\u0000"' | awk "${categorizer[@]}")" "${name}"
+      _examine_test "$(printf '%s' "${files}" | jq -j '.[]|"\(.name)\u0000\(.length)\u0000"' |
+        awk "${categorizer[@]}")" "${name}"
     done < <(
       request_tr '{"arguments":{"fields":["name","files"]},"method":"torrent-get"}' |
         jq -j '.arguments.torrents[]|"\(.name)/\(.files)\u0000"'
@@ -493,7 +493,7 @@ unit_test() {
     esac
     if [[ -z ${err} ]]; then
       dest="${locations[${key}]}"
-      [[ ${path} && ! ${path} -ef ${dest} ]] && err='different path'
+      [[ -z ${path} || ${path} -ef ${dest} ]] || err='different path'
     fi
 
     result=('name' "${name}" 'path' "${path}" 'dest' "${dest}" 'type' "${key}" 'stat' "${err:-pass}")
@@ -518,8 +518,8 @@ unit_test() {
     printf -- "  ${fmt}" "${result[@]:2}"
   }
 
-  [[ $1 == 'all' ]] && set -- tr tv film
   local arg i kfmt="${MAGENTA}%s${ENDCOLOR}:" empty=1 error=()
+  [[ $1 == 'all' ]] && set -- tr tv film
 
   for arg; do
     case "${arg}" in
