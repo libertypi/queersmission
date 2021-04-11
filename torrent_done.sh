@@ -518,7 +518,7 @@ hash curl jq || die 'Curl and jq required.'
 
 # read config file
 cd -- "${BASH_SOURCE[0]%/*}" || die 'Unable to enter script directory.'
-source ./config || die "Reading config file failed."
+source ./config || die 'Reading config file failed.'
 
 # verify configurations
 [[ ${rpc_url} == http* && ${download_dir} == /?* && ${locations['default']} == /?* && \
@@ -530,9 +530,9 @@ while getopts 'j:q:f:ls:dht:' i; do
   case "${i}" in
     h) print_help ;;
     d) dryrun=1 ;;
-    [jt]) [[ ${OPTARG} ]] || arg_error "requires a non-empty argument" "${i}" ;;&
-    [qfs]) [[ ${OPTARG} =~ ^[0-9]+$ ]] || arg_error "requires a non-negative integer argument" "${i}" ;;&
-    [flst]) [[ ${_opt} && ${_opt} != "${i}" ]] && arg_error "options are mutual exclusive" "${_opt}, ${i}" ;;&
+    [jt]) [[ ${OPTARG} ]] || arg_error 'requires a non-empty argument' "${i}" ;;&
+    [qfs]) [[ ${OPTARG} =~ ^[0-9]+$ ]] || arg_error 'requires a non-negative integer argument' "${i}" ;;&
+    [flst]) [[ ${_opt} && ${_opt} != "${i}" ]] && arg_error 'options are mutual exclusive' "${_opt}, ${i}" ;;&
     j) savejson="${OPTARG}" ;;
     q) ((rm_thresh = OPTARG * GiB)) ;;
     f) _opt="${i}" TR_TORRENT_ID="${OPTARG}" ;;
@@ -540,7 +540,7 @@ while getopts 'j:q:f:ls:dht:' i; do
     *) arg_error ;;
   esac
 done
-(($# >= OPTIND)) && arg_error "unrecognized argument" "${@:OPTIND:1}"
+(($# >= OPTIND)) && arg_error 'unrecognized argument' "${@:OPTIND:1}"
 
 # constants
 [[ ${rpc_username} ]] && tr_auth=(--anyauth --user "${rpc_username}${rpc_password:+${rpc_password/#/:}}")
@@ -569,7 +569,7 @@ else
   if [[ ${TR_TORRENT_ID} ]]; then
     flock -x "${i}"
   elif ! flock -x -n "${i}"; then
-    die "Unable to acquire lock, another instance running?"
+    die 'Unable to acquire lock, another instance running?'
   fi
   trap 'write_log' EXIT
 
