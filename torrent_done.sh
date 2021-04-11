@@ -289,8 +289,8 @@ remove_inactive() {
   case "${rm_strategy}" in
     'freespace')
       {
-        read -r _
         # disksize, freespace
+        read -r _
         read -r m n && [[ ${m} =~ ^[0-9]+$ && ${n} =~ ^[0-9]+$ ]] || {
           printf 'Reading disk stat failed.\n' 1>&2
           return 1
