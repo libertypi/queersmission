@@ -3,27 +3,12 @@
 # Bash script for transmission maintenance and torrent management.
 # Author: David Pi
 
-################################################################################
-#                                 Environment                                  #
-################################################################################
-
 die() {
   printf 'Fatal: %s\n' "$1" 1>&2
   exit 1
 }
-
 export LC_ALL=C LANG=C
-unset IFS rpc_url rpc_username rpc_password download_dir watch_dir space_thresh \
-  locations tr_auth tr_header savejson
-
-((BASH_VERSINFO >= 4)) 1>/dev/null 2>&1 || die 'Bash >=4 required.'
-hash curl jq || die 'Curl and jq required.'
-cd -- "${BASH_SOURCE[0]%/*}" || die 'Unable to enter script directory.'
-
-readonly GiB=1073741824
-. ./config || die "Loading config file failed."
-[[ ${rpc_url} == http* && ${download_dir} == /* && ${space_thresh} -ge 0 && ${locations['default']} == /* ]] ||
-  die 'Invalid configuration.'
+[[ ${BASH_VERSINFO} -ge 4 ]] 1>/dev/null 2>&1 || die 'Bash >=4 required.'
 
 ################################################################################
 #                                  Functions                                   #
@@ -60,58 +45,8 @@ arg_error() {
   exit 1
 } 1>&2
 
-init() {
-  # init variables
-  local i opt arg
-  logfile="${PWD}/logfile.log"
-  categorizer=(-v regexfile="${PWD}/component/regex.txt" -f "${PWD}/component/categorizer.awk")
-  [[ ${rpc_username} ]] && tr_auth=(--anyauth --user "${rpc_username}${rpc_password:+${rpc_password/#/:}}")
-  download_dir="$(normpath "${download_dir}")"
-  logs=() dryrun=0
-
-  # parse arguments
-  while getopts 'j:q:f:ls:dht:' i; do
-    case "${i}" in
-      h) print_help ;;
-      d) dryrun=1 ;;
-      [jt]) [[ ${OPTARG} ]] || arg_error "requires a non-empty argument -- ${i}" ;;&
-      [qfs]) [[ ${OPTARG} =~ ^[0-9]+$ ]] || arg_error "requires a positive integer argument -- ${i}" ;;&
-      [flst]) [[ ${opt} && ${opt} != "${i}" ]] && arg_error "options are mutual exclusive -- ${opt}, ${i}" ;;&
-      j) savejson="${OPTARG}" ;;
-      q) ((space_thresh = OPTARG * GiB)) ;;
-      f) opt="${i}" TR_TORRENT_ID="${OPTARG}" ;;
-      [lst]) opt="${i}" arg="${OPTARG}" ;;
-      *) arg_error ;;
-    esac
-  done
-  readonly -- rpc_url download_dir watch_dir space_thresh locations tr_auth categorizer logfile dryrun savejson
-
-  # stand-alone functions
-  if [[ ${opt} == [lst] ]]; then
-    set_colors
-    set_tr_header || die 'Unable to connect to transmission API.'
-    case "${opt}" in
-      l) show_tr_list ;;
-      s) show_tr_info "${arg}" ;;
-      t) unit_test "${arg}" ;;
-    esac
-    exit
-  fi
-
-  # acquire lock
-  exec {i}<"./${BASH_SOURCE[0]##*/}"
-  if [[ ${TR_TORRENT_ID} ]]; then
-    flock -x "${i}"
-  elif ! flock -x -n "${i}"; then
-    die "Unable to acquire lock, another instance running?"
-  fi
-  trap 'write_log' EXIT
-}
-
-# Copy finished downloads to destination. This function only runs when the
-# script was invoked as "script-torrent-done" or with "-f" option.
+# Copy finished downloads to destination.
 copy_finished() {
-  [[ ${TR_TORRENT_ID} ]] || return 0
 
   _copy_to_dest() {
     if ((use_rsync)); then
@@ -130,7 +65,9 @@ copy_finished() {
     request_tr "{\"arguments\":{\"fields\":[\"name\",\"downloadDir\",\"files\"],\"ids\":[${TR_TORRENT_ID}]},\"method\":\"torrent-get\"}"
   }
 
+  ### begin ###
   local src dest logdir data use_rsync=0
+  [[ ${TR_TORRENT_ID} ]] || die 'Torrent ID not set.'
 
   [[ ${TR_TORRENT_NAME} && ${TR_TORRENT_DIR} ]] || {
     data="$(_query_tr_id)" || die "Connection failed."
@@ -192,7 +129,7 @@ copy_finished() {
 
 # Query and parse API maindata.
 # Global variables: tr_maindata, tr_totalsize, tr_paused, tr_names
-# torrent status number:
+# torrent status code:
 # https://github.com/transmission/transmission/blob/master/libtransmission/transmission.h#L1658
 process_maindata() {
   local total name dir
@@ -222,7 +159,8 @@ process_maindata() {
     "${total}" "${tr_paused}" "$((tr_totalsize / GiB))" 1>&2
 }
 
-# Clean junk files in download_dir and watch_dir. This function runs in a subshell.
+# Clean junk files in download_dir and watch_dir. This function runs in a
+# subshell.
 clean_disk() {
   (
     shopt -s nullglob dotglob || exit 1
@@ -417,6 +355,7 @@ show_tr_list() {
 }
 
 show_tr_info() {
+
   _format_read() {
     local fmt="${kfmt} ${YELLOW}${1}${ENDCOLOR}\n" k v
     shift
@@ -426,6 +365,7 @@ show_tr_info() {
     done
   }
 
+  ### begin ###
   local data jqprog files \
     kfmt="${MAGENTA}%s${ENDCOLOR}:" \
     strings=('name' 'downloadDir' 'hashString' 'id' 'status') \
@@ -518,6 +458,7 @@ unit_test() {
     printf -- "  ${fmt}" "${result[@]:2}"
   }
 
+  ### begin ###
   local arg i kfmt="${MAGENTA}%s${ENDCOLOR}:" empty=1 error=()
   [[ $1 == 'all' ]] && set -- tr tv film
 
@@ -561,11 +502,78 @@ unit_test() {
 #                                     Main                                     #
 ################################################################################
 
-init "$@"
-set_tr_header
-copy_finished
-process_maindata
-clean_disk
-remove_inactive
-resume_paused
+# init variables
+unset IFS rpc_url rpc_username rpc_password download_dir watch_dir space_thresh \
+  locations tr_auth tr_header savejson opt arg
+
+# dependencies
+hash curl jq || die 'Curl and jq required.'
+
+# read configuration
+cd -- "${BASH_SOURCE[0]%/*}" || die 'Unable to enter script directory.'
+readonly GiB=1073741824
+source ./config || die "Reading config file failed."
+[[ ${rpc_url} == http* && ${download_dir} == /* && ${space_thresh} -ge 0 && ${locations['default']} == /* ]] ||
+  die 'Error in configuration file.'
+
+# assign variables
+logs=()
+logfile="${PWD}/logfile.log"
+categorizer=(-v regexfile="${PWD}/component/regex.txt" -f "${PWD}/component/categorizer.awk")
+[[ ${rpc_username} ]] && tr_auth=(--anyauth --user "${rpc_username}${rpc_password:+${rpc_password/#/:}}")
+download_dir="$(normpath "${download_dir}")"
+dryrun=0
+
+# parse arguments
+while getopts 'j:q:f:ls:dht:' i; do
+  case "${i}" in
+    h) print_help ;;
+    d) dryrun=1 ;;
+    [jt]) [[ ${OPTARG} ]] || arg_error "requires a non-empty argument -- ${i}" ;;&
+    [qfs]) [[ ${OPTARG} =~ ^[0-9]+$ ]] || arg_error "requires a positive integer argument -- ${i}" ;;&
+    [flst]) [[ ${opt} && ${opt} != "${i}" ]] && arg_error "options are mutual exclusive -- ${opt}, ${i}" ;;&
+    j) savejson="${OPTARG}" ;;
+    q) ((space_thresh = OPTARG * GiB)) ;;
+    f) opt="${i}" TR_TORRENT_ID="${OPTARG}" ;;
+    [lst]) opt="${i}" arg="${OPTARG}" ;;
+    *) arg_error ;;
+  esac
+done
+readonly -- rpc_url download_dir watch_dir space_thresh locations tr_auth \
+  categorizer logfile dryrun savejson
+
+if [[ ${opt} == [lst] ]]; then
+
+  # stand-alone functions
+  set_colors
+  set_tr_header || die 'Unable to connect to transmission API.'
+
+  case "${opt}" in
+    l) show_tr_list ;;
+    s) show_tr_info "${arg}" ;;
+    t) unit_test "${arg}" ;;
+  esac
+
+else
+
+  # acquire lock
+  exec {i}<"./${BASH_SOURCE[0]##*/}"
+  if [[ ${TR_TORRENT_ID} ]]; then
+    flock -x "${i}"
+  elif ! flock -x -n "${i}"; then
+    die "Unable to acquire lock, another instance running?"
+  fi
+  trap 'write_log' EXIT
+
+  # copy finished download
+  set_tr_header
+  [[ ${TR_TORRENT_ID} ]] && copy_finished
+
+  # maintenance
+  process_maindata
+  clean_disk
+  remove_inactive
+  resume_paused
+
+fi
 exit 0
