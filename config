@@ -30,8 +30,8 @@ watch_dir='/volume1/video/Torrent'
 # There are two strategies:
 # - "freespace": when the free space of `download_dir` is bellow `rm_thresh`,
 #   i.e., the minimum free space to keep on disk.
-# - "sum": when the total size of all torrents exceeds `rm_thresh`, i.e., the
-#   maximum size of existing torrents.
+# - "sizesum": when the total size of all torrents exceeds `rm_thresh`, i.e.,
+#   the maximum size of existing torrents.
 
 rm_strategy='freespace'
 ((rm_thresh = 50 * GiB))

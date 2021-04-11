@@ -299,7 +299,7 @@ remove_inactive() {
       ((i = n / GiB, m = rm_thresh + tr_totalsize - m, n = rm_thresh - n, target = m > n ? m : n))
       m='free space'
       ;;
-    'sum')
+    'sizesum')
       ((i = rm_thresh / GiB, target = tr_totalsize - rm_thresh))
       m='quota'
       ;;
@@ -522,7 +522,7 @@ source ./config || die 'Reading config file failed.'
 
 # verify configurations
 [[ ${rpc_url} == http* && ${download_dir} == /?* && ${locations['default']} == /?* && \
-${rm_thresh} =~ ^[0-9]+$ && (${rm_strategy} == 'freespace' || ${rm_strategy} == 'sum') ]] ||
+${rm_thresh} =~ ^[0-9]+$ && (${rm_strategy} == 'freespace' || ${rm_strategy} == 'sizesum') ]] ||
   die 'Error in config file.'
 
 # parse arguments
