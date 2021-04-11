@@ -337,10 +337,8 @@ remove_inactive() {
 
 # Restart paused torrents, if any.
 resume_paused() {
-  if ((tr_paused > 0)); then
-    printf 'Resume torrents.\n' 1>&2
-    ((dryrun)) || request_tr '{"method":"torrent-start"}' >/dev/null
-  fi
+  printf 'Resume torrents.\n' 1>&2
+  ((dryrun)) || request_tr '{"method":"torrent-start"}' >/dev/null
 }
 
 show_tr_list() {
@@ -580,7 +578,7 @@ else
   process_maindata
   clean_junk
   remove_inactive
-  resume_paused
+  ((tr_paused > 0)) && resume_paused
 
 fi
 exit 0
