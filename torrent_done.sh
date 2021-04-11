@@ -396,8 +396,9 @@ show_tr_info() {
 
   printf "${kfmt}\n" 'files'
   printf -- "- ${YELLOW}%s%.0s${ENDCOLOR}\n" "${files[@]}"
-  printf "${kfmt} ${YELLOW}%s${ENDCOLOR}\n" 'category' \
-    "$(printf '%s\n' "${files[@]}" | jq -j '"\(.)\u0000"' | awk "${categorizer[@]}")"
+
+  data="$(printf '%s\n' "${files[@]}" | jq -j '"\(.)\u0000"' | awk "${categorizer[@]}")"
+  printf "${kfmt} ${YELLOW}%s${ENDCOLOR}\n" 'category' "${data:-null}"
 }
 
 unit_test() {
@@ -539,6 +540,7 @@ while getopts 'j:q:f:ls:dht:' i; do
     *) arg_error ;;
   esac
 done
+(($# >= OPTIND)) && arg_error "unrecognized argument" "${@:OPTIND:1}"
 
 # constants
 [[ ${rpc_username} ]] && tr_auth=(--anyauth --user "${rpc_username}${rpc_password:+${rpc_password/#/:}}")
