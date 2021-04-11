@@ -238,14 +238,14 @@ process_maindata() {
   fi
 
   {
-    IFS=/ read -r -d '' total tr_totalsize tr_paused || die "Invalid json response."
+    IFS=/ read -r -d '' total tr_paused tr_totalsize || die "Invalid json response."
     while IFS=/ read -r -d '' name dir; do
       [[ ${download_dir} == "${dir}" || ${download_dir} -ef ${dir} ]] && tr_names["${name}"]=1
     done
   } < <(printf '%s' "${tr_maindata}" | jq -j '
     if .result == "success" then
     .arguments.torrents|
-    ("\(length)/\([.[].sizeWhenDone]|add)/\(map(select(.status == 0))|length)\u0000"),
+    ("\(length)/\(map(select(.status == 0))|length)/\([.[].sizeWhenDone]|add)\u0000"),
     (.[]|"\(.name)/\(.downloadDir)\u0000")
     else empty end')
 
