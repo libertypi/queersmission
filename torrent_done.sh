@@ -23,7 +23,7 @@ Author: David Pi
 
 Transmission maintenance:
   -j FILE    save json format data to FILE
-  -q NUM     set space thresh to NUM GiB, override config file
+  -q NUM     set rm_thresh to NUM GiB, override config file
 
 Torrent management:
   -f ID      force copy torrent ID, like "script-torrent-done"
@@ -282,32 +282,41 @@ clean_junk() {
   )
 }
 
-# Remove inactive torrents if disk space was bellow $space_thresh.
+# Remove inactive torrents to free up space.
 remove_inactive() {
-  local disksize freespace target m n id size ids names
+  local i m n target ids names
 
-  {
-    read -r _
-    read -r disksize freespace
-  } < <(df --block-size=1 --output='size,avail' -- "${download_dir}") &&
-    [[ ${disksize} =~ ^[0-9]+$ && ${freespace} =~ ^[0-9]+$ ]] || {
-    printf 'Reading disk stat failed.\n' 1>&2
-    return 1
-  }
+  case "${rm_strategy}" in
+    'freespace')
+      {
+        read -r _
+        read -r m n && [[ ${m} =~ ^[0-9]+$ && ${n} =~ ^[0-9]+$ ]] # disksize freespace
+      } < <(df --block-size=1 --output='size,avail' -- "${download_dir}") || {
+        printf 'Reading disk stat failed.\n' 1>&2
+        return 1
+      }
+      ((i = n / GiB, m = rm_thresh + tr_totalsize - m, n = rm_thresh - n, target = m > n ? m : n))
+      m='free space'
+      ;;
+    'sum')
+      ((i = rm_thresh / GiB, target = tr_totalsize - rm_thresh))
+      m='quota'
+      ;;
+    *) die "Invalid rm_strategy '${rm_strategy}'." ;;
+  esac
 
-  if ((m = space_thresh + tr_totalsize - disksize, n = space_thresh - freespace, (target = m > n ? m : n) > 0)); then
-    printf 'disk free space: %d GiB, will remove: %d GiB\n' "$((freespace / GiB))" "$((target / GiB))" 1>&2
+  if ((target > 0)); then
+    printf '%s: %d GiB, will remove: %d GiB\n' "${m}" "${i}" "$((target / GiB))" 1>&2
   else
-    printf 'disk free space: %d GiB, availability: %d GiB. System is healthy.\n' \
-      "$((freespace / GiB))" "$((-target / GiB))" 1>&2
+    printf '%s: %d GiB, availability: %d GiB. System is healthy.\n' "${m}" "${i}" "$((-target / GiB))" 1>&2
     return 0
   fi
 
-  while IFS=/ read -r -d '' id size n; do
+  while IFS=/ read -r -d '' i m n; do # id, size, name
     [[ ${tr_names["${n}"]} ]] || continue
-    ids+="${id},"
+    ids+="${i},"
     names+=("${n}")
-    (((target -= size) <= 0)) && break
+    (((target -= m) <= 0)) && break
   done < <(
     printf '%s' "${tr_maindata}" | jq -j '
       .arguments.torrents|
@@ -500,18 +509,21 @@ unit_test() {
 ################################################################################
 
 # init variables
-unset IFS rpc_url rpc_username rpc_password download_dir watch_dir \
-  space_thresh locations tr_auth tr_header logs dryrun savejson _opt _arg
+unset IFS rpc_url rpc_username rpc_password download_dir watch_dir rm_strategy \
+  rm_thresh locations tr_auth tr_header logs dryrun savejson _opt _arg
 
 # dependencies
 hash curl jq || die 'Curl and jq required.'
 
-# read configuration
+# read config file
 cd -- "${BASH_SOURCE[0]%/*}" || die 'Unable to enter script directory.'
 readonly GiB=1073741824
 source ./config || die "Reading config file failed."
-[[ ${rpc_url} == http* && ${download_dir} == /* && ${space_thresh} -ge 0 && ${locations['default']} == /* ]] ||
-  die 'Error in configuration file.'
+
+# verify configurations
+[[ ${rpc_url} == http* && ${download_dir} == /* && ${locations['default']} == /* && \
+${rm_thresh} -gt 0 && (${rm_strategy} == 'freespace' || ${rm_strategy} == 'sum') ]] ||
+  die 'Error in config file.'
 
 # parse arguments
 while getopts 'j:q:f:ls:dht:' i; do
@@ -522,7 +534,7 @@ while getopts 'j:q:f:ls:dht:' i; do
     [qfs]) [[ ${OPTARG} =~ ^[0-9]+$ ]] || arg_error "requires a positive integer argument -- ${i}" ;;&
     [flst]) [[ ${_opt} && ${_opt} != "${i}" ]] && arg_error "options are mutual exclusive -- ${_opt}, ${i}" ;;&
     j) savejson="${OPTARG}" ;;
-    q) ((space_thresh = OPTARG * GiB)) ;;
+    q) ((rm_thresh = OPTARG * GiB)) ;;
     f) _opt="${i}" TR_TORRENT_ID="${OPTARG}" ;;
     [lst]) _opt="${i}" _arg="${OPTARG}" ;;
     *) arg_error ;;
@@ -531,7 +543,7 @@ done
 
 # constants
 [[ ${rpc_username} ]] && tr_auth=(--anyauth --user "${rpc_username}${rpc_password:+${rpc_password/#/:}}")
-readonly -- rpc_url watch_dir space_thresh locations tr_auth dryrun savejson \
+readonly -- rpc_url watch_dir rm_strategy rm_thresh locations tr_auth dryrun savejson \
   download_dir="$(normpath "${download_dir}")" \
   logfile="${PWD}/logfile.log" \
   categorizer=(-v regexfile="${PWD}/component/regex.txt" -f "${PWD}/component/categorizer.awk")

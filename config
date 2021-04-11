@@ -6,27 +6,40 @@
 
 # Transmission rpc address. If authentication was disabled, leave rpc_username
 # and rpc_password empty.
+
 rpc_url='http://localhost:9091/transmission/rpc'
 rpc_username=''
 rpc_password=''
 
 # Directory storing seeding files, match "download-dir" in transmission
-# settings. This directory should only be used for internal cache. DO NOT put
-# user files here or they will be lost.
+# settings. This directory should only be used for internal cache. Any files not
+# listed in transmission torrent list will be removed. DO NOT put user files
+# here or they will be lost.
+
 download_dir='/volume2/@transmission'
 
 # Directory where transmission monitors for new torrents, match "watch-dir" in
 # transmission settings. Transmission occasionally leaves empty ".torrent" files
 # here, and this script will delete them for you. Leave empty to disable.
+
 watch_dir='/volume1/video/Torrent'
 
-# Minimum free space to keep in download_dir (default: 50 GiB). If free space
-# was bellow the threshold, we begin to delete the most inactive torrents.
-((space_thresh = 50 * GiB))
+# The condition under which we begin to remove torrents to free up space. The
+# least recent actived torrent will be deleted first. Set "rm_strategy" to one
+# of the strategies bellow, and "rm_thresh" to the value.
+# There are two strategies:
+# - "freespace": when the free space of download_dir is bellow "rm_thresh",
+#   i.e., the minimum free space to keep on disk.
+# - "sum": when the total size of all torrents exceeds "rm_thresh", i.e., the
+#   maximum size of existing torrents.
 
-# Download save locations. When transmission finishes a download, we categorize
-# the torrent and copy it to the corresponding location. Locations should NOT be
-# the same as nor related to download_dir.
+rm_strategy='freespace'
+((rm_thresh = 50 * GiB))
+
+# Download saving locations. When transmission finishes a download, we
+# categorize the torrent and copy it to the corresponding place. Locations
+# should NOT be as same as nor related to download_dir.
+
 declare -A locations=(
   ['default']='/volume1/homes/admin/Download'
   ['av']='/volume1/driver/Temp'
