@@ -4,29 +4,29 @@
 #                                Configurations                                #
 ################################################################################
 
-# Full url of Transmission RPC API. If authentication was disabled, leave
+# The full url of Transmission RPC. If authentication was disabled, leave
 # `rpc_username` and `rpc_password` empty.
 
 rpc_url='http://localhost:9091/transmission/rpc'
 rpc_username=''
 rpc_password=''
 
-# Directory storing files for seeding, match "download-dir" in transmission
+# The directory storing files for seeding, match "download-dir" in transmission
 # settings. This directory should only be used for internal cache. Any files not
 # in transmission torrent list will be removed. DO NOT PUT USER FILES HERE OR
 # THEY WILL BE LOST.
 
 download_dir='/volume2/@transmission'
 
-# Directory where transmission monitors for new torrents, match "watch-dir" in
-# transmission settings. Transmission occasionally leaves empty ".torrent" files
-# here, and we will delete them for you. Leave empty to disable.
+# The directory where transmission monitors for new torrents, match "watch-dir"
+# in transmission settings. Transmission occasionally leaves empty ".torrent"
+# files here, and we will delete them for you. Leave empty to disable.
 
 watch_dir='/volume1/video/Torrent'
 
 # The condition under which we begin to remove torrents to free up space. The
 # least recent actived torrent will be deleted first. Set `rm_strategy` to one
-# of the strategies bellow, and `rm_thresh` to the value.
+# of the strategy names bellow, and `rm_thresh` to the value (unit: GiB).
 # There are two strategies:
 # - "freespace": when the free space of `download_dir` is bellow `rm_thresh`,
 #   i.e., the minimum free space to keep on disk.
@@ -34,7 +34,7 @@ watch_dir='/volume1/video/Torrent'
 #   the maximum size of existing torrents.
 
 rm_strategy='freespace'
-((rm_thresh = 50 * GiB))
+rm_thresh=50
 
 # Download saving locations. When transmission finishes a download, we
 # categorize the torrent and copy it to the corresponding place. The paths

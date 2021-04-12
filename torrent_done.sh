@@ -69,7 +69,7 @@ normpath() {
 }
 
 # Get the X-Transmission-Session-Id header.
-# Global variable: tr_header
+# Global: tr_header
 set_tr_header() {
   if [[ "$(curl -sI --retry 3 "${tr_auth[@]}" -- "${rpc_url}")" =~ X-Transmission-Session-Id:[[:blank:]]*[[:alnum:]]+ ]]; then
     tr_header="${BASH_REMATCH[0]}"
@@ -93,7 +93,8 @@ request_tr() {
   return 1
 }
 
-# Record one line of log to global array `logs`.
+# Record one line of log.
+# Global: logs
 # param  column            width
 #    --  mm/dd/yy hh:mm:ss    17
 #    $1  Finish/Remove/Error   6
@@ -187,7 +188,7 @@ copy_finished() {
     # if source is not a dir, append a sub-directory
     if [[ -d ${src} ]]; then
       dest="${logdir}"
-    elif [[ ${TR_TORRENT_NAME} =~ (.*[^.].*)\.[^.]*$ ]]; then
+    elif [[ ${TR_TORRENT_NAME} =~ (.*[^.].*)\.[^.]*$ ]]; then # strip extension
       dest="${logdir}/${BASH_REMATCH[1]}"
     else
       dest="${logdir}/${TR_TORRENT_NAME}"
@@ -225,7 +226,7 @@ copy_finished() {
 }
 
 # Query and parse API maindata.
-# Global variables: tr_maindata, tr_paused, tr_totalsize, tr_names
+# Globals: tr_maindata, tr_paused, tr_totalsize, tr_names
 # torrent status code:
 # https://github.com/transmission/transmission/blob/master/libtransmission/transmission.h#L1658
 process_maindata() {
@@ -365,7 +366,7 @@ show_tr_list() {
   printf "%${w0}d${gap}${MAGENTA}%${w1}s${gap}%5.1f${gap}${YELLOW}%s${ENDCOLOR}\n" "${arr[@]}"
 }
 
-# Show detail information of a torrent, yaml output.
+# Show torrent details, yaml output.
 # $1: torrent ID
 show_tr_info() {
 
@@ -519,7 +520,6 @@ unit_test() {
 # init variables
 unset IFS rpc_url rpc_username rpc_password download_dir watch_dir rm_strategy \
   rm_thresh locations tr_auth tr_header logs dryrun savejson _opt _arg
-readonly GiB=1073741824
 
 # dependencies
 hash curl jq || die 'Curl and jq required.'
@@ -542,7 +542,7 @@ while getopts 'j:q:f:ls:dht:' i; do
     [qfs]) [[ ${OPTARG} =~ ^[0-9]+$ ]] || arg_error 'requires a non-negative integer argument' "${i}" ;;&
     [flst]) [[ ${_opt} && ${_opt} != "${i}" ]] && arg_error 'options are mutual exclusive' "${_opt}, ${i}" ;;&
     j) savejson="${OPTARG}" ;;
-    q) ((rm_thresh = OPTARG * GiB)) ;;
+    q) rm_thresh="${OPTARG}" ;;
     f) _opt="${i}" TR_TORRENT_ID="${OPTARG}" ;;
     [lst]) _opt="${i}" _arg="${OPTARG}" ;;
     *) arg_error ;;
@@ -553,8 +553,9 @@ done
 # constants
 normpath download_dir "${download_dir}"
 [[ ${rpc_username} ]] && tr_auth=(--anyauth --user "${rpc_username}${rpc_password:+:${rpc_password}}")
-readonly -- rpc_url download_dir watch_dir rm_strategy rm_thresh locations tr_auth dryrun savejson \
-  logfile="${PWD}/logfile.log" \
+((GiB = 1073741824, rm_thresh *= GiB))
+readonly -- rpc_url download_dir watch_dir rm_strategy rm_thresh locations \
+  tr_auth dryrun savejson GiB logfile="${PWD}/logfile.log" \
   categorizer=(-v regexfile="${PWD}/component/regex.txt" -f "${PWD}/component/categorizer.awk")
 
 # begin
