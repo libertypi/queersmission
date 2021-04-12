@@ -549,7 +549,7 @@ done
 (($# >= OPTIND)) && arg_error 'unrecognized argument' "${@:OPTIND:1}"
 
 # constants
-[[ ${rpc_username} ]] && tr_auth=(--anyauth --user "${rpc_username}${rpc_password:+${rpc_password/#/:}}")
+[[ ${rpc_username} ]] && tr_auth=(--anyauth --user "${rpc_username}${rpc_password:+:${rpc_password}}")
 readonly -- rpc_url watch_dir rm_strategy rm_thresh locations tr_auth dryrun savejson \
   download_dir="$(normpath "${download_dir}")" \
   logfile="${PWD}/logfile.log" \
