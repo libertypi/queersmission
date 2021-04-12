@@ -46,16 +46,16 @@ arg_error() {
 } 1>&2
 
 # Normalize path, eliminating double slashes, etc.
-# Usage: new_path="$(normpath "${old_path}")"
+# Assign result to variable var: `normpath var "${path}"`
 # Translated from Python's posixpath.normpath:
 # https://github.com/python/cpython/blob/master/Lib/posixpath.py#L337
 normpath() {
   local IFS=/ c s cs=()
-  if [[ $1 == /* ]]; then
+  if [[ $2 == /* ]]; then
     s='/'
-    [[ $1 == //* && $1 != ///* ]] && s='//'
+    [[ $2 == //* && $2 != ///* ]] && s='//'
   fi
-  for c in $1; do
+  for c in $2; do
     [[ -z ${c} || ${c} == '.' ]] && continue
     if [[ ${c} != '..' || (-z ${s} && ${#cs[@]} -eq 0) || (${#cs[@]} -gt 0 && ${cs[-1]} == '..') ]]; then
       cs+=("${c}")
@@ -64,7 +64,7 @@ normpath() {
     fi
   done
   c="${s}${cs[*]}"
-  printf '%s' "${c:-.}"
+  printf -v "$1" '%s' "${c:-.}"
 }
 
 # Get the X-Transmission-Session-Id header.
@@ -172,7 +172,7 @@ copy_finished() {
     ) && [[ ${TR_TORRENT_NAME} && ${TR_TORRENT_DIR} ]] ||
       die "Invalid torrent ID '${TR_TORRENT_ID}'. Run '${BASH_SOURCE[0]} -l' to show torrent list."
   }
-  src="$(normpath "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}")"
+  normpath src "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}"
 
   # decide the destination
   if [[ ${TR_TORRENT_DIR} -ef ${download_dir} ]]; then # source: download_dir
@@ -182,7 +182,7 @@ copy_finished() {
         awk "${categorizer[@]}"
     )"
     # fallback to default if failed
-    logdir="$(normpath "${locations[${logdir:-default}]:-${locations[default]}}")"
+    normpath logdir "${locations[${logdir:-default}]:-${locations[default]}}"
     # if source is not a dir, append a sub-directory
     if [[ -d ${src} ]]; then
       dest="${logdir}"
@@ -292,11 +292,12 @@ remove_inactive() {
       {
         read -r _
         # m, n: disksize, freespace
-        read -r m n && [[ ${m} =~ ^[0-9]+$ && ${n} =~ ^[0-9]+$ ]] || {
-          printf 'Reading disk stat failed.\n' 1>&2
-          return 1
-        }
-      } < <(df --block-size=1 --output='size,avail' -- "${download_dir}")
+        read -r m n
+      } < <(df --block-size=1 --output='size,avail' -- "${download_dir}") &&
+        [[ ${m} =~ ^[0-9]+$ && ${n} =~ ^[0-9]+$ ]] || {
+        printf 'Reading disk stat failed.\n' 1>&2
+        return 1
+      }
       ((i = n / GiB, m = rm_thresh + tr_totalsize - m, n = rm_thresh - n, target = m > n ? m : n))
       m='free space'
       ;;
@@ -549,9 +550,9 @@ done
 (($# >= OPTIND)) && arg_error 'unrecognized argument' "${@:OPTIND:1}"
 
 # constants
+normpath download_dir "${download_dir}"
 [[ ${rpc_username} ]] && tr_auth=(--anyauth --user "${rpc_username}${rpc_password:+:${rpc_password}}")
-readonly -- rpc_url watch_dir rm_strategy rm_thresh locations tr_auth dryrun savejson \
-  download_dir="$(normpath "${download_dir}")" \
+readonly -- rpc_url download_dir watch_dir rm_strategy rm_thresh locations tr_auth dryrun savejson \
   logfile="${PWD}/logfile.log" \
   categorizer=(-v regexfile="${PWD}/component/regex.txt" -f "${PWD}/component/categorizer.awk")
 
