@@ -555,7 +555,7 @@ normpath download_dir "${download_dir}"
 [[ ${rpc_username} ]] && tr_auth=(--anyauth --user "${rpc_username}${rpc_password:+:${rpc_password}}")
 ((GiB = 1073741824, rm_thresh *= GiB))
 readonly -- rpc_url download_dir watch_dir rm_strategy rm_thresh locations \
-  tr_auth dryrun savejson GiB logfile="${PWD}/logfile.log" \
+  tr_auth GiB dryrun savejson logfile="${PWD}/logfile.log" \
   categorizer=(-v regexfile="${PWD}/component/regex.txt" -f "${PWD}/component/categorizer.awk")
 
 # begin
