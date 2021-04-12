@@ -67,8 +67,10 @@ normpath() {
   printf '%s' "${c:-.}"
 }
 
+# Get the X-Transmission-Session-Id header.
+# Global variable: tr_header
 set_tr_header() {
-  if [[ "$(curl -sI "${tr_auth[@]}" -- "${rpc_url}")" =~ X-Transmission-Session-Id:[[:blank:]]*[[:alnum:]]+ ]]; then
+  if [[ "$(curl -sI --retry 3 "${tr_auth[@]}" -- "${rpc_url}")" =~ X-Transmission-Session-Id:[[:blank:]]*[[:alnum:]]+ ]]; then
     tr_header="${BASH_REMATCH[0]}"
     return 0
   fi
@@ -76,26 +78,26 @@ set_tr_header() {
 }
 
 # Send an API request.
-# $1: data to send
+# $1: HTTP POST data
 request_tr() {
-  local retry
-  for retry in {1..3}; do
-    if curl -sf "${tr_auth[@]}" --header "${tr_header}" -d "$1" -- "${rpc_url}"; then
+  local i
+  for i in 1 0; do
+    if curl -sf --retry 3 -H "${tr_header}" -d "$1" "${tr_auth[@]}" -- "${rpc_url}"; then
       return 0
-    elif ((retry < 3)); then
-      set_tr_header
+    elif ((i)); then
+      set_tr_header || break
     fi
   done
-  printf 'Connection failure. url: \047%s\047, request: \047%s\047\n' "${rpc_url}" "$1" 1>&2
+  printf "Connection failed. URL: '%s', POST: '%s', Session-Id: '%s'\n" "${rpc_url}" "$1" "${tr_header}" 1>&2
   return 1
 }
 
-# Record one line of log.
-# columns & arguments, width:
-#   --: mm/dd/yy hh:mm:ss     (17)
-#   $1: Finish/Remove/Error   (6)
-#   $2: location              (30)
-#   $3: name
+# Record one line of log to global array `logs`.
+# param  column            width
+#    --  mm/dd/yy hh:mm:ss    17
+#    $1  Finish/Remove/Error   6
+#    $2  location             30
+#    $3  name                 --
 append_log() {
   printf -v "logs[${#logs[@]}]" '%(%D %T)T  %-6.6s  %-30.30s  %s\n' \
     -1 "$1" "${2//[[:cntrl:]]/ }" "${3//[[:cntrl:]]/ }"
@@ -104,14 +106,14 @@ append_log() {
 # Print logs in reversed order.
 print_log() {
   local i
-  printf -v i '%.0s-' {1..80} # sep-line length: 80
+  printf -v i '%.0s-' {1..80} # "-" * 80
   printf '%-17s  %-6s  %-30s  %s\n%s\n' 'Date' 'Status' 'Location' 'Name' "${i}"
   for ((i = ${#logs[@]} - 1; i >= 0; i--)); do
     printf '%s' "${logs[i]}"
   done
 }
 
-# Insert logs at the beginning of $logfile.
+# Prepend logs to logfile.
 write_log() {
   if ((${#logs[@]})); then
     if ((dryrun)); then
@@ -222,7 +224,7 @@ copy_finished() {
 }
 
 # Query and parse API maindata.
-# Global variables: tr_maindata, tr_totalsize, tr_paused, tr_names
+# Global variables: tr_maindata, tr_paused, tr_totalsize, tr_names
 # torrent status code:
 # https://github.com/transmission/transmission/blob/master/libtransmission/transmission.h#L1658
 process_maindata() {
@@ -252,8 +254,7 @@ process_maindata() {
   printf 'torrents: %d, paused: %d, size: %d GiB\n' "${total}" "${tr_paused}" "$((tr_totalsize / GiB))" 1>&2
 }
 
-# Clean junk files in download_dir and watch_dir. This function runs in a
-# subshell.
+# Clean junk files in `download_dir` and `watch_dir`, runs in a subshell.
 clean_junk() {
   (
     shopt -s nullglob dotglob || exit 1
@@ -289,8 +290,8 @@ remove_inactive() {
   case "${rm_strategy}" in
     'freespace')
       {
-        # disksize, freespace
         read -r _
+        # m, n: disksize, freespace
         read -r m n && [[ ${m} =~ ^[0-9]+$ && ${n} =~ ^[0-9]+$ ]] || {
           printf 'Reading disk stat failed.\n' 1>&2
           return 1
@@ -313,8 +314,8 @@ remove_inactive() {
     return 0
   fi
 
+  # id, size, name
   while IFS=/ read -r -d '' i m n; do
-    # id, size, name
     [[ ${tr_names["${n}"]} ]] || continue
     ids+="${i},"
     names+=("${n}")
@@ -343,6 +344,7 @@ resume_paused() {
   ((dryrun)) || request_tr '{"method":"torrent-start"}' >/dev/null
 }
 
+# Show transmission torrent list, tabular output.
 show_tr_list() {
   local id size pct name arr w0=2 w1=4 gap='  '
 
@@ -361,6 +363,8 @@ show_tr_list() {
   printf "%${w0}d${gap}${MAGENTA}%${w1}s${gap}%5.1f${gap}${YELLOW}%s${ENDCOLOR}\n" "${arr[@]}"
 }
 
+# Show detail information of a torrent, yaml output.
+# $1: torrent ID
 show_tr_info() {
 
   _format_read() {
@@ -401,6 +405,8 @@ show_tr_info() {
   printf "${kfmt} ${YELLOW}%s${ENDCOLOR}\n" 'category' "${data:-null}"
 }
 
+# Categorizer unit test, yaml output.
+# $1: "all", "tr", "tv", "film" or any path
 unit_test() {
 
   _test_tr() {
