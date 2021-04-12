@@ -45,25 +45,26 @@ arg_error() {
   exit 1
 } 1>&2
 
+# Usage: normpath var path
 # Normalize path, eliminating double slashes, etc.
-# Assign result to variable var: `normpath var "${path}"`
+# Result is assigned to shell variable var.
 # Translated from Python's posixpath.normpath:
 # https://github.com/python/cpython/blob/master/Lib/posixpath.py#L337
 normpath() {
-  local IFS=/ c s cs=()
+  local IFS=/ c s a=()
   if [[ $2 == /* ]]; then
     s='/'
     [[ $2 == //* && $2 != ///* ]] && s='//'
   fi
   for c in $2; do
     [[ -z ${c} || ${c} == '.' ]] && continue
-    if [[ ${c} != '..' || (-z ${s} && ${#cs[@]} -eq 0) || (${#cs[@]} -gt 0 && ${cs[-1]} == '..') ]]; then
-      cs+=("${c}")
-    elif ((${#cs[@]})); then
-      unset 'cs[-1]'
+    if [[ ${c} != '..' || (-z ${s} && ${#a[@]} -eq 0) || (${#a[@]} -gt 0 && ${a[-1]} == '..') ]]; then
+      a+=("${c}")
+    elif ((${#a[@]})); then
+      unset 'a[-1]'
     fi
   done
-  c="${s}${cs[*]}"
+  c="${s}${a[*]}"
   printf -v "$1" '%s' "${c:-.}"
 }
 
