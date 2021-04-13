@@ -71,7 +71,7 @@ normpath() {
 # Get the X-Transmission-Session-Id header.
 # Global: tr_header
 set_tr_header() {
-  if [[ "$(curl -sI --retry 3 "${tr_auth[@]}" -- "${rpc_url}")" =~ X-Transmission-Session-Id:[[:blank:]]*[[:alnum:]]+ ]]; then
+  if [[ "$(curl -sI --retry 3 "${tr_auth[@]}" -- "${rpc_url}")" =~ X-Transmission-Session-Id[[:blank:]]*:[[:blank:]]*[[:alnum:]]+ ]]; then
     tr_header="${BASH_REMATCH[0]}"
     return 0
   fi
@@ -427,7 +427,7 @@ unit_test() {
     local name="$1" path="$2"
     _examine_test "$(
       if [[ ${path} ]] && { [[ ${PWD} == "${path}" ]] || cd -- "${path}" 1>/dev/null 2>&1; }; then
-        find "${name}" -name '[.#@]*' -prune -o -type f -printf '%p\0%s\0'
+        find "${name}" -type f -printf '%p\0%s\0' -o -name '[#@]*' -prune
       else
         printf '%s\0' "${name}" 1
       fi | awk "${categorizer[@]}"
