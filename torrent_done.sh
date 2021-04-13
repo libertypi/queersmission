@@ -538,9 +538,9 @@ while getopts 'j:q:f:ls:dht:' i; do
   case "${i}" in
     h) print_help ;;
     d) dryrun=1 ;;
-    [jt]) [[ ${OPTARG} ]] || arg_error 'requires a non-empty argument' "${i}" ;;&
+    [jt]) [[ ${OPTARG} ]] || arg_error 'empty argument' "${i}" ;;&
     [qfs]) [[ ${OPTARG} =~ ^[0-9]+$ ]] || arg_error 'requires a non-negative integer argument' "${i}" ;;&
-    [flst]) [[ ${_opt} && ${_opt} != "${i}" ]] && arg_error 'options are mutual exclusive' "${_opt}, ${i}" ;;&
+    [flst]) [[ ${_opt} && ${_opt} != "${i}" ]] && arg_error 'mutual exclusive options' "${_opt}, ${i}" ;;&
     j) savejson="${OPTARG}" ;;
     q) rm_thresh="${OPTARG}" ;;
     f) _opt="${i}" TR_TORRENT_ID="${OPTARG}" ;;
