@@ -484,7 +484,7 @@ unit_test() {
         pushd -- "${locations[${arg}]}" 1>/dev/null 2>&1 ||
           die "Unable to enter: '${locations[${arg}]}'"
         shopt -s nullglob
-        for i in [^.\#@]*; do
+        for i in [^\#@]*; do
           _test_dir "${i}" "${PWD}"
         done
         shopt -u nullglob
