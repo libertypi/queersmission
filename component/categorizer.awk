@@ -47,7 +47,7 @@ NR % 2 {  # path
 }
 
 {
-    printf("[AWK] Warning: Bad record: ('%s', '%s')\n", path, $0) > "/dev/stderr"
+    printf("[AWK] Bad record: ('%s', '%s')\n", path, $0) > "/dev/stderr"
 }
 
 END {
