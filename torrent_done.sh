@@ -33,8 +33,8 @@ Torrent management:
 Miscellaneous:
   -d         perform a dry run with no changes made
   -h         show this message and exit
-  -t TEST    categorizer unit test. TEST: "all", "tr", "tv",
-             "film" or any path
+  -t TEST    categorizer unit test
+             TEST: "all", "tr", "tv", "film" or any path
 EOF
   exit 0
 }
@@ -45,8 +45,8 @@ arg_error() {
   exit 1
 } 1>&2
 
-# Usage: normpath var path
 # Normalize path, eliminating double slashes, etc.
+# Usage: normpath var path
 # Result is assigned to shell variable var.
 # Translated from Python's posixpath.normpath:
 # https://github.com/python/cpython/blob/master/Lib/posixpath.py#L337
