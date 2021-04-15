@@ -210,19 +210,20 @@ copy_finished() {
     logdir="${TR_TORRENT_DIR}"
     dest="${download_dir}"
   fi
+  if ((use_rsync)); then data='Syncing'; else data='Copying'; fi
+  printf '%s: "%s" -> "%s/"\n' "${data}" "${src}" "${dest}" 1>&2
 
   # copy file
   append_log 'Error' "${logdir}" "${TR_TORRENT_NAME}"
-  if ((use_rsync)); then data='Syncing'; else data='Copying'; fi
-  printf '%s: "%s" -> "%s/"\n' "${data}" "${src}" "${dest}" 1>&2
   if ((dryrun)) || _copy_to_dest; then
     unset 'logs[-1]'
     append_log 'Finish' "${logdir}" "${TR_TORRENT_NAME}"
     printf 'Done.\n' 1>&2
     return 0
+  else
+    printf 'Failed.\n' 1>&2
+    return 1
   fi
-  printf 'Failed.\n' 1>&2
-  return 1
 }
 
 # Query and parse API maindata.
