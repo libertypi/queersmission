@@ -1,12 +1,12 @@
 # GNU Awk program for torrents categorization.
 # Author: David Pi
 #
-# input stream:
-#   path \0 size \0 ...
 # variable assignment (-v var=val):
-#   regexfile="/path/to/regexfile"
-# output is one of:
-#   default, av, film, tv, music
+#   regexfile
+# standard input:
+#   path \0 size \0 ...
+# standard output:
+#   [default, av, film, tv, music]
 
 BEGIN {
     if (PROCINFO["version"] < 4)

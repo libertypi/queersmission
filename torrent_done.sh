@@ -68,6 +68,11 @@ normpath() {
   printf -v "$1" '%s' "${c:-.}"
 }
 
+# Return 0 if the string is a digit string, otherwise 1.
+isdigit() {
+  [[ $1 && $1 != *[!0-9]* ]]
+}
+
 # Get the X-Transmission-Session-Id header.
 # Global: tr_header
 set_tr_header() {
@@ -250,7 +255,7 @@ process_maindata() {
   } < <(printf '%s' "${tr_maindata}" | jq -j '
     if .result == "success" then
     .arguments.torrents|
-    ("\(length)/\(map(select(.status == 0))|length)/\([.[].sizeWhenDone]|add)\u0000"),
+    ("\(length)/\(map(select(.status == 0))|length)/\(map(.sizeWhenDone)|add)\u0000"),
     (.[]|"\(.name)/\(.downloadDir)\u0000")
     else empty end')
 
@@ -294,10 +299,9 @@ remove_inactive() {
     'freespace')
       {
         read -r _
-        # m, n: disksize, freespace
-        read -r m n
-      } < <(df --block-size=1 --output='size,avail' -- "${download_dir}") &&
-        [[ ${m} =~ ^[0-9]+$ && ${n} =~ ^[0-9]+$ ]] || {
+        # disksize, freespace
+        read -r m n && isdigit "${m}" && isdigit "${n}"
+      } < <(df --block-size=1 --output='size,avail' -- "${download_dir}") || {
         printf 'Reading disk stat failed.\n' 1>&2
         return 1
       }
@@ -485,7 +489,7 @@ unit_test() {
         pushd -- "${locations[${arg}]}" 1>/dev/null 2>&1 ||
           die "Unable to enter: '${locations[${arg}]}'"
         shopt -s nullglob
-        for i in [^\#@]*; do
+        for i in [!\#@]*; do
           _test_dir "${i}" "${PWD}"
         done
         shopt -u nullglob
@@ -530,8 +534,8 @@ cd -- "${BASH_SOURCE[0]%/*}" || die 'Unable to enter script directory.'
 source ./config || die 'Reading config file failed.'
 
 # verify configurations
-[[ ${rpc_url} == http* && ${download_dir} == /?* && ${locations['default']} == /?* && \
-${rm_thresh} =~ ^[0-9]+$ && (${rm_strategy} == 'freespace' || ${rm_strategy} == 'sizesum') ]] ||
+[[ ${rpc_url} == http* && ${download_dir} == /?* && ${locations['default']} == /?* && (\
+${rm_strategy} == 'freespace' || ${rm_strategy} == 'sizesum') ]] && isdigit "${rm_thresh}" ||
   die 'Error in config file.'
 
 # parse arguments
@@ -540,7 +544,7 @@ while getopts 'j:q:f:ls:dht:' i; do
     h) print_help ;;
     d) dryrun=1 ;;
     [jt]) [[ ${OPTARG} ]] || arg_error 'empty argument' "${i}" ;;&
-    [qfs]) [[ ${OPTARG} =~ ^[0-9]+$ ]] || arg_error 'requires a non-negative integer argument' "${i}" ;;&
+    [qfs]) isdigit "${OPTARG}" || arg_error 'requires a non-negative integer argument' "${i}" ;;&
     [flst]) [[ ${_opt} && ${_opt} != "${i}" ]] && arg_error 'mutual exclusive options' "${_opt}, ${i}" ;;&
     j) savejson="${OPTARG}" ;;
     q) rm_thresh="${OPTARG}" ;;
