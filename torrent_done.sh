@@ -150,6 +150,7 @@ set_colors() {
 
 # Copy finished downloads to destination.
 copy_finished() {
+  [[ ${TR_TORRENT_ID} ]] || return 0
 
   _copy_to_dest() {
     if ((use_rsync)); then
@@ -170,7 +171,6 @@ copy_finished() {
 
   ### begin ###
   local src dest logdir data use_rsync=0
-  [[ ${TR_TORRENT_ID} ]] || die 'Torrent ID is not set.'
 
   [[ ${TR_TORRENT_NAME} && ${TR_TORRENT_DIR} ]] || {
     data="$(_query_tr_id)" || die "Connection failed."
@@ -348,8 +348,10 @@ remove_inactive() {
 
 # Restart paused torrents, if any.
 resume_paused() {
-  printf 'Resume torrents.\n' 1>&2
-  ((dryrun)) || request_tr '{"method":"torrent-start"}' >/dev/null
+  if ((tr_paused > 0)); then
+    printf 'Resume torrents.\n' 1>&2
+    ((dryrun)) || request_tr '{"method":"torrent-start"}' >/dev/null
+  fi
 }
 
 # Show transmission torrent list, tabular output.
@@ -589,13 +591,13 @@ else
 
   # copy finished download
   set_tr_header
-  [[ ${TR_TORRENT_ID} ]] && copy_finished
+  copy_finished
 
   # maintenance
   process_maindata
   clean_junk
   remove_inactive
-  ((tr_paused > 0)) && resume_paused
+  resume_paused
 
 fi
 exit 0
