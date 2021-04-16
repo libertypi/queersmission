@@ -382,7 +382,7 @@ show_tr_info() {
     shift
     for k; do
       IFS= read -r v || exit 1
-      printf -- "${fmt}" "${k}" "${v}"
+      printf "${fmt}" "${k}" "${v}"
     done
   }
 
@@ -408,11 +408,11 @@ show_tr_info() {
   } < <(request_tr "${data}" | jq -r --argjson g "${GiB}" "${jqprog}")
   ((${#files[@]})) || exit 1
 
-  printf -- "${kfmt}\n" 'files'
+  printf "${kfmt}\n" 'files'
   printf -- "- ${YELLOW}%s%.0s${ENDCOLOR}\n" "${files[@]}"
 
   data="$(printf '%s\n' "${files[@]}" | jq -j '"\(.)\u0000"' | awk "${categorizer[@]}")"
-  printf -- "${kfmt} ${YELLOW}%s${ENDCOLOR}\n" 'category' "${data:-null}"
+  printf "${kfmt} ${YELLOW}%s${ENDCOLOR}\n" 'category' "${data:-null}"
 }
 
 # Categorizer unit test, yaml output.
