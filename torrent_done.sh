@@ -51,7 +51,7 @@ arg_error() {
 # Translated from Python's posixpath.normpath:
 # https://github.com/python/cpython/blob/master/Lib/posixpath.py#L337
 normpath() {
-  local IFS=/ c s a=()
+  local IFS=/ c s a
   if [[ $2 == /* ]]; then
     s='/'
     [[ $2 == //* && $2 != ///* ]] && s='//'
