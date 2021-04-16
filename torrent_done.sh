@@ -160,13 +160,13 @@ copy_finished() {
     fi || return 1
     if [[ ${dest} == "${download_dir}" ]]; then
       request_tr "$(jq -acn --argjson i "${TR_TORRENT_ID}" --arg d "${download_dir}" \
-        '{"arguments":{"ids":[$i],"location":$d},"method":"torrent-set-location"}')" >/dev/null || return 1
+        '{"arguments":{"ids":$i,"location":$d},"method":"torrent-set-location"}')" >/dev/null || return 1
     fi
     return 0
   }
 
   _query_tr_id() {
-    request_tr "{\"arguments\":{\"fields\":[\"name\",\"downloadDir\",\"files\"],\"ids\":[${TR_TORRENT_ID}]},\"method\":\"torrent-get\"}"
+    request_tr "{\"arguments\":{\"fields\":[\"name\",\"downloadDir\",\"files\"],\"ids\":${TR_TORRENT_ID}},\"method\":\"torrent-get\"}"
   }
 
   ### begin ###
@@ -395,7 +395,7 @@ show_tr_info() {
     dates=('addedDate' 'activityDate')
 
   printf -v data '"%s",' "${strings[@]}" "${percents[@]}" "${sizes[@]}" "${dates[@]}" 'files'
-  printf -v data '{"arguments":{"fields":[%s],"ids":[%d]},"method":"torrent-get"}' "${data%,}" "$1"
+  printf -v data '{"arguments":{"fields":[%s],"ids":%d},"method":"torrent-get"}' "${data%,}" "$1"
   jqprog=("${strings[@]}" "${percents[@]/%/'*100'}" "${sizes[@]/%/'/$g'}" "${dates[@]}")
   IFS=',' eval 'jqprog=".arguments.torrents[]|(${jqprog[*]/#/.}),(.files[]|.name,.length)|@json"'
 
