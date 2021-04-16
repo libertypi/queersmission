@@ -276,7 +276,7 @@ clean_junk() {
     else
       printf 'Skip cleanup: "%s"\n' "${download_dir}" 1>&2
     fi
-    if [[ ${watch_dir} ]]; then
+    if [[ ${watch_dir} == /?* ]]; then
       for i in "${watch_dir}/"*.torrent; do
         [[ -s ${i} ]] || arr+=("${i}")
       done
@@ -547,7 +547,7 @@ while getopts 'j:q:f:ls:dht:' i; do
     d) dryrun=1 ;;
     [jt]) [[ ${OPTARG} ]] || arg_error 'empty argument' "${i}" ;;&
     [qfs]) isdigit "${OPTARG}" || arg_error 'requires a non-negative integer argument' "${i}" ;;&
-    [flst]) [[ ${_opt} && ${_opt} != "${i}" ]] && arg_error 'mutual exclusive options' "${_opt}, ${i}" ;;&
+    [flst]) [[ ${_opt} && ${_opt} != "${i}" ]] && arg_error 'mutually exclusive options' "${_opt}, ${i}" ;;&
     j) savejson="${OPTARG}" ;;
     q) rm_thresh="${OPTARG}" ;;
     f) _opt="${i}" TR_TORRENT_ID="${OPTARG}" ;;
