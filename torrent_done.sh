@@ -255,7 +255,7 @@ process_maindata() {
   } < <(printf '%s' "${tr_maindata}" | jq -j '
     if .result == "success" then
     .arguments.torrents|
-    ("\(length)/\(map(select(.status == 0))|length)/\(map(.sizeWhenDone)|add)\u0000"),
+    ("\(length)/\(map(select(.status == 0))|length)/\(map(.sizeWhenDone)|add + 0)\u0000"),
     (.[]|"\(.name)/\(.downloadDir)\u0000")
     else empty end')
 
@@ -356,7 +356,7 @@ resume_paused() {
 
 # Show transmission torrent list, tabular output.
 show_tr_list() {
-  local id size pct name arr w0=2 w1=4 gap='  '
+  local id size pct name arr w0=2 w1=4 gap=' '
 
   while IFS=/ read -r -d '' id size pct name; do
     printf -v size '%.1fG' "${size}"
