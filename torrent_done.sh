@@ -85,8 +85,8 @@ set_rpc_header() {
 
 # Send an API request.
 # Global: rpc_header
-# $1: HTTP POST data
-# $2: if present, response is assigned to VAR. Otherwise, to stdout.
+# Usage: `request_rpc DATA [VAR]`
+# VAR: assign response to VAR rather than display on the stdout.
 request_rpc() {
   local i
   for i in 1 0; do
