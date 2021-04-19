@@ -147,8 +147,7 @@ function pattern_match(sizedict, videoset,  p, root, type, parts, arr)
 #   nums[1] = 4
 #   nums[2] = 5
 #   nums[3] = 6
-# If we found three consecutive digits in one group,
-# identify as TV Series.
+# If we found three consecutive digits in one group, identify as TV Series.
 function series_match(videoset,  m, n, i, j, words, nums, arr)
 {
     for (m in videoset) {
