@@ -74,31 +74,31 @@ isdigit() {
 }
 
 # Get the X-Transmission-Session-Id header.
-# Global: tr_header
-set_tr_header() {
-  if [[ "$(curl -sI --retry 3 "${tr_auth[@]}" -- "${rpc_url}")" =~ X-Transmission-Session-Id[[:blank:]]*:[[:blank:]]*[[:alnum:]]+ ]]; then
-    tr_header="${BASH_REMATCH[0]}"
+# Global: rpc_header
+set_rpc_header() {
+  if [[ "$(curl -sI --retry 3 "${rpc_auth[@]}" -- "${rpc_url}")" =~ X-Transmission-Session-Id[[:blank:]]*:[[:blank:]]*[[:alnum:]]+ ]]; then
+    rpc_header="${BASH_REMATCH[0]}"
     return 0
   fi
   return 1
 }
 
 # Send an API request.
-# Global: tr_header
+# Global: rpc_header
 # $1: HTTP POST data
 # $2: if present, response is assigned to VAR. Otherwise, to stdout.
-request_tr() {
+request_rpc() {
   local i
   for i in 1 0; do
-    [[ ${tr_header} ]] || set_tr_header || break
+    [[ ${rpc_header} ]] || set_rpc_header || break
     if [[ $2 ]]; then
-      eval "${2}"'="$(curl -sf --retry 3 -H "${tr_header}" -d "$1" "${tr_auth[@]}" -- "${rpc_url}")"'
+      eval "${2}"'="$(curl -sf --retry 3 -H "${rpc_header}" -d "$1" "${rpc_auth[@]}" -- "${rpc_url}")"'
     else
-      curl -sf --retry 3 -H "${tr_header}" -d "$1" "${tr_auth[@]}" -- "${rpc_url}"
+      curl -sf --retry 3 -H "${rpc_header}" -d "$1" "${rpc_auth[@]}" -- "${rpc_url}"
     fi && return 0
-    ((i)) && unset 'tr_header'
+    ((i)) && unset rpc_header
   done
-  printf "Connection failed. URL: '%s', POST: '%s', Session-Id: '%s'\n" "${rpc_url}" "$1" "${tr_header}" 1>&2
+  printf "Connection failed. URL: '%s', POST: '%s', Session-Id: '%s'\n" "${rpc_url}" "$1" "${rpc_header}" 1>&2
   return 1
 }
 
@@ -163,14 +163,14 @@ copy_finished() {
       [[ -e ${dest} ]] || mkdir -p -- "${dest}" && cp -a -f -- "${src}" "${dest}/"
     fi || return 1
     if [[ ${dest} == "${download_dir}" ]]; then
-      request_tr "$(jq -acn --argjson i "${TR_TORRENT_ID}" --arg d "${download_dir}" \
+      request_rpc "$(jq -acn --argjson i "${TR_TORRENT_ID}" --arg d "${download_dir}" \
         '{"arguments":{"ids":$i,"location":$d},"method":"torrent-set-location"}')" >/dev/null || return 1
     fi
     return 0
   }
 
   _query_tr_id() {
-    request_tr "{\"arguments\":{\"fields\":[\"name\",\"downloadDir\",\"files\"],\"ids\":${TR_TORRENT_ID}},\"method\":\"torrent-get\"}" "$@"
+    request_rpc "{\"arguments\":{\"fields\":[\"name\",\"downloadDir\",\"files\"],\"ids\":${TR_TORRENT_ID}},\"method\":\"torrent-get\"}" "$@"
   }
 
   ### begin ###
@@ -245,7 +245,7 @@ process_maindata() {
   declare -Ag tr_names=()
 
   # save to `tr_maindata`
-  request_tr '{"arguments":{"fields":["activityDate","downloadDir","id","name","percentDone","sizeWhenDone","status"]},"method":"torrent-get"}' tr_maindata ||
+  request_rpc '{"arguments":{"fields":["activityDate","downloadDir","id","name","percentDone","sizeWhenDone","status"]},"method":"torrent-get"}' tr_maindata ||
     die 'Unable to connect to transmission API.'
   if [[ ${savejson} ]]; then
     printf '%s' "${tr_maindata}" | jq '.' >"${savejson}" &&
@@ -344,7 +344,7 @@ remove_inactive() {
   if ((${#names[@]})); then
     printf 'Remove: %s\n' "${names[@]}" 1>&2
     ((dryrun)) ||
-      request_tr "{\"arguments\":{\"ids\":[${ids%,}],\"delete-local-data\":true},\"method\":\"torrent-remove\"}" >/dev/null &&
+      request_rpc "{\"arguments\":{\"ids\":[${ids%,}],\"delete-local-data\":true},\"method\":\"torrent-remove\"}" >/dev/null &&
       for n in "${names[@]}"; do
         append_log 'Remove' "${download_dir}" "${n}"
       done
@@ -355,7 +355,7 @@ remove_inactive() {
 resume_paused() {
   if ((tr_paused > 0)); then
     printf 'Resume torrents.\n' 1>&2
-    ((dryrun)) || request_tr '{"method":"torrent-start"}' >/dev/null
+    ((dryrun)) || request_rpc '{"method":"torrent-start"}' >/dev/null
   fi
 }
 
@@ -369,7 +369,7 @@ show_tr_list() {
     ((${#size} > w1)) && w1="${#size}"
     arr+=("${id}" "${size}" "${pct}" "${name//[[:cntrl:]]/ }")
   done < <(
-    request_tr '{"arguments":{"fields":["id","sizeWhenDone","percentDone","name"]},"method":"torrent-get"}' |
+    request_rpc '{"arguments":{"fields":["id","sizeWhenDone","percentDone","name"]},"method":"torrent-get"}' |
       jq -j --argjson g "${GiB}" '.arguments.torrents[]|"\(.id)/\(.sizeWhenDone/$g)/\(.percentDone*100)/\(.name)\u0000"'
   )
   ((${#arr[@]})) || exit 1
@@ -410,7 +410,7 @@ show_tr_info() {
     _format_read '%.2f GiB' "${sizes[@]}"
     _format_read '%(%c)T' "${dates[@]}"
     mapfile -t files
-  } < <(request_tr "${data}" | jq -r --argjson g "${GiB}" "${jqprog}")
+  } < <(request_rpc "${data}" | jq -r --argjson g "${GiB}" "${jqprog}")
   ((${#files[@]})) || exit 1
 
   printf "${kfmt}\n" 'files'
@@ -430,7 +430,7 @@ unit_test() {
       _examine_test "$(printf '%s' "${files}" | jq -j '.[]|"\(.name)\u0000\(.length)\u0000"' |
         awk "${categorizer[@]}")" "${name}"
     done < <(
-      request_tr '{"arguments":{"fields":["name","files"]},"method":"torrent-get"}' |
+      request_rpc '{"arguments":{"fields":["name","files"]},"method":"torrent-get"}' |
         jq -j '.arguments.torrents[]|"\(.name)/\(.files)\u0000"'
     )
   }
@@ -531,7 +531,7 @@ unit_test() {
 
 # init variables
 unset IFS rpc_url rpc_username rpc_password download_dir watch_dir rm_strategy \
-  rm_thresh locations tr_auth tr_header logs dryrun savejson _opt _arg
+  rm_thresh locations rpc_auth rpc_header logs dryrun savejson _opt _arg
 
 # dependencies
 hash curl jq || die 'Curl and jq required.'
@@ -564,10 +564,10 @@ done
 
 # constants
 normpath download_dir "${download_dir}"
-[[ ${rpc_username} ]] && tr_auth=(--anyauth --user "${rpc_username}${rpc_password:+:${rpc_password}}")
+[[ ${rpc_username} ]] && rpc_auth=(--anyauth --user "${rpc_username}${rpc_password:+:${rpc_password}}")
 ((GiB = 1073741824, rm_thresh *= GiB))
 readonly -- rpc_url download_dir watch_dir rm_strategy rm_thresh locations \
-  tr_auth GiB dryrun savejson logfile="${PWD}/logfile.log" \
+  rpc_auth GiB dryrun savejson logfile="${PWD}/logfile.log" \
   categorizer=(-v regexfile="${PWD}/component/regex.txt" -f "${PWD}/component/categorizer.awk")
 
 # begin
@@ -575,7 +575,7 @@ if [[ ${_opt} == [lst] ]]; then
 
   # stand-alone functions
   set_colors
-  set_tr_header || die 'Unable to connect to transmission API.'
+  set_rpc_header || die 'Unable to connect to transmission API.'
 
   case "${_opt}" in
     l) show_tr_list ;;
@@ -595,7 +595,7 @@ else
   trap 'write_log' EXIT
 
   # copy finished download
-  set_tr_header
+  set_rpc_header
   copy_finished
 
   # maintenance
