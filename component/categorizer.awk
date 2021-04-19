@@ -80,36 +80,56 @@ function output(type)
     }
 }
 
+# Split the path into a pair (root, ext) such that root + "." + ext == path.
+# Modified from Python's os.path.splitext.
+function splitext(p, parts,  i, j, arr)
+{
+    delete parts
+    i = split(p, arr, "/")
+    i = split(arr[i], arr, ".")
+    for (j = 1; j < i; j++) {
+        if (arr[j] != "") {
+            parts[1] = substr(p, 1, length(p) - length(arr[i]) - 1)
+            parts[2] = arr[i]
+            return
+        }
+    }
+    parts[1] = p
+    parts[2] = ""
+}
+
 # match files against patterns
-# save video files to: videoset[path]
+# save video files to: videoset[root]
 # return the most significant file type
-function pattern_match(sizedict, videoset,  i, type, arr)
+function pattern_match(sizedict, videoset,  p, root, type, parts, arr)
 {
     delete videoset
     PROCINFO["sorted_in"] = "@val_num_desc"
-    for (i in sizedict) {
-        switch (i) {
-        case /\.iso$/:
-            if (i ~ /(\y|_)(v[0-9]+(\.[0-9]+)+|x(64|86)|adobe|microsoft|windows)(\y|_)/) {
+    for (p in sizedict) {
+        splitext(p, parts)
+        root = parts[1]
+        switch (parts[2]) {
+        case /^iso$/:
+            if (root ~ /(\y|_)(v[0-9]+(\.[0-9]+)+|x(64|86)|adobe|microsoft|windows)(\y|_)/) {
                 type = "default"
                 break
             }
             # fall-through to video
-        case /\.((fl|og|vi|yu)v|3g[2p]|[as]vi|[aw]mv|asf|divx|f4[abpv]|hevc|m(2?ts|4p|[24kop]v|p[24e]|pe?g|xf)|qt|rm|rmvb|swf|ts|vob|webm)$/:
-            if (i ~ av_regex)
+        case /^((fl|og|vi|yu)v|3g[2p]|[as]vi|[aw]mv|asf|divx|f4[abpv]|hevc|m(2?ts|4p|[24kop]v|p[24e]|pe?g|xf)|qt|rm|rmvb|swf|ts|vob|webm)$/:
+            if (root ~ av_regex)
                 output("av")
-            if (i ~ /(\y|_)([es]|ep[ _-]?|s([1-9][0-9]|0?[1-9])e)([1-9][0-9]|0?[1-9])(\y|_)/)
+            if (root ~ /(\y|_)([es]|ep[ _-]?|s([1-9][0-9]|0?[1-9])e)([1-9][0-9]|0?[1-9])(\y|_)/)
                 output("tv")
-            videoset[i]
+            videoset[root]
             type = "film"
             break
-        case /\.((al?|fl)ac|(m4|og|r|wm)a|aiff|ape|m?ogg|mp[3c]|opus|pcm|wa?v)$/:
+        case /^((al?|fl)ac|(m4|og|r|wm)a|aiff|ape|m?ogg|mp[3c]|opus|pcm|wa?v)$/:
             type = "music"
             break
         default:
             type = "default"
         }
-        arr[type] += sizedict[i]
+        arr[type] += sizedict[p]
     }
     for (type in arr) break
     delete PROCINFO["sorted_in"]
@@ -118,14 +138,14 @@ function pattern_match(sizedict, videoset,  i, type, arr)
 
 # Scan videoset to identify consecutive digits:
 # input:
-#   videoset[parent/string_05.mp4]
-#   videoset[parent/string_06.mp4]
-#   videoset[parent/string_04string_05.mp4]
+#   videoset[parent/string_05]
+#   videoset[parent/string_06]
+#   videoset[parent/string_04string_05]
 # After split, grouped as:
-#   arr[1, "string"][5] (parent/string_05.mp4)
-#   arr[1, "string"][6] (parent/string_06.mp4)
-#   arr[1, "string"][4] (parent/string_04string_05.mp4)
-#   arr[2, "string"][5] (parent/string_04string_05.mp4)
+#   arr[1, "string"][5] (parent/string_05)
+#   arr[1, "string"][6] (parent/string_06)
+#   arr[1, "string"][4] (parent/string_04string_05)
+#   arr[2, "string"][5] (parent/string_04string_05)
 #   (one file would never appear in the same group twice)
 # For each group, sort its subgroups by keys:
 #   nums[1] = 4
