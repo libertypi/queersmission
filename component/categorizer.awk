@@ -76,7 +76,8 @@ function output(type)
     exit 0
 }
 
-# Split the path into a pair (root, ext) such that root + "." + ext == path.
+# Split the path into a pair (root, ext). This behaves the same way as Python's
+# os.path.splitext. Except that the period between root and ext is omitted.
 function splitext(p, parts,  i, j, arr)
 {
     delete parts
