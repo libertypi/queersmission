@@ -84,15 +84,19 @@ set_tr_header() {
 }
 
 # Send an API request.
+# Global: tr_header
 # $1: HTTP POST data
+# $2: if present, response is assigned to VAR. Otherwise, to stdout.
 request_tr() {
   local i
   for i in 1 0; do
-    if curl -sf --retry 3 -H "${tr_header}" -d "$1" "${tr_auth[@]}" -- "${rpc_url}"; then
-      return 0
-    elif ((i)); then
-      set_tr_header || break
-    fi
+    [[ ${tr_header} ]] || set_tr_header || break
+    if [[ $2 ]]; then
+      eval "${2}="'"$(curl -sf --retry 3 -H "${tr_header}" -d "$1" "${tr_auth[@]}" -- "${rpc_url}")"'
+    else
+      curl -sf --retry 3 -H "${tr_header}" -d "$1" "${tr_auth[@]}" -- "${rpc_url}"
+    fi && return 0
+    ((i)) && unset 'tr_header'
   done
   printf "Connection failed. URL: '%s', POST: '%s', Session-Id: '%s'\n" "${rpc_url}" "$1" "${tr_header}" 1>&2
   return 1
@@ -166,14 +170,14 @@ copy_finished() {
   }
 
   _query_tr_id() {
-    request_tr "{\"arguments\":{\"fields\":[\"name\",\"downloadDir\",\"files\"],\"ids\":${TR_TORRENT_ID}},\"method\":\"torrent-get\"}"
+    request_tr "{\"arguments\":{\"fields\":[\"name\",\"downloadDir\",\"files\"],\"ids\":${TR_TORRENT_ID}},\"method\":\"torrent-get\"}" "$@"
   }
 
   ### begin ###
   local src dest logdir data use_rsync=0
 
   [[ ${TR_TORRENT_NAME} && ${TR_TORRENT_DIR} ]] || {
-    data="$(_query_tr_id)" || die "Connection failed."
+    _query_tr_id data || die "Connection failed."
     IFS=/ read -r -d '' TR_TORRENT_NAME TR_TORRENT_DIR < <(
       printf '%s' "${data}" | jq -j '.arguments.torrents[]|"\(.name)/\(.downloadDir)\u0000"'
     ) && [[ ${TR_TORRENT_NAME} && ${TR_TORRENT_DIR} ]] ||
@@ -183,6 +187,7 @@ copy_finished() {
 
   # decide the destination
   if [[ ${TR_TORRENT_DIR} -ef ${download_dir} ]]; then # source: download_dir
+    # categorization
     logdir="$(
       if [[ ${data} ]]; then printf '%s' "${data}"; else _query_tr_id; fi |
         jq -j '.arguments.torrents[].files[]|"\(.name)\u0000\(.length)\u0000"' |
@@ -239,9 +244,9 @@ process_maindata() {
   local total name dir
   declare -Ag tr_names=()
 
-  tr_maindata="$(
-    request_tr '{"arguments":{"fields":["activityDate","downloadDir","id","name","percentDone","sizeWhenDone","status"]},"method":"torrent-get"}'
-  )" || die 'Unable to connect to transmission API.'
+  # save to `tr_maindata`
+  request_tr '{"arguments":{"fields":["activityDate","downloadDir","id","name","percentDone","sizeWhenDone","status"]},"method":"torrent-get"}' tr_maindata ||
+    die 'Unable to connect to transmission API.'
   if [[ ${savejson} ]]; then
     printf '%s' "${tr_maindata}" | jq '.' >"${savejson}" &&
       printf 'Json data saved to: "%s"\n' "${savejson}" 1>&2
