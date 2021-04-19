@@ -198,7 +198,7 @@ copy_finished() {
     # if source is not a dir, append a sub-directory
     if [[ -d ${src} ]]; then
       dest="${logdir}"
-    elif [[ ${TR_TORRENT_NAME} =~ (.*[^.].*)\.[^.]*$ ]]; then # strip extension
+    elif [[ ${TR_TORRENT_NAME} =~ (.*[^/.][^/]*)\.[^/.]*$ ]]; then # strip extension
       dest="${logdir}/${BASH_REMATCH[1]}"
     else
       dest="${logdir}/${TR_TORRENT_NAME}"

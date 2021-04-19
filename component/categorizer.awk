@@ -72,16 +72,11 @@ function raise(msg)
 
 function output(type)
 {
-    if (type ~ /^(default|av|film|tv|music)$/) {
-        print type
-        exit 0
-    } else {
-        raise("Invalid type: " type)
-    }
+    print type
+    exit 0
 }
 
 # Split the path into a pair (root, ext) such that root + "." + ext == path.
-# Modified from Python's os.path.splitext.
 function splitext(p, parts,  i, j, arr)
 {
     delete parts
@@ -109,7 +104,7 @@ function pattern_match(sizedict, videoset,  p, root, type, parts, arr)
         splitext(p, parts)
         root = parts[1]
         switch (parts[2]) {
-        case /^iso$/:
+        case "iso":
             if (root ~ /(\y|_)(v[0-9]+(\.[0-9]+)+|x(64|86)|adobe|microsoft|windows)(\y|_)/) {
                 type = "default"
                 break
