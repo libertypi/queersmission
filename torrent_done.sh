@@ -92,7 +92,7 @@ request_tr() {
   for i in 1 0; do
     [[ ${tr_header} ]] || set_tr_header || break
     if [[ $2 ]]; then
-      eval "${2}="'"$(curl -sf --retry 3 -H "${tr_header}" -d "$1" "${tr_auth[@]}" -- "${rpc_url}")"'
+      eval "${2}"'="$(curl -sf --retry 3 -H "${tr_header}" -d "$1" "${tr_auth[@]}" -- "${rpc_url}")"'
     else
       curl -sf --retry 3 -H "${tr_header}" -d "$1" "${tr_auth[@]}" -- "${rpc_url}"
     fi && return 0
