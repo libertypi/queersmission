@@ -163,7 +163,8 @@ function series_match(videoset,  m, n, i, j, words, nums, arr)
         i = 1
         for (j = 2; j <= n; j++) {
             if (nums[j - 1] == nums[j] - 1) {
-                if (++i == 3) output("tv")
+                if (++i == 3)
+                    output("tv")
             } else {
                 i = 1
             }
