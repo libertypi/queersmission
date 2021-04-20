@@ -84,8 +84,10 @@ function output(type)
 function splitext(p, parts,  i, j, arr)
 {
     delete parts
-    i = split(p, arr, "/")
-    i = split(arr[i], arr, ".")
+    j = p
+    while (i = index(j, "/"))
+        j = substr(j, i + 1)
+    i = split(j, arr, ".")
     for (j = 1; j < i; j++) {
         if (arr[j] != "") {
             parts[1] = substr(p, 1, length(p) - length(arr[i]) - 1)
