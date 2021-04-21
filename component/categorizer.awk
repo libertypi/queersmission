@@ -79,47 +79,46 @@ function output(type)
 
 # Split the path into a pair (root, ext). This behaves the same way as Python's
 # os.path.splitext. Except that the period between root and ext is omitted.
-function splitext(p, parts,  c, i, j)
+function splitext(p, pair,  c, i, j)
 {
-    delete parts
+    delete pair
     for (i = length(p); i > 0; i--) {
         c = substr(p, i, 1)
         if (c == "/") break
         if (c == ".") {
             if (! j) j = i
         } else if (j) {
-            parts[1] = substr(p, 1, j - 1)
-            parts[2] = substr(p, j + 1)
+            pair[1] = substr(p, 1, j - 1)
+            pair[2] = substr(p, j + 1)
             return
         }
     }
-    parts[1] = p
-    parts[2] = ""
+    pair[1] = p
+    pair[2] = ""
 }
 
 # match files against patterns
 # save video files to: videoset[root]
 # return the most significant file type
-function pattern_match(sizedict, videoset,  p, root, type, parts, arr)
+function pattern_match(sizedict, videoset,  p, a, type, arr)
 {
     delete videoset
     PROCINFO["sorted_in"] = "@val_num_desc"
     for (p in sizedict) {
-        splitext(p, parts)
-        root = parts[1]
-        switch (parts[2]) {
+        splitext(p, a)
+        switch (a[2]) {
         case "iso":
-            if (root ~ /(\y|_)(v[0-9]+(\.[0-9]+)+|x(64|86)|adobe|microsoft|windows)(\y|_)/) {
+            if (a[1] ~ /(\y|_)(adobe|microsoft|windows|v[0-9]+(\.[0-9]+)+|x(64|86))(\y|_)/) {
                 type = "default"
                 break
             }
             # fall-through to video
         case /^((fl|og|vi|yu)v|3g[2p]|[as]vi|[aw]mv|asf|divx|f4[abpv]|hevc|m(2?ts|4p|[24kop]v|p[24e]|pe?g|xf)|qt|rm|rmvb|swf|ts|vob|webm)$/:
-            if (root ~ av_regex)
+            if (a[1] ~ av_regex)
                 output("av")
-            if (root ~ /(\y|_)([es]|ep[ _-]?|s([1-9][0-9]|0?[1-9])e)([1-9][0-9]|0?[1-9])(\y|_)/)
+            if (a[1] ~ /(\y|_)([es]|ep[ _-]?|s([1-9][0-9]|0?[1-9])e)([1-9][0-9]|0?[1-9])(\y|_)/)
                 output("tv")
-            videoset[root]
+            videoset[a[1]]
             type = "film"
             break
         case /^((al?|fl)ac|(m4|og|r|wm)a|aiff|ape|m?ogg|mp[3c]|opus|pcm|wa?v)$/:
