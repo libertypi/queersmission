@@ -138,12 +138,12 @@ function pattern_match(sizedict, videoset,  p, a, type, arr)
 # input:
 #   videoset[path/a_05]
 #   videoset[path/a_06]
-#   videoset[path/a_04b_05]
+#   videoset[path/a_04a_05]
 # After split, grouped as:
 #   arr[1, "a"][5]
 #   arr[1, "a"][6]
 #   arr[1, "a"][4]
-#   arr[2, "b"][5]
+#   arr[2, "a"][5]
 #   (one file would never appear in the same group twice)
 # For each group, sort its sub-array by keys. arr[1, "a"] become:
 #   nums[1] = 4
