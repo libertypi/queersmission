@@ -134,23 +134,23 @@ function pattern_match(sizedict, videoset,  p, a, type, arr)
     return type
 }
 
-# Scan videoset to identify consecutive digits:
+# Scan videoset to identify consecutive digits.
 # input:
-#   videoset[parent/string_05]
-#   videoset[parent/string_06]
-#   videoset[parent/string_04string_05]
+#   videoset[path/a_05]
+#   videoset[path/a_06]
+#   videoset[path/a_04b_05]
 # After split, grouped as:
-#   arr[1, "string"][5] (parent/string_05)
-#   arr[1, "string"][6] (parent/string_06)
-#   arr[1, "string"][4] (parent/string_04string_05)
-#   arr[2, "string"][5] (parent/string_04string_05)
+#   arr[1, "a"][5]
+#   arr[1, "a"][6]
+#   arr[1, "a"][4]
+#   arr[2, "b"][5]
 #   (one file would never appear in the same group twice)
-# For each group, sort its subgroups by keys:
+# For each group, sort its sub-array by keys. arr[1, "a"] become:
 #   nums[1] = 4
 #   nums[2] = 5
 #   nums[3] = 6
 # If we found three consecutive digits in one group, identify as TV Series.
-function series_match(videoset,  m, n, i, j, words, nums, arr)
+function series_match(videoset,  m, n, i, words, nums, arr)
 {
     for (m in videoset) {
         n = split(m, words, /[0-9]+/, nums)
@@ -161,15 +161,10 @@ function series_match(videoset,  m, n, i, j, words, nums, arr)
     }
     for (m in arr) {
         if (length(arr[m]) < 3) continue
-        n = asorti(arr[m], nums, "@ind_num_asc")
-        i = 1
-        for (j = 2; j <= n; j++) {
-            if (nums[j - 1] == nums[j] - 1) {
-                if (++i == 3)
-                    output("tv")
-            } else {
-                i = 1
-            }
+        n = asorti(arr[m], nums, "@ind_num_asc") - 2
+        for (i = 1; i <= n; i++) {
+            if (nums[i] + 2 == nums[i + 2])
+                output("tv")
         }
     }
 }
