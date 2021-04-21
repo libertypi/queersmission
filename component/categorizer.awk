@@ -30,7 +30,12 @@ NR % 2 {  # path
     next
 }
 
-/^[0-9]+$/ {  # size
+path == "" || ! /^[0-9]+$/ {
+    printf("[AWK] Bad record: ('%s', '%s')\n", path, $0) > "/dev/stderr"
+    next
+}
+
+{   # size
     if ($0 >= size_thresh) {
         if (! size_reached) {
             delete sizedict
@@ -46,11 +51,6 @@ NR % 2 {  # path
         sub(/\/[^/]*vts[0-9_]+\.vob$/, "/video_ts.vob", path)
     }
     sizedict[path] += $0  # {path: size}
-    next
-}
-
-{
-    printf("[AWK] Bad record: ('%s', '%s')\n", path, $0) > "/dev/stderr"
 }
 
 END {
@@ -81,17 +81,17 @@ function output(type)
 
 # Split the path into a pair (root, ext). This behaves the same way as Python's
 # os.path.splitext. Except that the period between root and ext is omitted.
-function splitext(p, parts,  i, j, arr)
+function splitext(p, parts,  c, i, j)
 {
     delete parts
-    j = p
-    while (i = index(j, "/"))
-        j = substr(j, i + 1)
-    i = split(j, arr, ".")
-    for (j = 1; j < i; j++) {
-        if (arr[j] != "") {
-            parts[1] = substr(p, 1, length(p) - length(arr[i]) - 1)
-            parts[2] = arr[i]
+    for (i = length(p); i > 0; i--) {
+        c = substr(p, i, 1)
+        if (c == "/") break
+        if (c == ".") {
+            if (! j) j = i
+        } else if (j) {
+            parts[1] = substr(p, 1, j - 1)
+            parts[2] = substr(p, j + 1)
             return
         }
     }
