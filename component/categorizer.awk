@@ -1,17 +1,15 @@
 # GNU Awk program for torrents categorization.
 # Author: David Pi
+# Requires: gawk version 4+
 #
 # variable assignment (-v var=val):
 #   regexfile
 # standard input:
 #   path \0 size \0 ...
 # standard output:
-#   [default, av, film, tv, music]
+#   {"default", "av", "film", "tv", "music"}
 
 BEGIN {
-    if (PROCINFO["version"] < 4)
-        raise("GNU Awk >= 4 required.")
-
     RS = "\0"
     raise_exit = size_reached = 0
     size_thresh = 52428800  # 50 MiB
@@ -25,13 +23,13 @@ BEGIN {
     close(regexfile)
 }
 
-NR % 2 {  # path
+FNR % 2 {  # path
     path = $0
     next
 }
 
 path == "" || ! /^[0-9]+$/ {
-    printf("[AWK] Bad record: ('%s', '%s')\n", path, $0) > "/dev/stderr"
+    printf("[AWK] Record ignored: ('%s', '%s')\n", path, $0) > "/dev/stderr"
     next
 }
 
