@@ -1,6 +1,6 @@
 # GNU Awk program for torrents categorization.
 # Author: David Pi
-# Requires: gawk version 4+
+# Requires: gawk 4+
 #
 # variable assignment (-v var=val):
 #   regexfile
