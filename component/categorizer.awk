@@ -82,9 +82,9 @@ function output(type)
 
 # Split the path into a pair (root, ext). This behaves the same way as Python's
 # os.path.splitext, except that the period between root and ext is omitted.
-function splitext(p, pair,  s, i, isext)
+function splitext(p, arr,  s, i, isext)
 {
-    delete pair
+    delete arr
     s = p
     while (i = index(s, "/"))
         s = substr(s, i + 1)
@@ -93,11 +93,11 @@ function splitext(p, pair,  s, i, isext)
         if (i > 1) isext = 1
     }
     if (isext) {
-        pair[1] = substr(p, 1, length(p) - length(s) - 1)
-        pair[2] = s
+        arr[1] = substr(p, 1, length(p) - length(s) - 1)
+        arr[2] = s
     } else {
-        pair[1] = p
-        pair[2] = ""
+        arr[1] = p
+        arr[2] = ""
     }
 }
 
@@ -154,13 +154,15 @@ function pattern_match(sizedict, videoset,  p, a, type, arr)
 #   nums[2] = 5
 #   nums[3] = 6
 # If we found three consecutive digits in one group, identify as TV Series.
-function series_match(videoset,  m, n, i, words, nums, arr)
+function series_match(videoset,  m, n, i, j, strs, nums, arr)
 {
     for (m in videoset) {
-        n = split(m, words, /[0-9]+/, nums)
+        n = split(m, strs, /[0-9]+/, nums)
         for (i = 1; i < n; i++) {
-            gsub(/.*\/|[[:space:][:punct:]]+/, "", words[i])
-            arr[i, words[i]][nums[i] + 0]
+            while (j = index(strs[i], "/"))
+                strs[i] = substr(strs[i], j + 1)
+            gsub(/[[:space:]._-]+/, "", strs[i])
+            arr[i, strs[i]][nums[i] + 0]
         }
     }
     for (m in arr) {
