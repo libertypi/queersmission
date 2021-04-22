@@ -15,7 +15,8 @@ BEGIN {
     size_thresh = 52428800  # 50 MiB
     delete sizedict
 
-    if (regexfile != "" && (getline av_regex < regexfile) > 0 && av_regex ~ /[^[:space:]]/) {
+    if (regexfile == "") raise("Require argument: '-v regexfile=...'")
+    if ((getline av_regex < regexfile) > 0 && av_regex ~ /[^[:space:]]/) {
         gsub(/^[[:space:]]+|[[:space:]]+$/, "", av_regex)
     } else {
         raise("Reading regexfile '" regexfile "' failed.")
@@ -28,7 +29,7 @@ FNR % 2 {  # path
     next
 }
 
-path == "" || ! /^[0-9]+$/ {
+path == "" || $0 + 0 != $0 {
     printf("[AWK] Record ignored: ('%s', '%s')\n", path, $0) > "/dev/stderr"
     next
 }
