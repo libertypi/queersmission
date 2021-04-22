@@ -81,23 +81,22 @@ function output(type)
 
 # Split the path into a pair (root, ext). This behaves the same way as Python's
 # os.path.splitext. Except that the period between root and ext is omitted.
-function splitext(p, pair,  s, i, isext)
+function splitext(p, pair,  c, i, j)
 {
-    delete parts
-    s = p
-    while (i = index(s, "/"))
-        s = substr(s, i + 1)
-    while (i = index(s, ".")) {
-        s = substr(s, i + 1)
-        if (i > 1) isext = 1
+    delete pair
+    for (i = length(p); i > 0; i--) {
+        c = substr(p, i, 1)
+        if (c == "/") break
+        if (c == ".") {
+            if (! j) j = i
+        } else if (j) {
+            pair[1] = substr(p, 1, j - 1)
+            pair[2] = substr(p, j + 1)
+            return
+        }
     }
-    if (isext) {
-        pair[1] = substr(p, 1, length(p) - length(s) - 1)
-        pair[2] = s
-    } else {
-        pair[1] = p
-        pair[2] = ""
-    }
+    pair[1] = p
+    pair[2] = ""
 }
 
 # match files against patterns
