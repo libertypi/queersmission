@@ -24,18 +24,16 @@ BEGIN {
     close(regexfile)
 }
 
-# path
 FNR % 2 {
     path = $0
     next
 }
 
-path == "" || $0 + 0 != $0 {
+path == "" || (size = $0 + 0) != $0 {
     printf("[AWK] Record ignored: ('%s', '%s')\n", path, $0) > "/dev/stderr"
     next
 }
 
-# size
 {
     splitext(tolower(path), arr)
     switch (arr[2]) {
@@ -47,8 +45,8 @@ path == "" || $0 + 0 != $0 {
         }
         # fall-through
     case /^((og|r[ap]?|sk|w|web)m|3gp?[2p]|[aw]mv|asf|avi|divx|dpg|evo|f[4l]v|ifo|k3g|m(([14ko]|p?2)v|2?ts|2t|4b|4p|p4|peg?|pg|pv2|xf)|ns[rv]|ogv|qt|rmvb|swf|tpr?|ts|vob|wmp|wtv)$/:
-        # video file. 
-        video_add(arr, $0)
+        # video file.
+        video_add(arr, size)
         # fall-through
     case /^([ax]ss|asx|bdjo|bdmv|clpi|idx|mpls?|psb|rt|s(bv|mi|rr|rt|sa|sf|ub|up)|ttml|usf|vtt|w[mv]x)$/:
         # video subtitle, playlist
@@ -61,7 +59,7 @@ path == "" || $0 + 0 != $0 {
     default:
         type = "default"
     }
-    typedict[type] += $0
+    typedict[type] += size
 }
 
 END {
@@ -137,7 +135,7 @@ function imax(arr,  f, km, vm, k, v)
 # Add video path to `videodict`. If any video meets `video_thresh`, we only keep
 # files larger than that.
 function video_add(arr, size)
-{    
+{
     if (size >= video_thresh) {
         if (! thresh_reached) {
             delete videodict
