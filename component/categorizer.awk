@@ -10,7 +10,7 @@
 #   {"default", "av", "film", "tv", "music"}
 
 BEGIN {
-	RS = "\000"
+    RS = "\000"
     video_thresh = 52428800 # 50 MiB
     raise_exit = thresh_reached = 0
     delete typedict
@@ -37,14 +37,7 @@ path == "" || $0 + 0 != $0 {
 
 # size
 {
-    path = tolower(path)
-    if (path ~ /m2ts$/) {
-        sub(/\/bdmv\/stream\/[^/]+\.m2ts$/, "/bdmv.m2ts", path)
-    } else if (path ~ /vob$/) {
-        sub(/\/[^/]*vts[0-9_]+\.vob$/, "/video_ts.vob", path)
-    }
-
-    splitext(path, arr)
+    splitext(tolower(path), arr)
     switch (arr[2]) {
     case "iso":
         if (arr[1] ~ /(\y|_)(adobe|microsoft|windows|x(64|86)|v[0-9]+(\.[0-9]+)+)(\y|_)/) {
@@ -54,17 +47,8 @@ path == "" || $0 + 0 != $0 {
         }
         # fall-through
     case /^((og|r[ap]?|sk|w|web)m|3gp?[2p]|[aw]mv|asf|avi|divx|dpg|evo|f[4l]v|ifo|k3g|m(([14ko]|p?2)v|2?ts|2t|4b|4p|p4|peg?|pg|pv2|xf)|ns[rv]|ogv|qt|rmvb|swf|tpr?|ts|vob|wmp|wtv)$/:
-        # video file. If any video meets `video_thresh`, we only store files
-        # larger than the thresh into `videodict`.
-        if ($0 >= video_thresh) {
-            if (! thresh_reached) {
-                delete videodict
-                thresh_reached = 1
-            }
-            videodict[arr[1]] += $0
-        } else if (! thresh_reached) {
-            videodict[arr[1]] += $0
-        }
+        # video file. 
+        video_add(arr, $0)
         # fall-through
     case /^([ax]ss|asx|bdjo|bdmv|clpi|idx|mpls?|psb|rt|s(bv|mi|rr|rt|sa|sf|ub|up)|ttml|usf|vtt|w[mv]x)$/:
         # video subtitle, playlist
@@ -148,6 +132,28 @@ function imax(arr,  f, km, vm, k, v)
         }
     }
     return km
+}
+
+# Add video path to `videodict`. If any video meets `video_thresh`, we only keep
+# files larger than that.
+function video_add(arr, size)
+{    
+    if (size >= video_thresh) {
+        if (! thresh_reached) {
+            delete videodict
+            thresh_reached = 1
+        }
+    } else if (thresh_reached) {
+        return
+    }
+    switch (arr[2]) {
+    case "m2ts":
+        sub(/\/bdmv\/stream\/[^/]+$/, "", arr[1])
+        break
+    case "vob":
+        sub(/\/[^/]*vts[0-9_]+$/, "/video_ts", arr[1])
+    }
+    videodict[arr[1]] += size
 }
 
 # Match videos against patterns.

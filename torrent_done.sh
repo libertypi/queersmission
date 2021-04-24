@@ -84,7 +84,6 @@ set_rpc_header() {
 }
 
 # Send an API request.
-# Global: rpc_header
 # Usage: `request_rpc DATA [VAR]`
 # VAR: assign response to VAR rather than display on the stdout.
 request_rpc() {
