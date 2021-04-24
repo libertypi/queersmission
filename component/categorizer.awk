@@ -10,9 +10,10 @@
 #   {"default", "av", "film", "tv", "music"}
 
 BEGIN {
-    RS = "\0"
+	RS = "\000"
     video_thresh = 52428800 # 50 MiB
     raise_exit = thresh_reached = 0
+    delete typedict
 
     if (regexfile == "") raise("Require argument: '-v regexfile=...'")
     if ((getline av_regex < regexfile) > 0 && av_regex ~ /[^[:space:]]/) {
@@ -44,7 +45,7 @@ path == "" || $0 + 0 != $0 {
     }
 
     splitext(path, arr)
-    switch(arr[2]) {
+    switch (arr[2]) {
     case "iso":
         if (arr[1] ~ /(\y|_)(adobe|microsoft|windows|x(64|86)|v[0-9]+(\.[0-9]+)+)(\y|_)/) {
             # software
@@ -53,7 +54,7 @@ path == "" || $0 + 0 != $0 {
         }
         # fall-through
     case /^((og|r[ap]?|sk|w|web)m|3gp?[2p]|[aw]mv|asf|avi|divx|dpg|evo|f[4l]v|ifo|k3g|m(([14ko]|p?2)v|2?ts|2t|4b|4p|p4|peg?|pg|pv2|xf)|ns[rv]|ogv|qt|rmvb|swf|tpr?|ts|vob|wmp|wtv)$/:
-        # video file. If any file meets `video_thresh`, we only store files
+        # video file. If any video meets `video_thresh`, we only store files
         # larger than the thresh into `videodict`.
         if ($0 >= video_thresh) {
             if (! thresh_reached) {
@@ -80,14 +81,16 @@ path == "" || $0 + 0 != $0 {
 }
 
 END {
-    if (raise_exit) exit 1
+    if (raise_exit)
+        exit 1
     if (! length(typedict))
         raise("Invalid input. Expect null-terminated (path, size) pairs.")
 
     type = imax(typedict)
     if (type == "film") {
         match_videos(videodict)
-        if (length(videodict) >= 3) match_series(videodict)
+        if (length(videodict) >= 3)
+            match_series(videodict)
     }
     output(type)
 }
