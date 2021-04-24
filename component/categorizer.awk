@@ -132,8 +132,8 @@ function imax(arr,  f, km, vm, k, v)
     return km
 }
 
-# Add video path to `videodict`. If any video meets `video_thresh`, we only keep
-# files larger than that.
+# Add {path: size} to `videodict`. If any video meets `video_thresh`, we only
+# keep files larger than that.
 function video_add(arr, size)
 {
     if (size >= video_thresh) {
