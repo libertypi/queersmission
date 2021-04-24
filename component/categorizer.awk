@@ -66,7 +66,7 @@ path == "" || $0 + 0 != $0 {
             videodict[arr[1]] += $0
         }
         # fall-through
-    case /^([ax]ss|asx|bdmv|clpi|idx|mpls?|psb|rt|s(bv|mi|rr|rt|sa|sf|ub|up)|ttml|usf|vtt|w[mv]x)$/:
+    case /^([ax]ss|asx|bdjo|bdmv|clpi|idx|mpls?|psb|rt|s(bv|mi|rr|rt|sa|sf|ub|up)|ttml|usf|vtt|w[mv]x)$/:
         # video subtitle, playlist
         type = "film"
         break
