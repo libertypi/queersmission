@@ -11,9 +11,8 @@
 
 BEGIN {
     RS = "\0"
-    raise_exit = size_reached = 0
-    size_thresh = 52428800  # 50 MiB
-    delete sizedict
+    video_thresh = 52428800 # 50 MiB
+    raise_exit = thresh_reached = 0
 
     if (regexfile == "") raise("Require argument: '-v regexfile=...'")
     if ((getline av_regex < regexfile) > 0 && av_regex ~ /[^[:space:]]/) {
@@ -24,7 +23,8 @@ BEGIN {
     close(regexfile)
 }
 
-FNR % 2 {  # path
+# path
+FNR % 2 {
     path = $0
     next
 }
@@ -34,33 +34,61 @@ path == "" || $0 + 0 != $0 {
     next
 }
 
-{   # size
-    if ($0 >= size_thresh) {
-        if (! size_reached) {
-            delete sizedict
-            size_reached = 1
-        }
-    } else if (size_reached) {
-        next
-    }
+# size
+{
     path = tolower(path)
     if (path ~ /m2ts$/) {
         sub(/\/bdmv\/stream\/[^/]+\.m2ts$/, "/bdmv.m2ts", path)
     } else if (path ~ /vob$/) {
         sub(/\/[^/]*vts[0-9_]+\.vob$/, "/video_ts.vob", path)
     }
-    sizedict[path] += $0  # {path: size}
+
+    splitext(path, arr)
+    switch(arr[2]) {
+    case "iso":
+        if (arr[1] ~ /(\y|_)(adobe|microsoft|windows|x(64|86)|v[0-9]+(\.[0-9]+)+)(\y|_)/) {
+            # software
+            type = "default"
+            break
+        }
+        # fall-through
+    case /^((og|r[ap]?|sk|w|web)m|3gp?[2p]|[aw]mv|asf|avi|divx|dpg|evo|f[4l]v|ifo|k3g|m(([14ko]|p?2)v|2?ts|2t|4b|4p|p4|peg?|pg|pv2|xf)|ns[rv]|ogv|qt|rmvb|swf|tpr?|ts|vob|wmp|wtv)$/:
+        # video file. If any file meets `video_thresh`, we only store files
+        # larger than the thresh into `videodict`.
+        if ($0 >= video_thresh) {
+            if (! thresh_reached) {
+                delete videodict
+                thresh_reached = 1
+            }
+            videodict[arr[1]] += $0
+        } else if (! thresh_reached) {
+            videodict[arr[1]] += $0
+        }
+        # fall-through
+    case /^([ax]ss|asx|bdmv|clpi|idx|mpls?|psb|rt|s(bv|mi|rr|rt|sa|sf|ub|up)|ttml|usf|vtt|w[mv]x)$/:
+        # video subtitle, playlist
+        type = "film"
+        break
+    case /^((al?|fl)ac|(cd|r|tt|wm)a|aiff|amr|ape|cue|dsf|dts(hd)?|e?ac3|m(3u8?|[124kp]a|od|p[23c])|ogg|opus|pls|tak|wa?v|wax|xspf)$/:
+        # audio file, playlist
+        type = "music"
+        break
+    default:
+        type = "default"
+    }
+    typedict[type] += $0
 }
 
 END {
-    if (raise_exit)
-        exit 1
-    if (! length(sizedict))
+    if (raise_exit) exit 1
+    if (! length(typedict))
         raise("Invalid input. Expect null-terminated (path, size) pairs.")
 
-    type = pattern_match(sizedict, videoset)
-    if (type == "film" && length(videoset) >= 3)
-        series_match(videoset)
+    type = imax(typedict)
+    if (type == "film") {
+        match_videos(videodict)
+        if (length(videodict) >= 3) match_series(videodict)
+    }
     output(type)
 }
 
@@ -101,76 +129,54 @@ function splitext(p, arr,  s, i, isext)
     }
 }
 
-# match files against patterns
-# save video files to: videoset[root]
-# return the most significant file type
-function pattern_match(sizedict, videoset,  p, a, type, arr)
+# Return the key of the item with the max numeric value in array.
+function imax(arr,  f, km, vm, k, v)
 {
-    delete videoset
-    PROCINFO["sorted_in"] = "@val_num_desc"
-    for (p in sizedict) {
-        splitext(p, a)
-        switch (a[2]) {
-        case "iso":
-            if (a[1] ~ /(\y|_)(adobe|microsoft|windows|v[0-9]+(\.[0-9]+)+|x(64|86))(\y|_)/) {
-                type = "default"
-                break
-            }
-            # fall-through to video
-        case /^((fl|og|vi|yu)v|3g[2p]|[as]vi|[aw]mv|asf|divx|f4[abpv]|hevc|m(2?ts|4p|[24kop]v|p[24e]|pe?g|xf)|qt|rm|rmvb|swf|ts|vob|webm)$/:
-            if (a[1] ~ av_regex)
-                output("av")
-            if (a[1] ~ /(\y|_)([es]|ep[ _-]?|s([1-9][0-9]|0?[1-9])e)([1-9][0-9]|0?[1-9])(\y|_)/)
-                output("tv")
-            videoset[a[1]]
-            type = "film"
-            break
-        case /^((al?|fl)ac|(m4|og|r|wm)a|aiff|ape|m?ogg|mp[3c]|opus|pcm|wa?v)$/:
-            type = "music"
-            break
-        default:
-            type = "default"
+    f = 1
+    for (k in arr) {
+        v = arr[k] + 0
+        if (f) {
+            f = 0
+            km = k
+            vm = v
+        } else if (v > vm) {
+            km = k
+            vm = v
         }
-        arr[type] += sizedict[p]
     }
-    for (type in arr) break
-    delete PROCINFO["sorted_in"]
-    return type
+    return km
 }
 
-# Scan videoset to identify consecutive digits.
-# input:
-#   videoset[path/a_05]
-#   videoset[path/a_06]
-#   videoset[path/a_04a_05]
-# After split, grouped as:
-#   arr[1, "a"][5]
-#   arr[1, "a"][6]
-#   arr[1, "a"][4]
-#   arr[2, "a"][5]
-#   (one file would never appear in the same group twice)
-# For each group, sort its sub-array by keys. arr[1, "a"] become:
-#   nums[1] = 4
-#   nums[2] = 5
-#   nums[3] = 6
-# If we found three consecutive digits in one group, identify as TV Series.
-function series_match(videoset,  m, n, i, j, strs, nums, arr)
+# Match videos against patterns.
+function match_videos(videodict,  i)
 {
-    for (m in videoset) {
-        n = split(m, strs, /[0-9]+/, nums)
-        for (i = 1; i < n; i++) {
-            while (j = index(strs[i], "/"))
-                strs[i] = substr(strs[i], j + 1)
-            gsub(/[[:space:]._-]+/, "", strs[i])
-            arr[i, strs[i]][nums[i] + 0]
-        }
+    PROCINFO["sorted_in"] = "@val_num_desc"
+    for (i in videodict) {
+        if (i ~ av_regex)
+            output("av")
+        if (i ~ /(\y|_)([es]|ep[ _-]?|s([1-9][0-9]|0?[1-9])e)([1-9][0-9]|0?[1-9])(\y|_)/)
+            output("tv")
     }
-    for (m in arr) {
-        if (length(arr[m]) < 3) continue
-        n = asorti(arr[m], nums, "@ind_num_asc") - 2
-        for (i = 1; i <= n; i++) {
-            if (nums[i] + 2 == nums[i + 2])
-                output("tv")
+    delete PROCINFO["sorted_in"]
+}
+
+# Scan videodict to identify consecutive digits.
+# input:
+# {"path/a01", "path/a03", "path/a05a06"}
+# grouped:
+# {"1, a": {1, 3, 5}, "2, a": {6}}
+# If we found three digits in one group, identify as TV Series.
+function match_series(videodict,  i, j, m, n, strs, nums, arr)
+{
+    for (i in videodict) {
+        m = split(i, strs, /[0-9]+/, nums)
+        for (j = 1; j < m; j++) {
+            while (n = index(strs[j], "/"))
+                strs[j] = substr(strs[j], n + 1)
+            gsub(/[[:space:]._-]+/, "", strs[j])
+            n = (j SUBSEP strs[j])
+            arr[n][nums[j] + 0]
+            if (length(arr[n]) == 3) output("tv")
         }
     }
 }
