@@ -135,16 +135,15 @@ function imax(arr,  f, k, km, vm)
 # to slice the list to value `x`. If no value meets `x`, the list is not sliced.
 function sort_videos(a, x,  d, i, lo, hi, mid)
 {
-    i = asorti(a, d, "@val_num_desc") + 1
     lo = 1
-    hi = i
+    hi = i = asorti(a, d, "@val_num_desc") + 1
     while (lo < hi) {
         mid = int((lo + hi) / 2)
         if (x > a[d[mid]]) hi = mid
         else lo = mid + 1
     }
-    if (lo == 1) lo = i
     delete a
+    if (lo == 1) lo = i
     for (i = 1; i < lo; i++) a[i] = d[i]
 }
 
