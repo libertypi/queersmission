@@ -74,7 +74,7 @@ END {
 
     type = imax(typedict)
     if (type == "film") {
-        isort_slice(videolist, 52428800)  # threshold: 50 MiB
+        slicesorti(videolist, 52428800)  # threshold: 50 MiB
         match_videos(videolist)
         if (length(videolist) >= 3)
             match_series(videolist)
@@ -131,7 +131,7 @@ function imax(a,  f, k, km, vm)
 
 # Reversely sort the keys of `a` by its values, then slice the list so that all
 # values >= `x`. If no value meets `x`, the whole list is returned.
-function isort_slice(a, x,  d, i, lo, hi, mid)
+function slicesorti(a, x,  d, i, lo, hi, mid)
 {
     lo = 1
     hi = i = asorti(a, d, "@val_num_desc") + 1
@@ -170,7 +170,7 @@ function match_series(a,  i, j, m, n, strs, nums, arr)
         for (j = 1; j < m; j++) {
             while (n = index(strs[j], "/"))
                 strs[j] = substr(strs[j], n + 1)
-            gsub(/[[:space:]._-]+/, "", strs[j])
+            gsub(/[[:space:][:cntrl:]._-]+/, "", strs[j])
             n = (j SUBSEP strs[j])
             arr[n][nums[j] + 0]
             if (length(arr[n]) == 3) output("tv")
