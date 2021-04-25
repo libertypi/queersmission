@@ -129,8 +129,8 @@ function imax(a,  f, k, km, vm)
     return km
 }
 
-# Reversely sort the keys of `a` by its values, then slice the list to value
-# `x`. If no value meets `x`, the whole list is returned.
+# Reversely sort the keys of `a` by its values, then slice the list so that all
+# values >= `x`. If no value meets `x`, the whole list is returned.
 function isort_slice(a, x,  d, i, lo, hi, mid)
 {
     lo = 1
