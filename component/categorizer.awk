@@ -12,8 +12,6 @@
 BEGIN {
     RS = "\000"
     raise_exit = 0
-    delete typedict
-
     if (regexfile == "") raise("Require argument: '-v regexfile=...'")
     if ((getline av_regex < regexfile) > 0 && av_regex ~ /[^[:space:]]/) {
         gsub(/^[[:space:]]+|[[:space:]]+$/, "", av_regex)
@@ -34,10 +32,10 @@ path == "" || $0 + 0 != $0 {
 }
 
 {
-    splitext(tolower(path), arr)
-    switch (arr[2]) {
+    splitext(tolower(path), a)
+    switch (a[2]) {
     case "iso":
-        if (arr[1] ~ /(\y|_)(adobe|microsoft|windows|x(64|86)|v[0-9]+(\.[0-9]+)+)(\y|_)/) {
+        if (a[1] ~ /(\y|_)(adobe|microsoft|windows|x(64|86)|v[0-9]+(\.[0-9]+)+)(\y|_)/) {
             # software
             type = "default"
             break
@@ -45,14 +43,14 @@ path == "" || $0 + 0 != $0 {
         # fall-through
     case /^((og|r[ap]?|sk|w|web)m|3gp?[2p]|[aw]mv|asf|avi|divx|dpg|evo|f[4l]v|ifo|k3g|m(([14ko]|p?2)v|2?ts|2t|4b|4p|p4|peg?|pg|pv2|xf)|ns[rv]|ogv|qt|rmvb|swf|tpr?|ts|vob|wmp|wtv)$/:
         # video file.
-        switch (arr[2]) {
+        switch (a[2]) {
         case "m2ts":
-            sub(/\/bdmv\/stream\/[^/]+$/, "", arr[1])
+            sub(/\/bdmv\/stream\/[^/]+$/, "", a[1])
             break
         case "vob":
-            sub(/\/[^/]*vts[0-9_]+$/, "/video_ts", arr[1])
+            sub(/\/[^/]*vts[0-9_]+$/, "/video_ts", a[1])
         }
-        videolist[arr[1]] += $0
+        videolist[a[1]] += $0
         # fall-through
     case /^([ax]ss|asx|bdjo|bdmv|clpi|idx|mpls?|psb|rt|s(bv|mi|rr|rt|sa|sf|ub|up)|ttml|usf|vtt|w[mv]x)$/:
         # video subtitle, playlist
@@ -76,7 +74,7 @@ END {
 
     type = imax(typedict)
     if (type == "film") {
-        sort_videos(videolist, 52428800)  # threshold: 50 MiB
+        isort_slice(videolist, 52428800)  # threshold: 50 MiB
         match_videos(videolist)
         if (length(videolist) >= 3)
             match_series(videolist)
@@ -94,9 +92,9 @@ function raise(msg)
 
 # Split the path into a pair (root, ext). This behaves the same way as Python's
 # os.path.splitext, except that the period between root and ext is omitted.
-function splitext(p, arr,  s, i, isext)
+function splitext(p, a,  s, i, isext)
 {
-    delete arr
+    delete a
     s = p
     while (i = index(s, "/"))
         s = substr(s, i + 1)
@@ -105,57 +103,56 @@ function splitext(p, arr,  s, i, isext)
         if (i > 1) isext = 1
     }
     if (isext) {
-        arr[1] = substr(p, 1, length(p) - length(s) - 1)
-        arr[2] = s
+        a[1] = substr(p, 1, length(p) - length(s) - 1)
+        a[2] = s
     } else {
-        arr[1] = p
-        arr[2] = ""
+        a[1] = p
+        a[2] = ""
     }
 }
 
 # Return the key of the item with the max value in array. Note that to do
 # numeric comparison, array values must be numbers, not strings.
-function imax(arr,  f, k, km, vm)
+function imax(a,  f, k, km, vm)
 {
     f = 1
-    for (k in arr) {
+    for (k in a) {
         if (f) {
             f = 0
             km = k
-            vm = arr[k]
-        } else if (arr[k] > vm) {
+            vm = a[k]
+        } else if (a[k] > vm) {
             km = k
-            vm = arr[k]
+            vm = a[k]
         }
     }
     return km
 }
 
-# Reversely sort the keys of `a` by its values, then use bisect right algorism
-# to slice the list to value `x`. If no value meets `x`, the list is not sliced.
-function sort_videos(a, x,  d, i, lo, hi, mid)
+# Reversely sort the keys of `a` by its values, then slice the list to value
+# `x`. If no value meets `x`, the whole list is returned.
+function isort_slice(a, x,  d, i, lo, hi, mid)
 {
-    i = asorti(a, d, "@val_num_desc") + 1
     lo = 1
-    hi = i
+    hi = i = asorti(a, d, "@val_num_desc") + 1
     while (lo < hi) {
         mid = int((lo + hi) / 2)
         if (x > a[d[mid]]) hi = mid
         else lo = mid + 1
     }
-    if (lo == 1) lo = i
     delete a
+    if (lo == 1) lo = i
     for (i = 1; i < lo; i++) a[i] = d[i]
 }
 
 # Match videos against patterns.
-function match_videos(videolist,  i, n)
+function match_videos(a,  i, n)
 {
-    n = length(videolist)
+    n = length(a)
     for (i = 1; i <= n; i++) {
-        if (videolist[i] ~ av_regex)
+        if (a[i] ~ av_regex)
             output("av")
-        if (videolist[i] ~ /(\y|_)([es]|ep[ _-]?|s([1-9][0-9]|0?[1-9])e)([1-9][0-9]|0?[1-9])(\y|_)/)
+        if (a[i] ~ /(\y|_)([es]|ep[ _-]?|s([1-9][0-9]|0?[1-9])e)([1-9][0-9]|0?[1-9])(\y|_)/)
             output("tv")
     }
 }
@@ -166,10 +163,10 @@ function match_videos(videolist,  i, n)
 # grouped:
 # {"1, a": {1, 3, 5}, "2, a": {6}}
 # If we found three digits in one group, identify as TV Series.
-function match_series(videolist,  i, j, m, n, strs, nums, arr)
+function match_series(a,  i, j, m, n, strs, nums, arr)
 {
-    for (i in videolist) {
-        m = split(videolist[i], strs, /[0-9]+/, nums)
+    for (i in a) {
+        m = split(a[i], strs, /[0-9]+/, nums)
         for (j = 1; j < m; j++) {
             while (n = index(strs[j], "/"))
                 strs[j] = substr(strs[j], n + 1)
