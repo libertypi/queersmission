@@ -150,7 +150,11 @@ function index_commonprefix(a,  l, i, n, a1, a2)
 # is a null string. Return the number of video files.
 # Example:
 # input:  a = {"path/a": 1, "path/b": 5, "path/c": 3}, x = 1
+<<<<<<< HEAD
 # result: a = {0: "path", 1: "b", 2: "c"}, return: 2
+=======
+# result: [0: "path", 1: "b", 2: "c"], return: 2
+>>>>>>> a24670c0ab86500754e1ed16c855846df9c3acc8
 function process_videos(a, x,  d, m, n, i, j)
 {
     n = asorti(a, d, "@val_num_desc")
@@ -161,7 +165,11 @@ function process_videos(a, x,  d, m, n, i, j)
             if (x > a[d[m]]) j = m
             else i = m + 1
         }
+<<<<<<< HEAD
         if (i > 1) while (n >= i) delete d[n--]
+=======
+        if (i > 1) for (; n >= i; n--) delete d[n]
+>>>>>>> a24670c0ab86500754e1ed16c855846df9c3acc8
     }
     delete a
     if (n > 1 && (m = index_commonprefix(d))) {
