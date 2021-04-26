@@ -26,7 +26,7 @@ FNR % 2 {
     next
 }
 
-path == "" || $0 + 0 != $0 {
+path == "" || $0 != $0 + 0 {
     printf("[AWK] Record ignored: ('%s', '%s')\n", path, $0) > "/dev/stderr"
     next
 }
@@ -74,10 +74,10 @@ END {
 
     type = imax(typedict)
     if (type == "film") {
-        process_videos(videolist, 52428800)  # threshold: 50 MiB
-        match_videos(videolist)
-        if (length(videolist) > 3)  # videolist contains len-1 files
-            match_series(videolist)
+        videocount = process_videos(videolist, 52428800)  # 50 MiB threshold
+        match_videos(videolist, videocount)
+        if (videocount >= 3)
+            match_series(videolist, videocount)
     }
     output(type)
 }
@@ -144,12 +144,14 @@ function index_commonprefix(a,  l, i, n, a1, a2)
 }
 
 # Inplace modify array `a` to a sorted list of its keys. The list is sorted by
-# its origional values reversely. And if any of such values meets `x`, any key
-# whose value less than `x` is removed. The result array is 0 based. `a[0]` is
-# the common prefix of all paths so that `a[0] + "/" + a[n] == path[n]`. If
-# there was no common parent, `a[0]` is a null string. Example:
-# input: a = {"path/a": 1, "path/b": 5, "path/c": 3}, x = 1
-# result: [0: "path", 1: "b", 2: "c"]
+# its origional values reversely. And if any of such values is less than `x`,
+# the list is truncated from the point. In the result array, `a[0]` is the
+# common prefix of all paths so that `a[0] + "/" + a[n] == path[n]`. If there
+# was no common parent, `a[0]` is a null string. Return the number of video
+# files.
+# Example:
+# input:  a = {"path/a": 1, "path/b": 5, "path/c": 3}, x = 1
+# result: [0: "path", 1: "b", 2: "c"], return: 2
 function process_videos(a, x,  d, i, lo, hi, m)
 {
     lo = 1
@@ -159,24 +161,22 @@ function process_videos(a, x,  d, i, lo, hi, m)
         if (x > a[d[m]]) hi = m
         else lo = m + 1
     }
-    if (lo > 1) {
-        for (x = lo; x < i; x++) delete d[x]
-    }
+    if (lo > 1) for (; lo < i; lo++) delete d[lo]
     delete a
-    if (length(d) > 1 && (m = index_commonprefix(d))) {
+    if ((hi = length(d)) > 1 && (m = index_commonprefix(d))) {
         a[0] = substr(d[1], 1, m++ - 1)
         for (i in d) a[i] = substr(d[i], m)
     } else {
         a[0] = ""
         for (i in d) a[i] = d[i]
     }
+    return hi
 }
 
 # Match videos against patterns.
-function match_videos(a,  i, n)
+function match_videos(a, vc,  i)
 {
-    n = length(a)
-    for (i = (a[0] == "" ? 1 : 0); i < n; i++) {
+    for (i = (a[0] == "" ? 1 : 0); i <= vc; i++) {
         if (a[i] ~ av_regex)
             output("av")
         if (a[i] ~ /(\y|_)([es]|ep[ _-]?|s([1-9][0-9]|0?[1-9])e)([1-9][0-9]|0?[1-9])(\y|_)/)
@@ -190,15 +190,14 @@ function match_videos(a,  i, n)
 # grouped:
 # {"1, a": {1, 3, 5}, "2, a": {6}}
 # If we found three digits in one group, identify as TV Series.
-function match_series(a,  i, j, m, n, t, strs, nums, arr)
+function match_series(a, vc,  i, j, m, n, strs, nums, arr)
 {
-    t = length(a)
-    for (i = 1; i < t; i++) {  # skip a[0]
+    for (i = 1; i <= vc; i++) {  # skip a[0]
         m = split(a[i], strs, /[0-9]+/, nums)
         for (j = 1; j < m; j++) {
             while (n = index(strs[j], "/"))
                 strs[j] = substr(strs[j], n + 1)
-            gsub(/[[:space:]._-]+/, "", strs[j])
+            gsub(/[[:space:][:cntrl:]._-]/, "", strs[j])
             n = (j SUBSEP strs[j])
             arr[n][nums[j] + 0]
             if (length(arr[n]) == 3) output("tv")
