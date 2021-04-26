@@ -42,7 +42,7 @@ path == "" || $0 != $0 + 0 {
         }
         # fall-through
     case /^((og|r[ap]?|sk|w|web)m|3gp?[2p]|[aw]mv|asf|avi|divx|dpg|evo|f[4l]v|ifo|k3g|m(([14ko]|p?2)v|2?ts|2t|4b|4p|p4|peg?|pg|pv2|xf)|ns[rv]|ogv|qt|rmvb|swf|tpr?|ts|vob|wmp|wtv)$/:
-        # video file.
+        # video file
         switch (a[2]) {
         case "m2ts":
             sub(/\/bdmv\/stream\/[^/]+$/, "", a[1])
@@ -111,67 +111,66 @@ function splitext(p, a,  s, i, isext)
     }
 }
 
-# Return the key of the item with the max value in array. Note that to do
-# numeric comparison, array values must be numbers, not strings.
-function imax(a,  f, k, km, vm)
+# Return the key with the max numeric value in array.
+function imax(a,  f, k, v, km, vm)
 {
     f = 1
     for (k in a) {
-        if (f) {
-            f = 0
-            km = k
-            vm = a[k]
-        } else if (a[k] > vm) {
-            km = k
-            vm = a[k]
-        }
+        v = a[k] + 0  # force numeric comparison
+        if (f) { km = k; vm = v; f = 0 }
+        else if (v > vm) { km = k; vm = v }
     }
     return km
 }
 
-# Find the index dividing common path prefix in array.
-function index_commonprefix(a,  l, i, n, a1, a2)
+# Find the last index of common path prefix.
+function index_commonprefix(a,  res, f, i, n, min, max, a1, a2)
 {
-    l = 0
-    i = asort(a, a2, "@val_str_asc")
-    n = split(a2[1], a1, "/")
-    split(a2[i], a2, "/")
+    res = 0; f = 1
+    for (i in a) {
+        n = a[i] ""  # force string comparison
+        if (f) { min = max = n; f = 0 }
+        else if (n < min) min = n
+        else if (n > max) max = n
+    }
+    n = split(min, a1, "/")
+    split(max, a2, "/")
     for (i = 1; i <= n; i++) {
         if (a1[i] != a2[i]) break
-        l += length(a1[i]) + 1
+        res += length(a1[i]) + 1
     }
-    return l
+    return res
 }
 
-# Inplace modify array `a` to a sorted list of its keys. The list is sorted by
-# its origional values reversely. And if any of such values meets `x`, all the
-# keys whose value less than `x` is deleted. If there was a common prefix of all
-# paths, it was stored in `a[0]` and striped from all paths. Otherwise, `a[0]`
-# is a null string. Return the number of video files.
+# Inplace modify array `a` to a sorted list of its keys. The list is reversely
+# sorted by its origional values. And if any of such values meets `x`, all the
+# keys with value less than `x` are deleted. If there was a common path prefix,
+# it was stored in `a[0]` and striped from all paths. Otherwise, `a[0]` is a
+# null string. Returns the number of video files.
 # Example:
-# input:  a = {"path/a": 1, "path/b": 5, "path/c": 3}, x = 1
-# result: a = {0: "path", 1: "b", 2: "c"}, return: 2
-function process_videos(a, x,  d, m, n, i, j)
+# input:  a = {"path/a": 1, "path/b": 3, "path/c": 5}, x = 2
+# result: a = {0: "path", 1: "c", 2: "b"}, return: 2
+function process_videos(a, x,  c, i, j, m, d)
 {
-    n = asorti(a, d, "@val_num_desc")
-    if (n > 1) {
-        i = 1; j = n + 1
+    c = asorti(a, d, "@val_num_desc")
+    if (c > 1) {
+        i = 1; j = c + 1
         while (i < j) {
             m = int((i + j) / 2)
             if (x > a[d[m]]) j = m
             else i = m + 1
         }
-        if (i > 1) while (n >= i) delete d[n--]
+        if (i > 1) while (c >= i) delete d[c--]
     }
     delete a
-    if (n > 1 && (m = index_commonprefix(d))) {
+    if (c > 1 && (m = index_commonprefix(d))) {
         a[0] = substr(d[1], 1, m++ - 1)
         for (i in d) a[i] = substr(d[i], m)
     } else {
         a[0] = ""
         for (i in d) a[i] = d[i]
     }
-    return n
+    return c
 }
 
 # Match videos against patterns.
