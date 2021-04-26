@@ -74,10 +74,10 @@ END {
 
     type = imax(typedict)
     if (type == "film") {
-        videocount = process_videos(videolist, 52428800)  # 50 MiB threshold
-        match_videos(videolist, videocount)
-        if (videocount >= 3)
-            match_series(videolist, videocount)
+        count = process_videos(videolist, 52428800)  # 50 MiB threshold
+        match_videos(videolist, count)
+        if (count >= 3)
+            match_series(videolist, count)
     }
     output(type)
 }
@@ -129,7 +129,7 @@ function imax(a,  f, k, km, vm)
     return km
 }
 
-# Find the index dividing common prefix path in array.
+# Find the index dividing common path prefix in array.
 function index_commonprefix(a,  l, i, n, a1, a2)
 {
     l = 0
@@ -144,39 +144,40 @@ function index_commonprefix(a,  l, i, n, a1, a2)
 }
 
 # Inplace modify array `a` to a sorted list of its keys. The list is sorted by
-# its origional values reversely. And if any of such values is less than `x`,
-# the list is truncated from the point. In the result array, `a[0]` is the
-# common prefix of all paths so that `a[0] + "/" + a[n] == path[n]`. If there
-# was no common parent, `a[0]` is a null string. Return the number of video
-# files.
+# its origional values reversely. And if any of such values meets `x`, all the
+# keys whose value less than `x` is deleted. If there was a common prefix of all
+# paths, it was stored in `a[0]` and striped from all paths. Otherwise, `a[0]`
+# is a null string. Return the number of video files.
 # Example:
 # input:  a = {"path/a": 1, "path/b": 5, "path/c": 3}, x = 1
-# result: [0: "path", 1: "b", 2: "c"], return: 2
-function process_videos(a, x,  d, i, lo, hi, m)
+# result: a = {0: "path", 1: "b", 2: "c"}, return: 2
+function process_videos(a, x,  d, m, n, i, j)
 {
-    lo = 1
-    hi = i = asorti(a, d, "@val_num_desc") + 1
-    while (lo < hi) {
-        m = int((lo + hi) / 2)
-        if (x > a[d[m]]) hi = m
-        else lo = m + 1
+    n = asorti(a, d, "@val_num_desc")
+    if (n > 1) {
+        i = 1; j = n + 1
+        while (i < j) {
+            m = int((i + j) / 2)
+            if (x > a[d[m]]) j = m
+            else i = m + 1
+        }
+        if (i > 1) while (n >= i) delete d[n--]
     }
-    if (lo > 1) for (; lo < i; lo++) delete d[lo]
     delete a
-    if ((hi = length(d)) > 1 && (m = index_commonprefix(d))) {
+    if (n > 1 && (m = index_commonprefix(d))) {
         a[0] = substr(d[1], 1, m++ - 1)
         for (i in d) a[i] = substr(d[i], m)
     } else {
         a[0] = ""
         for (i in d) a[i] = d[i]
     }
-    return hi
+    return n
 }
 
 # Match videos against patterns.
-function match_videos(a, vc,  i)
+function match_videos(a, c,  i)
 {
-    for (i = (a[0] == "" ? 1 : 0); i <= vc; i++) {
+    for (i = (a[0] == "" ? 1 : 0); i <= c; i++) {
         if (a[i] ~ av_regex)
             output("av")
         if (a[i] ~ /(\y|_)([es]|ep[ _-]?|s([1-9][0-9]|0?[1-9])e)([1-9][0-9]|0?[1-9])(\y|_)/)
@@ -186,13 +187,13 @@ function match_videos(a, vc,  i)
 
 # Scan videolist to identify consecutive digits.
 # input:
-# ["path", "a01", "a03", "a05a06"]
+# a = ["path", "a01", "a03", "a05a06"], c = 3
 # grouped:
 # {"1, a": {1, 3, 5}, "2, a": {6}}
 # If we found three digits in one group, identify as TV Series.
-function match_series(a, vc,  i, j, m, n, strs, nums, arr)
+function match_series(a, c,  i, j, m, n, strs, nums, arr)
 {
-    for (i = 1; i <= vc; i++) {  # skip a[0]
+    for (i = 1; i <= c; i++) {  # skip a[0]
         m = split(a[i], strs, /[0-9]+/, nums)
         for (j = 1; j < m; j++) {
             while (n = index(strs[j], "/"))
