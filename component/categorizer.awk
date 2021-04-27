@@ -111,28 +111,28 @@ function raise(msg)
 
 # Return the index of the dot which split the path into root and extension uses
 # the same logic as Python's `os.path.splitext`. If there was no ext, return 0.
-function indexext(p,  i, j, c)
+function indexext(p,  ret, i, c)
 {
     for (i = length(p); i > 0; i--) {
         c = substr(p, i, 1)
         if (c == "/") break
-        if (c == ".") { if (! j) j = i }
-        else if (j) return j
+        if (c == ".") { if (! ret) ret = i }
+        else if (ret) return ret
     }
     return 0
 }
 
 # Find the common prefix of two paths, return the length of it.
-function index_commonprefix(lo, hi,  f, i, n, a1, a2)
+function index_commonprefix(s1, s2,  ret, i, n, a1, a2)
 {
-    f = 0
-    n = split(lo, a1, "/")
-    split(hi, a2, "/")
+    ret = 0
+    n = split(s1, a1, "/")
+    split(s2, a2, "/")
     for (i = 1; i <= n; i++) {
         if (a1[i] != a2[i]) break
-        f += length(a1[i]) + 1
+        ret += length(a1[i]) + 1
     }
-    return f
+    return ret
 }
 
 # Return the key with the max numeric value in array.
@@ -151,25 +151,25 @@ function imax(a,  f, k, v, km, vm)
 # sorted by its origional values. And if any of such values meets `x`, all the
 # keys with value less than `x` are deleted. `n` is the length of prefix to be
 # stripped from all paths. Return the length of result.
-function process_list(a, x, n,  c, i, j, m, d)
+function process_list(a, x, n,  ret, i, j, m, d)
 {
-    c = asorti(a, d, "@val_num_desc")
-    if (c > 1) {
-        i = 1; j = c + 1
+    ret = asorti(a, d, "@val_num_desc")
+    if (ret > 1) {
+        i = 1; j = ret + 1
         while (i < j) {
             m = int((i + j) / 2)
             if (x > a[d[m]]) j = m
             else i = m + 1
         }
-        if (i > 1) c = i - 1
+        if (i > 1) ret = i - 1
     }
     delete a
     if (n++) {
-        for (i = 1; i <= c; i++) a[i] = substr(d[i], n)
+        for (i = 1; i <= ret; i++) a[i] = substr(d[i], n)
     } else {
-        for (i = 1; i <= c; i++) a[i] = d[i]
+        for (i = 1; i <= ret; i++) a[i] = d[i]
     }
-    return c
+    return ret
 }
 
 # Test a single string.
