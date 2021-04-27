@@ -12,6 +12,11 @@
 BEGIN {
     RS = "\000"
     raise_exit = 0
+    size_thresh = 52428800  # 50 MiB
+    delete typedict
+    delete videolist
+    delete archivelist
+
     if (regexfile == "") raise("Require argument: '-v regexfile=...'")
     if ((getline av_regex < regexfile) > 0 && av_regex ~ /[^[:space:]]/) {
         gsub(/^[[:space:]]+|[[:space:]]+$/, "", av_regex)
@@ -40,21 +45,26 @@ path == "" || $0 != $0 + 0 {
     }
     switch (type) {
     case "iso":
-        if (path ~ /(\y|_)(adobe|microsoft|windows|x(64|86)|v[0-9]+(\.[0-9]+)+)(\y|_)/)
+        # iso file could be software or video image
+        if (path ~ /(\y|_)(adobe|microsoft|windows|x(64|86)|v[0-9]+(\.[0-9]+)+)(\y|_)/) {
             type = "default"
-        else
-            type = "video"
+        } else {
+            videolist[path] += $0
+            type = "film"
+        }
         break
     case "m2ts":
         sub(/\/bdmv\/stream\/[^/]+$/, "", path)
-        type = "video"
+        videolist[path] += $0
+        type = "film"
         break
     case "vob":
         sub(/\/[^/]*vts[0-9_]+$/, "/video_ts", path)
         # fall-through
     case /^((og|r[ap]?|sk|w|web)m|3gp?[2p]|[aw]mv|asf|avi|divx|dpg|evo|f[4l]v|ifo|k3g|m(([14ko]|p?2)v|2t|4b|4p|p4|peg?|pg|pv2|ts|xf)|ns[rv]|ogv|qt|rmvb|swf|tpr?|ts|wmp|wtv)$/:
         # video file
-        type = "video"
+        videolist[path] += $0
+        type = "film"
         break
     case /^([ax]ss|asx|bdjo|bdmv|clpi|idx|mpls?|psb|rt|s(bv|mi|rr|rt|sa|sf|ub|up)|ttml|usf|vtt|w[mv]x)$/:
         # video subtitle, playlist
@@ -64,12 +74,12 @@ path == "" || $0 != $0 + 0 {
         # audio file, playlist
         type = "music"
         break
+    case /^(rar|s?7z|zipx?)$/:
+        # archive files, categorize as "default" but will go through video match
+        archivelist[path] += $0
+        # fall-through
     default:
         type = "default"
-    }
-    if (type == "video") {
-        videolist[path] += $0
-        type = "film"
     }
     typedict[type] += $0
 }
@@ -80,10 +90,16 @@ END {
         raise("Invalid input. Expect null-terminated (path, size) pairs.")
 
     type = imax(typedict)
-    if (type == "film") {
-        n = process_videos(videolist, 52428800)  # 50 MiB threshold
+    switch (type) {
+    case "film":
+        n = process_list(videolist, size_thresh)
         match_videos(videolist, n)
         if (n >= 3) match_series(videolist, n)
+        break
+    case "default":
+        if (! length(archivelist)) break
+        n = process_list(archivelist, size_thresh)
+        match_videos(archivelist, n)
     }
     output(type)
 }
@@ -143,11 +159,11 @@ function index_commonprefix(a,  f, i, n, lo, hi, a1, a2)
 # sorted by its origional values. And if any of such values meets `x`, all the
 # keys with value less than `x` are deleted. If there was a common path prefix,
 # it was stored in `a[0]` and striped from all paths. Otherwise, `a[0]` is a
-# null string. Returns the number of video files.
+# null string. Returns the number of files.
 # Example:
 # input:  a = {"path/a": 1, "path/b": 3, "path/c": 5}, x = 2
 # result: a = {0: "path", 1: "c", 2: "b"}, return: 2
-function process_videos(a, x,  c, i, j, m, d)
+function process_list(a, x,  c, i, j, m, d)
 {
     c = asorti(a, d, "@val_num_desc")
     if (c > 1) {
@@ -170,7 +186,7 @@ function process_videos(a, x,  c, i, j, m, d)
     return c
 }
 
-# Match videos against patterns.
+# Match (video) files against patterns.
 function match_videos(a, c,  i)
 {
     for (i = (a[0] == "" ? 1 : 0); i <= c; i++) {
