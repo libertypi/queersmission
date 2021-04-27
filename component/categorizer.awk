@@ -53,22 +53,22 @@ path == "" || $0 != $0 + 0 {
         if (path ~ /(\y|_)(adobe|microsoft|windows|x(64|86)|v[0-9]+(\.[0-9]+)+)(\y|_)/) {
             type = "default"
         } else {
-            videolist[path] += $0
             type = "film"
+            videolist[path] += $0
         }
         break
     case "m2ts":
+        type = "film"
         sub(/\/bdmv\/stream\/[^/]+$/, "", path)
         videolist[path] += $0
-        type = "film"
         break
     case "vob":
         sub(/\/[^/]*vts[0-9_]+$/, "/video_ts", path)
         # fall-through
     case /^((og|r[ap]?|sk|w|web)m|3gp?[2p]|[aw]mv|asf|avi|divx|dpg|evo|f[4l]v|ifo|k3g|m(([14ko]|p?2)v|2t|4b|4p|p4|peg?|pg|pv2|ts|xf)|ns[rv]|ogv|qt|rmvb|swf|tpr?|ts|wmp|wtv)$/:
         # video file
-        videolist[path] += $0
         type = "film"
+        videolist[path] += $0
         break
     case /^([ax]ss|asx|bdjo|bdmv|clpi|idx|mpls?|psb|rt|s(bv|mi|rr|rt|sa|sf|ub|up)|ttml|usf|vtt|w[mv]x)$/:
         # video subtitle, playlist
