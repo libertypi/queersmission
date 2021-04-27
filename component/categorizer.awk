@@ -40,12 +40,7 @@ path == "" || $0 != $0 + 0 {
     } else {
         type = ""
     }
-
-    # min and max strings
-    if (FNR == 2) path_min = path_max = path
-    else if (path > path_max) path_max = path
-    else if (path < path_min) path_min = path
-
+    
     # categorize file type
     switch (type) {
     case "iso":
@@ -82,6 +77,11 @@ path == "" || $0 != $0 + 0 {
         type = "default"
     }
     typedict[type] += $0
+
+    # min and max strings
+    if (FNR == 2) path_min = path_max = path
+    else if (path > path_max) path_max = path
+    else if (path < path_min) path_min = path
 }
 
 END {
