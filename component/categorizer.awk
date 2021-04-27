@@ -13,15 +13,12 @@ BEGIN {
     RS = "\000"
     raise_exit = 0
     size_thresh = 52428800  # 50 MiB
-    delete typedict
-    delete videolist
-    delete archivelist
 
     if (regexfile == "") raise("Require argument: '-v regexfile=...'")
     if ((getline av_regex < regexfile) > 0 && av_regex ~ /[^[:space:]]/) {
         gsub(/^[[:space:]]+|[[:space:]]+$/, "", av_regex)
     } else {
-        raise("Reading regexfile '" regexfile "' failed.")
+        raise("Reading regexfile failed: " regexfile)
     }
     close(regexfile)
 }
@@ -32,17 +29,24 @@ FNR % 2 {
 }
 
 path == "" || $0 != $0 + 0 {
-    printf("[AWK] Record ignored: ('%s', '%s')\n", path, $0) > "/dev/stderr"
-    next
+    raise("Invalid record: ('" path "', '" $0 "')")
 }
 
 {
+    # split extension
     if (n = indexext(path)) {
-        type = substr(path, n + 1)  # extension
+        type = substr(path, n + 1)  # ext
         path = substr(path, 1, n - 1)
     } else {
         type = ""
     }
+
+    # min and max strings
+    if (FNR == 2) path_min = path_max = path
+    else if (path > path_max) path_max = path
+    else if (path < path_min) path_min = path
+
+    # categorize file type
     switch (type) {
     case "iso":
         # iso file could be software or video image
@@ -74,10 +78,6 @@ path == "" || $0 != $0 + 0 {
         # audio file, playlist
         type = "music"
         break
-    case /^(rar|s?7z|zipx?)$/:
-        # archive files, categorize as "default" but will go through video match
-        archivelist[path] += $0
-        # fall-through
     default:
         type = "default"
     }
@@ -89,17 +89,14 @@ END {
     if (! length(typedict))
         raise("Invalid input. Expect null-terminated (path, size) pairs.")
 
+    n = index_commonprefix(path_min, path_max)
+    if (n) match_video(substr(path_min, 1, n - 1))
+
     type = imax(typedict)
-    switch (type) {
-    case "film":
-        n = process_list(videolist, size_thresh)
+    if (type == "film") {
+        n = process_list(videolist, size_thresh, n)
         match_videos(videolist, n)
-        if (n >= 3) match_series(videolist, n)
-        break
-    case "default":
-        if (! length(archivelist)) break
-        n = process_list(archivelist, size_thresh)
-        match_videos(archivelist, n)
+        if (n >= 3) match_series(videolist)
     }
     output(type)
 }
@@ -113,7 +110,7 @@ function raise(msg)
 }
 
 # Return the index of the dot which split the path into root and extension uses
-# the same logic as Python's `os.path.splitext`. If there was no ext, returns 0.
+# the same logic as Python's `os.path.splitext`. If there was no ext, return 0.
 function indexext(p,  i, j, c)
 {
     for (i = length(p); i > 0; i--) {
@@ -123,6 +120,19 @@ function indexext(p,  i, j, c)
         else if (j) return j
     }
     return 0
+}
+
+# Find the common prefix of two paths, return the length of it.
+function index_commonprefix(lo, hi,  f, i, n, a1, a2)
+{
+    f = 0
+    n = split(lo, a1, "/")
+    split(hi, a2, "/")
+    for (i = 1; i <= n; i++) {
+        if (a1[i] != a2[i]) break
+        f += length(a1[i]) + 1
+    }
+    return f
 }
 
 # Return the key with the max numeric value in array.
@@ -137,33 +147,11 @@ function imax(a,  f, k, v, km, vm)
     return km
 }
 
-# Find the last index of common path prefix.
-function index_commonprefix(a,  f, i, n, lo, hi, a1, a2)
-{
-    f = 1
-    for (i in a) {
-        n = a[i] ""  # force string comparison
-        if (f) { lo = hi = n; f = 0 }
-        else if (n < lo) lo = n
-        else if (n > hi) hi = n
-    }
-    f = 0; n = split(lo, a1, "/"); split(hi, a2, "/")
-    for (i = 1; i <= n; i++) {
-        if (a1[i] != a2[i]) break
-        f += length(a1[i]) + 1
-    }
-    return f
-}
-
 # Inplace modify array `a` to a sorted list of its keys. The list is reversely
 # sorted by its origional values. And if any of such values meets `x`, all the
-# keys with value less than `x` are deleted. If there was a common path prefix,
-# it was stored in `a[0]` and striped from all paths. Otherwise, `a[0]` is a
-# null string. Returns the number of files.
-# Example:
-# input:  a = {"path/a": 1, "path/b": 3, "path/c": 5}, x = 2
-# result: a = {0: "path", 1: "c", 2: "b"}, return: 2
-function process_list(a, x,  c, i, j, m, d)
+# keys with value less than `x` are deleted. `n` is the length of prefix to be
+# stripped from all paths. Return the length of result.
+function process_list(a, x, n,  c, i, j, m, d)
 {
     c = asorti(a, d, "@val_num_desc")
     if (c > 1) {
@@ -173,23 +161,28 @@ function process_list(a, x,  c, i, j, m, d)
             if (x > a[d[m]]) j = m
             else i = m + 1
         }
-        if (i > 1) while (c >= i) delete d[c--]
+        if (i > 1) c = i - 1
     }
     delete a
-    if (c > 1 && (m = index_commonprefix(d))) {
-        a[0] = substr(d[1], 1, m++ - 1)
-        for (i in d) a[i] = substr(d[i], m)
+    if (n++) {
+        for (i = 1; i <= c; i++) a[i] = substr(d[i], n)
     } else {
-        a[0] = ""
-        for (i in d) a[i] = d[i]
+        for (i = 1; i <= c; i++) a[i] = d[i]
     }
     return c
 }
 
-# Match (video) files against patterns.
+# Test a single string.
+function match_video(p,  a)
+{
+    a[1] = p
+    match_videos(a, 1)
+}
+
+# Test (video) strings with patterns.
 function match_videos(a, c,  i)
 {
-    for (i = (a[0] == "" ? 1 : 0); i <= c; i++) {
+    for (i = 1; i <= c; i++) {
         if (a[i] ~ av_regex)
             output("av")
         if (a[i] ~ /(\y|_)([es]|ep[ _-]?|s([1-9][0-9]|0?[1-9])e)([1-9][0-9]|0?[1-9])(\y|_)/)
@@ -197,15 +190,15 @@ function match_videos(a, c,  i)
     }
 }
 
-# Scan videolist to identify consecutive digits.
+# Scan strings to identify consecutive digits.
 # input:
-# a = ["path", "a01", "a03", "a05a06"], c = 3
+# ["a01", "a03", "a05a06"]
 # grouped:
 # {"1, a": {1, 3, 5}, "2, a": {6}}
-# If we found three digits in one group, identify as TV Series.
-function match_series(a, c,  i, j, m, n, strs, nums, arr)
+# If three digits was in one group, identify as TV Series.
+function match_series(a,  i, j, m, n, strs, nums, arr)
 {
-    for (i = 1; i <= c; i++) {  # skip a[0]
+    for (i in a) {
         m = split(a[i], strs, /[0-9]+/, nums)
         for (j = 1; j < m; j++) {
             while (n = index(strs[j], "/"))
