@@ -22,7 +22,7 @@ BEGIN {
 }
 
 FNR % 2 {
-    path = $0
+    path = tolower($0)
     next
 }
 
@@ -32,25 +32,24 @@ path == "" || $0 != $0 + 0 {
 }
 
 {
-    splitext(tolower(path), a)
-    switch (a[2]) {
-    case "iso":
-        if (a[1] ~ /(\y|_)(adobe|microsoft|windows|x(64|86)|v[0-9]+(\.[0-9]+)+)(\y|_)/) {
-            # software
-            type = "default"
-            break
-        }
-        # fall-through
-    case /^((og|r[ap]?|sk|w|web)m|3gp?[2p]|[aw]mv|asf|avi|divx|dpg|evo|f[4l]v|ifo|k3g|m(([14ko]|p?2)v|2?ts|2t|4b|4p|p4|peg?|pg|pv2|xf)|ns[rv]|ogv|qt|rmvb|swf|tpr?|ts|vob|wmp|wtv)$/:
+    n = indexext(path)
+    ext = n ? substr(path, n + 1) : ""
+    switch (ext) {
+    case /^(3gp?[2p]|amv|asf|avi|divx|dpg|evo|f[4l]v|i[fs]o|k3g|m(([14ko]|p?2)v|2ts?|4b|4p|p4|peg?|pg|pv2|ts|xf)|ns[rv]|og[mv]|qt|r([ap]?m|mvb)|skm|swf|tpr?|ts|vob|webm|wm[pv]?|wtv)$/:
         # video file
-        switch (a[2]) {
-        case "m2ts":
-            sub(/\/bdmv\/stream\/[^/]+$/, "", a[1])
-            break
-        case "vob":
-            sub(/\/[^/]*vts[0-9_]+$/, "/video_ts", a[1])
+        path = substr(path, 1, n - 1)
+        if (ext == "iso") {
+            if (path ~ /(\y|_)(adobe|microsoft|windows|x(64|86)|v[0-9]+(\.[0-9]+)+)(\y|_)/) {
+                # software
+                type = "default"
+                break
+            }
+        } else if (ext == "m2ts") {
+            sub(/\/bdmv\/stream\/[^/]+$/, "", path)
+        } else if (ext == "vob") {
+            sub(/\/[^/]*vts[0-9_]+$/, "/video_ts", path)
         }
-        videolist[a[1]] += $0
+        videolist[path] += $0
         # fall-through
     case /^([ax]ss|asx|bdjo|bdmv|clpi|idx|mpls?|psb|rt|s(bv|mi|rr|rt|sa|sf|ub|up)|ttml|usf|vtt|w[mv]x)$/:
         # video subtitle, playlist
@@ -67,17 +66,15 @@ path == "" || $0 != $0 + 0 {
 }
 
 END {
-    if (raise_exit)
-        exit 1
+    if (raise_exit) exit 1
     if (! length(typedict))
         raise("Invalid input. Expect null-terminated (path, size) pairs.")
 
     type = imax(typedict)
     if (type == "film") {
-        count = process_videos(videolist, 52428800)  # 50 MiB threshold
-        match_videos(videolist, count)
-        if (count >= 3)
-            match_series(videolist, count)
+        n = process_videos(videolist, 52428800)  # 50 MiB threshold
+        match_videos(videolist, n)
+        if (n >= 3) match_series(videolist, n)
     }
     output(type)
 }
@@ -90,25 +87,17 @@ function raise(msg)
     exit 1
 }
 
-# Split the path into a pair (root, ext). This behaves the same way as Python's
-# os.path.splitext, except that the period between root and ext is omitted.
-function splitext(p, a,  s, i, isext)
+# Return the index of the dot which split the path into root and extension uses
+# the same logic as Python's `os.path.splitext`. If there was no ext, returns 0.
+function indexext(p,  i, j, c)
 {
-    delete a
-    s = p
-    while (i = index(s, "/"))
-        s = substr(s, i + 1)
-    while (i = index(s, ".")) {
-        s = substr(s, i + 1)
-        if (i > 1) isext = 1
+    for (i = length(p); i > 0; i--) {
+        c = substr(p, i, 1)
+        if (c == "/") break
+        if (c == ".") { if (! j) j = i }
+        else if (j) return j
     }
-    if (isext) {
-        a[1] = substr(p, 1, length(p) - length(s) - 1)
-        a[2] = s
-    } else {
-        a[1] = p
-        a[2] = ""
-    }
+    return 0
 }
 
 # Return the key with the max numeric value in array.
@@ -124,22 +113,21 @@ function imax(a,  f, k, v, km, vm)
 }
 
 # Find the last index of common path prefix.
-function index_commonprefix(a,  res, f, i, n, min, max, a1, a2)
+function index_commonprefix(a,  f, i, n, lo, hi, a1, a2)
 {
-    res = 0; f = 1
+    f = 1
     for (i in a) {
         n = a[i] ""  # force string comparison
-        if (f) { min = max = n; f = 0 }
-        else if (n < min) min = n
-        else if (n > max) max = n
+        if (f) { lo = hi = n; f = 0 }
+        else if (n < lo) lo = n
+        else if (n > hi) hi = n
     }
-    n = split(min, a1, "/")
-    split(max, a2, "/")
+    f = 0; n = split(lo, a1, "/"); split(hi, a2, "/")
     for (i = 1; i <= n; i++) {
         if (a1[i] != a2[i]) break
-        res += length(a1[i]) + 1
+        f += length(a1[i]) + 1
     }
-    return res
+    return f
 }
 
 # Inplace modify array `a` to a sorted list of its keys. The list is reversely
