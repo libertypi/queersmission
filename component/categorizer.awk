@@ -32,25 +32,30 @@ path == "" || $0 != $0 + 0 {
 }
 
 {
-    n = indexext(path)
-    ext = n ? substr(path, n + 1) : ""
-    switch (ext) {
-    case /^(3gp?[2p]|amv|asf|avi|divx|dpg|evo|f[4l]v|i[fs]o|k3g|m(([14ko]|p?2)v|2ts?|4b|4p|p4|peg?|pg|pv2|ts|xf)|ns[rv]|og[mv]|qt|r([ap]?m|mvb)|skm|swf|tpr?|ts|vob|webm|wm[pv]?|wtv)$/:
-        # video file
+    if (n = indexext(path)) {
+        type = substr(path, n + 1)  # extension
         path = substr(path, 1, n - 1)
-        if (ext == "iso") {
-            if (path ~ /(\y|_)(adobe|microsoft|windows|x(64|86)|v[0-9]+(\.[0-9]+)+)(\y|_)/) {
-                # software
-                type = "default"
-                break
-            }
-        } else if (ext == "m2ts") {
-            sub(/\/bdmv\/stream\/[^/]+$/, "", path)
-        } else if (ext == "vob") {
-            sub(/\/[^/]*vts[0-9_]+$/, "/video_ts", path)
-        }
-        videolist[path] += $0
+    } else {
+        type = ""
+    }
+    switch (type) {
+    case "iso":
+        if (path ~ /(\y|_)(adobe|microsoft|windows|x(64|86)|v[0-9]+(\.[0-9]+)+)(\y|_)/)
+            type = "default"
+        else
+            type = "video"
+        break
+    case "m2ts":
+        sub(/\/bdmv\/stream\/[^/]+$/, "", path)
+        type = "video"
+        break
+    case "vob":
+        sub(/\/[^/]*vts[0-9_]+$/, "/video_ts", path)
         # fall-through
+    case /^((og|r[ap]?|sk|w|web)m|3gp?[2p]|[aw]mv|asf|avi|divx|dpg|evo|f[4l]v|ifo|k3g|m(([14ko]|p?2)v|2t|4b|4p|p4|peg?|pg|pv2|ts|xf)|ns[rv]|ogv|qt|rmvb|swf|tpr?|ts|wmp|wtv)$/:
+        # video file
+        type = "video"
+        break
     case /^([ax]ss|asx|bdjo|bdmv|clpi|idx|mpls?|psb|rt|s(bv|mi|rr|rt|sa|sf|ub|up)|ttml|usf|vtt|w[mv]x)$/:
         # video subtitle, playlist
         type = "film"
@@ -61,6 +66,10 @@ path == "" || $0 != $0 + 0 {
         break
     default:
         type = "default"
+    }
+    if (type == "video") {
+        videolist[path] += $0
+        type = "film"
     }
     typedict[type] += $0
 }
