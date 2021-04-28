@@ -13,6 +13,7 @@ BEGIN {
     RS = "\000"
     raise_exit = 0
     size_thresh = 52428800  # 50 MiB
+    delete typedict
 
     if (regexfile == "") raise("Require argument: '-v regexfile=...'")
     if ((getline av_regex < regexfile) > 0 && av_regex ~ /[^[:space:]]/) {
