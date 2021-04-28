@@ -44,7 +44,7 @@ path == "" || $0 != $0 + 0 {
     # categorize file type
     switch (type) {
     case "iso":
-        # iso file could be software or video image
+        # iso could be software or video image
         if (path ~ /(\y|_)(adobe|microsoft|windows|x(64|86)|v[0-9]+(\.[0-9]+)+)(\y|_)/) {
             type = "default"
         } else {
@@ -79,9 +79,9 @@ path == "" || $0 != $0 + 0 {
     typedict[type] += $0
 
     # min and max strings
-    if (NR == 2) path_min = path_max = path
-    else if (path > path_max) path_max = path
-    else if (path < path_min) path_min = path
+    if (NR == 2) pathmin = pathmax = path
+    else if (path > pathmax) pathmax = path
+    else if (path < pathmin) pathmin = path
 }
 
 END {
@@ -89,14 +89,16 @@ END {
     if (! length(typedict))
         raise("Invalid input. Expect null-terminated (path, size) pairs.")
 
-    n = index_commonprefix(path_min, path_max)
-    if (n) match_video(substr(path_min, 1, n - 1))
+    # match common prefix
+    n = index_commonprefix(pathmin, pathmax)
+    if (n) match_string(substr(pathmin, 1, n - 1))
 
+    # match files
     type = imax(typedict)
     if (type == "film") {
-        n = process_list(videolist, size_thresh, n)
-        match_videos(videolist, n)
-        if (n >= 3) match_series(videolist)
+        pathmax = process_list(videolist, size_thresh, n)
+        for (n = 1; n <= pathmax; n++) match_string(videolist[n])
+        if (pathmax >= 3) match_series(videolist)
     }
     output(type)
 }
@@ -173,21 +175,12 @@ function process_list(a, x, n,  ret, i, j, m, d)
 }
 
 # Test a single string.
-function match_video(p,  a)
+function match_string(s)
 {
-    a[1] = p
-    match_videos(a, 1)
-}
-
-# Test (video) strings with patterns.
-function match_videos(a, c,  i)
-{
-    for (i = 1; i <= c; i++) {
-        if (a[i] ~ av_regex)
-            output("av")
-        if (a[i] ~ /(\y|_)([es]|ep[ _-]?|s([1-9][0-9]|0?[1-9])e)([1-9][0-9]|0?[1-9])(\y|_)/)
-            output("tv")
-    }
+    if (s ~ av_regex)
+        output("av")
+    if (s ~ /(\y|_)([es]|ep[ _-]?|s([1-9][0-9]|0?[1-9])e)([1-9][0-9]|0?[1-9])(\y|_)/)
+        output("tv")
 }
 
 # Scan strings to identify consecutive digits.
