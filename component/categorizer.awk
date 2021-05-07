@@ -189,7 +189,7 @@ function match_string(s)
 # ["a01", "a03", "a05a06"]
 # grouped:
 # {"1, a": {1, 3, 5}, "2, a": {6}}
-# If three digits was in one group, identify as TV Series.
+# If three digits were in one group, identify as TV Series.
 function match_series(a,  i, j, m, n, strs, nums, arr)
 {
     for (i in a) {
