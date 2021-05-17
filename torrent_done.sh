@@ -540,8 +540,9 @@ cd -- "${BASH_SOURCE[0]%/*}" || die 'Unable to enter script directory.'
 source ./config || die 'Reading config file failed.'
 
 # verify configurations
-[[ ${rpc_url} == http* && ${download_dir} == /?* && ${locations['default']} == /?* && (\
-${rm_strategy} == 'freespace' || ${rm_strategy} == 'sizesum') ]] && isdigit "${rm_thresh}" ||
+[[ ${rpc_url} == http* && ${download_dir} == /?* && ${locations['default']} == /?* &&
+  (${rm_strategy} == 'freespace' || ${rm_strategy} == 'sizesum') ]] &&
+  isdigit "${rm_thresh}" ||
   die 'Error in config file.'
 
 # parse arguments
