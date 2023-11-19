@@ -42,9 +42,9 @@ rm_thresh=50
 # we fallback to `default`, while an empty `default` will cause an error.
 
 declare -A locations=(
-  ['default']='/volume1/homes/admin/Download'
-  ['av']='/volume1/driver/Temp'
-  ['film']='/volume1/video/Film'
-  ['tv']='/volume1/video/TV'
-  ['music']='/volume1/music/Download'
+  ['default']='/volume1/Download'
+  ['av']='/volume1/av'
+  ['film']='/volume1/Film'
+  ['tv']='/volume1/TV'
+  ['music']='/volume1/music'
 )
