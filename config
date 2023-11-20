@@ -22,7 +22,7 @@ download_dir='/volume2/@transmission'
 # in transmission settings. Transmission occasionally leaves empty ".torrent"
 # files here, and we will delete them for you. Leave empty to disable.
 
-watch_dir='/volume1/video/Torrent'
+watch_dir='/volume1/homes/admin/watch_dir'
 
 # The condition under which we begin to remove torrents to free up space. The
 # least recent actived torrent will be deleted first. Set `rm_strategy` to one
