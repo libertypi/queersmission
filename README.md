@@ -1,6 +1,6 @@
 # transmission-torrent-done
 
-This is a [post-download script](https://github.com/transmission/transmission/blob/main/docs/Scripts.md) for the Transmission torrent client, designed to allow users to dedicate storage for torrent uploading and to copy the downloaded files to user destinations. This ensures that file sharing continues, even if the user deletes or moves the content, which is particularly useful for Private Torrent (PT) users who need to maintain a sharing ratio.
+This is a [post-download script](https://github.com/transmission/transmission/blob/main/docs/Scripts.md) for the [Transmission](https://transmissionbt.com/) torrent client, designed to allow users to dedicate storage for torrent uploading and to copy the downloaded files to user destinations. This ensures that file sharing continues, even if the user deletes or moves the content, which is particularly useful for Private Torrent (PT) users who need to maintain a sharing ratio.
 
 ### Features
 
