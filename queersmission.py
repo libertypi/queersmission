@@ -568,7 +568,7 @@ def copy_file(src: str, dst: str):
     try:
         subprocess.run(
             ("cp", "-a", "-f", "--reflink=auto", "--", src,
-             dst if dst.endswith(os.sep) else f"{dst}{os.sep}"),
+             dst if dst.endswith(os.sep) else dst + os.sep),
             check=True,
         )  # fmt: skip
     except (subprocess.CalledProcessError, FileNotFoundError) as e:

@@ -31,8 +31,8 @@ Example:
     "log-level": "INFO",
     "destinations": {
         "default": "/volume1/Downloads",
-        "movie": "/volume1/Videos/Movies",
-        "tv": "/volume1/Videos/TV Shows",
+        "movies": "/volume1/Videos/Movies",
+        "tv-shows": "/volume1/Videos/TV Shows",
         "music": "/volume1/Music",
         "av": "/volume1/Age Restricted Materials"
     }
