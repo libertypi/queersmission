@@ -1,24 +1,29 @@
 #!/usr/bin/env python3
+
 """
 Pattern Builder - Generate patterns.json for Queersmission
-
-Author:
-    - David Pi
+==========================================================
 
 Regex Requirements:
-    - All regular expressions must be lowercased.
-    - All "_" characters should be replaced with "-".
-    - Matching will be using ASCII-only mode.
+-------------------
+- All regular expressions must be lowercased.
+- All "_" characters should be replaced with "-".
+- Matching will be using ASCII-only mode.
 
 Data Files:
-    - google-10000-english-usa-no-swears.txt: Common English words to be
-      excluded from the regex.
-    - fp-statistics.json: Statistical data for building regex patterns, from the
-      footprints project.
-    - prefixes-include.txt: Prefixes to include in the regex.
-    - prefixes-exclude.txt: Prefixes to exclude from the regex.
-    - keywords-include.txt: Keywords to include in the regex.
-    - keywords-exclude.txt: Keywords to exclude from the regex.
+-----------
+- google-10000-english-usa-no-swears.txt: Common English words to be excluded
+  from the regex.
+- fp-statistics.json: Statistical data for building regex patterns, from the
+  footprints project.
+- prefixes-include.txt: Prefixes to include in the regex.
+- prefixes-exclude.txt: Prefixes to exclude from the regex.
+- keywords-include.txt: Keywords to include in the regex.
+- keywords-exclude.txt: Keywords to exclude from the regex.
+
+Author:
+-------
+- David Pi
 """
 
 import argparse

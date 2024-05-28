@@ -1,5 +1,26 @@
 #!/usr/bin/env python3
 
+"""
+Queersmission - Smart Categorization for Transmission
+=====================================================
+
+Description:
+------------
+Queersmission is a post-download script for the Transmission client. It allows
+users to dedicate storage for torrent uploading and to copy the finished
+downloads to user destinations.
+
+Features:
+---------
+- Smart torrent categorization.
+- Automatic storage management based on quota settings.
+
+Author:
+-------
+- David Pi
+- GitHub: https://github.com/libertypi/queersmission
+"""
+
 import base64
 import functools
 import json
