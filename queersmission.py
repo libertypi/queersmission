@@ -481,7 +481,7 @@ class StorageManager:
         return gb * 1073741824 if gb and gb > 0 else 0
 
 
-re_compile = functools.cache(re.compile)
+re_compile = functools.lru_cache(maxsize=None)(re.compile)
 
 
 def re_test(pattern: str, string: str, _flags=re.A | re.I):
