@@ -81,9 +81,10 @@ except ImportError:
 class TransmissionClient:
     """A client for interacting with the Transmission RPC interface."""
 
-    _SSID = "X-Transmission-Session-Id"
-    _RETRIES = 3
-    _session_cache = None
+    _SSID: str = "X-Transmission-Session-Id"
+    _RETRIES: int = 3
+    _seed_dir: str = None
+    _session_data: dict = None
 
     def __init__(
         self,
@@ -98,20 +99,14 @@ class TransmissionClient:
     ) -> None:
 
         self.url = f"{protocol}://{host}:{port}{path}"
-        self.session = session = requests.Session()
+        self.is_localhost = host.lower() in ("127.0.0.1", "localhost", "::1")
+        if seed_dir:
+            self._seed_dir = op.realpath(seed_dir) if self.is_localhost else seed_dir
+
+        self.session = requests.Session()
         if username and password:
-            session.auth = username, password
-        session.headers.update({self._SSID: ""})
-
-        if not seed_dir:
-            seed_dir = self.session_get()["download-dir"]
-
-        if host.lower() in ("127.0.0.1", "localhost", "::1"):
-            self.is_localhost = True
-            self.seed_dir = op.realpath(seed_dir)
-        else:
-            self.is_localhost = False
-            self.seed_dir = seed_dir
+            self.session.auth = username, password
+        self.session.headers.update({self._SSID: ""})
 
     def _call(self, method: str, arguments: dict = None) -> dict:
         """Make a call to the Transmission RPC."""
@@ -140,11 +135,18 @@ class TransmissionClient:
 
         assert False, "Unexpected error in the retry logic."
 
+    @property
+    def seed_dir(self) -> str:
+        if not self._seed_dir:
+            s = self.session_get()["download-dir"]
+            self._seed_dir = op.realpath(s) if self.is_localhost else s
+        return self._seed_dir
+
     def session_get(self):
         """Get the session details, cached."""
-        if not self._session_cache:
-            self._session_cache = self._call("session-get")
-        return self._session_cache
+        if not self._session_data:
+            self._session_data = self._call("session-get")
+        return self._session_data
 
     def torrent_get(self, fields: List[str], ids=None):
         arguments = {"fields": fields}
@@ -201,23 +203,40 @@ class Categorizer:
         if not files:
             raise ValueError("Empty file list.")
 
-        main_type, video_to_size = self._analyze_file_types(files)
+        # Does the torrent name pass the AV test?
+        if re_test(self.av_re, name):
+            return Cat.AV
 
+        # The the most common file type, and a list of videos (root, ext)
+        main_type, videos = self._analyze_file_types(files)
+
+        # Does any of the videos pass the AV test?
+        segments = {name}
+        for path in videos:
+            for s in path[0].split("/"):
+                if s not in segments:
+                    if re_test(self.av_re, s):
+                        return Cat.AV
+                    segments.add(s)
+
+        # Categorize by the main file type
         if main_type == self.VIDEO:
-            # Analyze videos
-            return self._analyze_videos(video_to_size)
+            # Are they TV_SHOWS or MOVIES?
+            if any(re_test(self.tv_re, s) for s in segments):
+                return Cat.TV_SHOWS
+            if self._find_file_groups(videos):
+                return Cat.TV_SHOWS
+            return Cat.MOVIES
 
         if main_type == self.AUDIO:
-            # No need for further analysis
             return Cat.MUSIC
 
         if main_type == self.DEFAULT:
-            # Test the torrent name
-            return Cat.AV if re_test(self.av_re, name) else Cat.DEFAULT
+            return Cat.DEFAULT
 
         raise ValueError(f"Invalid main_type: {main_type}")
 
-    def _analyze_file_types(self, files: List[dict]) -> Tuple[int, dict]:
+    def _analyze_file_types(self, files: List[dict]) -> Tuple[int, list]:
         """Analyze and categorize files by type, finding the most common
         type."""
         type_to_size = defaultdict(int)
@@ -246,72 +265,45 @@ class Categorizer:
             if file_type == self.VIDEO:
                 video_to_size[root, ext] += size
 
-        return max(type_to_size, key=type_to_size.get), video_to_size
+        # Filter the videos by size
+        if any(f["length"] >= self._VIDEO_THRESH for f in files):
+            videos = (k for k, v in video_to_size.items() if v >= self._VIDEO_THRESH)
+        else:
+            videos = video_to_size
 
-    def _analyze_videos(self, video_to_size: dict):
-        """Analyze and categorize video files."""
-        # Filter the video list by size
-        videolist = [k for k, v in video_to_size.items() if v >= self._VIDEO_THRESH]
-        if not videolist:
-            # All files are filtered
-            videolist[:] = video_to_size
-
-        # Regex test for video paths
-        videolist.sort(key=video_to_size.get, reverse=True)
-        result = self._match_paths(p[0] for p in videolist)
-        if result:
-            return result
-
-        # Find video groups
-        videolist.sort()
-        if self._find_file_groups(videolist):
-            return Cat.TV_SHOWS
-
-        return Cat.MOVIES
-
-    def _match_paths(self, paths: Iterable[str]):
-        """Check if any segment of the paths matches the AV or TV regex."""
-        segments = set()
-
-        for path in paths:
-            for s in path.split("/"):
-                if s not in segments:
-                    if re_test(self.av_re, s):
-                        return Cat.AV
-                    segments.add(s)
-
-        if any(re_test(self.tv_re, s) for s in segments):
-            return Cat.TV_SHOWS
+        return (
+            max(type_to_size, key=type_to_size.get),
+            sorted(videos, key=video_to_size.get, reverse=True),
+        )
 
     @staticmethod
     def _find_file_groups(file_list: List[Tuple[str, str]], group_size: int = 3):
-        """Identify groups of files that appear to be part of a sequence.
-        Directories or files across directories are not grouped.
-
-        The `file_list` must already be sorted lexicographically. `group_size`
-        defines The minimum size of a group.
+        """Identify groups of files in the same directory that appear to be part
+        of a sequence. `group_size` defines the minimum size of a group.
         """
         if len(file_list) < group_size:
             return False
 
-        seq_finder = re_compile(r"(?<![0-9])(?:0?[1-9]|[1-9][0-9])(?![0-9])").finditer
-        group = defaultdict(set)
-        last_parent = None
+        seq_finder = re.compile(r"(?<![0-9])(?:0?[1-9]|[1-9][0-9])(?![0-9])").finditer
+        dir_files = defaultdict(list)
+        groups = defaultdict(set)
 
+        # Organize files by their directories
         for root, ext in file_list:
-            parent, _, stem = root.rpartition("/")
+            dirname, _, stem = root.rpartition("/")
+            dir_files[dirname].append((stem, ext))
 
-            if parent != last_parent:
-                # We entered a new directory
-                group.clear()
-                last_parent = parent
-
-            for m in seq_finder(stem):
-                # Key: part before the digit, after the digit, and ext
-                k = (stem[: m.start()], stem[m.end() :], ext)
-                group[k].add(int(m[0]))
-                if len(group[k]) >= group_size:
-                    return True
+        for files in dir_files.values():
+            if len(files) < group_size:
+                continue
+            groups.clear()
+            for stem, ext in files:
+                for m in seq_finder(stem):
+                    # Key: the part before, and after the digit, and the ext
+                    g = groups[stem[: m.start()], stem[m.end() :], ext]
+                    g.add(int(m[0]))
+                    if len(g) >= group_size:
+                        return True
         return False
 
 
