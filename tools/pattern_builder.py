@@ -12,10 +12,10 @@ Regex Requirements:
 
 Data Files:
 -----------
+- footprints-statistics.json: Statistical data from the footprints project for
+  building regex patterns.
 - google-10000-english-usa-no-swears.txt: Common English words to be excluded
   from the regex.
-- fp-statistics.json: Statistical data for building regex patterns, from the
-  footprints project.
 - prefixes-include.txt: Prefixes to include in the regex.
 - prefixes-exclude.txt: Prefixes to exclude from the regex.
 - keywords-include.txt: Keywords to include in the regex.
@@ -163,13 +163,15 @@ def main():
 
     args = parse_args()
 
-    src = join_root("fp-statistics.json")
+    src = join_root("footprints-statistics.json")
     dst = src.parents[1].joinpath("patterns.json")
     print(f"Source: {src}\nOutput: {dst}")
 
     # Read data from footprints
     try:
-        shutil.copy(src.parents[2].joinpath("footprints/data/fp-statistics.json"), src)
+        shutil.copy(
+            src.parents[2].joinpath("footprints/data/footprints-statistics.json"), src
+        )
     except FileNotFoundError:
         print("Warning: Unable to update data file from footprints.")
 
