@@ -22,7 +22,6 @@ Author:
 """
 
 import base64
-import functools
 import json
 import logging
 import os
@@ -34,6 +33,7 @@ import sys
 import time
 from collections import defaultdict
 from enum import Enum
+from functools import lru_cache
 from typing import Iterable, List, Tuple
 
 import requests
@@ -400,7 +400,7 @@ class StorageManager:
                 continue
             try:
                 s = e.stat()
-                if e.is_file() and (not s.st_size or time.time() - s.st_mtime > 3600):
+                if e.is_file() and (not s.st_size or s.st_mtime < time.time() - 3600):
                     logger.debug("Cleanup watch-dir: %s", e.name)
                     os.unlink(e.path)
             except OSError as e:
@@ -442,10 +442,10 @@ class StorageManager:
     def _get_removable_torrents(self, size_to_free: int):
         """Select torrents to remove to free the required size."""
         ids = []
-        rm_status = {0, 5, 6}  # stopped, queued to seed, seeding
         data: list = self.client.torrent_get(
             fields=(
                 "activityDate",
+                "doneDate",
                 "id",
                 "name",
                 "percentDone",
@@ -455,10 +455,20 @@ class StorageManager:
             ),
             ids=[t["id"] for t in self.torrents],
         )["torrents"]
-
         data.sort(key=self._torrent_value)
+
+        # Status: stopped, queued to seed, seeding
+        rm_status = {0, 5, 6}
+        # Torrents are only removed if they have been completed for more than an
+        # hour, allowing time for post-processing.
+        one_hour_ago = time.time() - 3600
+
         for t in data:
-            if t["percentDone"] == 1 and t["status"] in rm_status:
+            if (
+                t["status"] in rm_status
+                and t["percentDone"] == 1
+                and 0 < t["doneDate"] < one_hour_ago
+            ):
                 logger.info("Remove torrent: %s", t["name"])
                 ids.append(t["id"])
                 size_to_free -= t["sizeWhenDone"]
@@ -468,12 +478,11 @@ class StorageManager:
 
     @staticmethod
     def _torrent_value(t: dict):
-        """Return a tuples of `Value` and `activityDate`, where:
-
+        """Return a tuple of `Value` and `activityDate`, where:
         Value = Leechers * (Leechers / Seeders)
         """
-        l = sum(s["leecherCount"] for s in t["trackerStats"])
-        s = sum(s["seederCount"] for s in t["trackerStats"]) or 1
+        l = sum(i["leecherCount"] for i in t["trackerStats"])
+        s = sum(i["seederCount"] for i in t["trackerStats"]) or 1
         return (l**2 / s, t["activityDate"])
 
     @staticmethod
@@ -481,7 +490,7 @@ class StorageManager:
         return gb * 1073741824 if gb and gb > 0 else 0
 
 
-re_compile = functools.lru_cache(maxsize=None)(re.compile)
+re_compile = lru_cache(maxsize=None)(re.compile)
 
 
 def re_test(pattern: str, string: str, _flags=re.A | re.I):
@@ -535,7 +544,7 @@ def process_torrent_done(
     # Determine the destination
     if src_in_seed_dir:
         dst = Categorizer().categorize(name, data["files"])
-        logger.info("Torrent '%s' categorized as: %s", name, dst.name)
+        logger.info("Categorize '%s' as: %s", name, dst.name)
         dst = op.realpath(dsts.get(dst.value) or dsts[Cat.DEFAULT.value])
         if not op.isdir(src):
             # create a directory for a single file
