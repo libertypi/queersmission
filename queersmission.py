@@ -204,8 +204,8 @@ class Categorizer:
 
     def categorize(self, files: List[dict]):
         """
-        Categorize the torrent based on the provided list of files. The `files`
-        parameter is the array returned by the Transmission "torrent-get" API.
+        Categorize the torrent based on the files list. The `files` parameter is
+        the array returned by the Transmission "torrent-get" API.
         """
 
         # Does the torrent name pass the AV test? Torrent name is the file name
@@ -384,7 +384,7 @@ class StorageManager:
             try:
                 if e.is_file() and re_sub(r"\.part$", "", e.name) in allowed:
                     continue
-                logger.info("Cleanup download-dir: %s", e.name)
+                logger.info("Cleanup download-dir: %s", e.path)
                 if e.is_dir():
                     shutil.rmtree(e.path, ignore_errors=True)
                 else:
@@ -405,7 +405,7 @@ class StorageManager:
             try:
                 s = e.stat()
                 if e.is_file() and (not s.st_size or s.st_mtime < time.time() - 3600):
-                    logger.debug("Cleanup watch-dir: %s", e.name)
+                    logger.debug("Cleanup watch-dir: %s", e.path)
                     os.unlink(e.path)
             except OSError as e:
                 logger.error(e)
@@ -417,36 +417,6 @@ class StorageManager:
             return
 
         logger.debug("%s bytes need to be freed from disk.", size_to_free)
-        ids = self._get_removable_torrents(size_to_free)
-        if ids:
-            self.client.torrent_remove(ids, delete_local_data=True)
-
-    def _calculate_size_to_free(self):
-        """Calculate the total size that needs to be freed."""
-        size_to_free = 0
-
-        if self.size_limit:
-            n = sum(t["sizeWhenDone"] for t in self.torrents) - self.size_limit
-            if n > 0:
-                logger.debug("Total size limit exceeded by %s bytes.", n)
-                size_to_free = n
-
-        if self.space_floor:
-            try:
-                n = self.space_floor - shutil.disk_usage(self.client.seed_dir).free
-            except OSError as e:
-                logger.error(e)
-            else:
-                if n > 0:
-                    logger.debug("Free space below threshold by %s bytes.", n)
-                    if n > size_to_free:
-                        size_to_free = n
-        return size_to_free
-
-    def _get_removable_torrents(self, size_to_free: int):
-        """Select torrents to remove to free the required size."""
-        assert size_to_free > 0, f"'size_to_free' should be positive: {size_to_free}"
-        ids = []
         data: list = self.client.torrent_get(
             fields=(
                 "activityDate",
@@ -461,13 +431,12 @@ class StorageManager:
             ids=[t["id"] for t in self.torrents],
         )["torrents"]
         data.sort(key=self._torrent_value)
-
         # Status: stopped, queued to seed, seeding
         rm_status = {0, 5, 6}
         # Torrents are only removed if they have been completed for more than an
         # hour, in case they are queueing to be copied.
         one_hour_ago = time.time() - 3600
-
+        ids = []
         for t in data:
             if (
                 t["status"] in rm_status
@@ -479,7 +448,28 @@ class StorageManager:
                 size_to_free -= t["sizeWhenDone"]
                 if size_to_free <= 0:
                     break
-        return ids
+        if ids:
+            self.client.torrent_remove(ids, delete_local_data=True)
+
+    def _calculate_size_to_free(self):
+        """Calculate the total size that needs to be freed."""
+        size_to_free = 0
+        if self.size_limit:
+            n = sum(t["sizeWhenDone"] for t in self.torrents) - self.size_limit
+            if n > 0:
+                logger.debug("Total size limit exceeded by %s bytes.", n)
+                size_to_free = n
+        if self.space_floor:
+            try:
+                n = self.space_floor - shutil.disk_usage(self.client.seed_dir).free
+            except OSError as e:
+                logger.error(e)
+            else:
+                if n > 0:
+                    logger.debug("Free space below threshold by %s bytes.", n)
+                    if n > size_to_free:
+                        size_to_free = n
+        return size_to_free
 
     @staticmethod
     def _torrent_value(t: dict):
@@ -659,8 +649,6 @@ def parse_config(config_path):
             f"A blank configuration file has been created at '{config_path}'. "
             "Edit the settings before running this script again."
         )
-    except json.JSONDecodeError:
-        sys.exit(f"The configuration file at '{config_path}' is malformed.")
     except Exception as e:
         sys.exit(f"Configuration error: {e}")
     else:
@@ -732,9 +720,9 @@ def main():
 
         sm = StorageManager(
             client=client,
+            seed_dir_cleanup=conf["download-dir-cleanup-enable"],
             size_limit_gb=conf["download-dir-size-limit-gb"],
             space_floor_gb=conf["download-dir-space-floor-gb"],
-            seed_dir_cleanup=conf["download-dir-cleanup-enable"],
             watch_dir=conf["watch-dir"],
             watch_dir_cleanup=conf["watch-dir-cleanup-enable"],
         )
