@@ -16,25 +16,27 @@
 
 Upon the first run, a blank configuration file `config.json` will be created in the same directory as this script. Edit the config file to get started.
 
-Example:
+Template:
 
 ```json
 {
     "rpc-port": 9091,
     "rpc-username": "",
     "rpc-password": "",
-    "watch-dir": "/path/to/watch_dir",
-    "download-dir": "/path/to/download-dir",
-    "download-dir-size-limit-gb": 2000,
+    "download-dir": "",
+    "download-dir-cleanup-enable": false,
+    "download-dir-size-limit-gb": null,
     "download-dir-space-floor-gb": null,
-    "only-seed-private": true,
+    "watch-dir": "",
+    "watch-dir-cleanup-enable": false,
+    "only-seed-private": false,
     "log-level": "INFO",
     "destinations": {
-        "default": "/volume1/Downloads",
-        "movies": "/volume1/Videos/Movies",
-        "tv-shows": "/volume1/Videos/TV Shows",
-        "music": "/volume1/Music",
-        "av": "/volume1/Age Restricted Materials"
+        "default": "",
+        "movies": "",
+        "tv-shows": "",
+        "music": "",
+        "av": ""
     }
 }
 ```
@@ -45,15 +47,19 @@ Example:
 
 - **rpc-password**: String. Queersmission will obfuscate and rewrite this field after its first read.
 
-- **watch-dir**: String. Old or zero-length ".torrent" files will be cleared from this directory.
+- **download-dir**: String. The default download location, used as the dedicated seeding location. 
 
-- **download-dir**: String. The default download location, used as the dedicated seeding location. **IMPORTANT: Do NOT place any personal files in the download-dir as they will be deleted!**
+- **download-dir-cleanup-enable**: Boolean (default = false). When enabled, removes all files from the `download-dir` that are not in Transmission's downloads list. **Avoid storing personal or unrelated files in the `download-dir`, as they will be automatically deleted when this option is active!**
 
 - **download-dir-size-limit-gb**: Integer. Sets the maximum allowed size (in gigabytes) of the download-dir. If the total size of the files exceeds this limit, the script will remove the least active torrents to free up space. Set to null to disable.
 
 - **download-dir-space-floor-gb**: Integer. Specifies a minimum free space threshold (in gigabytes) for the download-dir. Set to null to disable.
 
-- **only-seed-private**: Boolean (default = true). Only seed private torrents. Public torrents will be removed from the seeding list immediately after the download completes and the files are moved to designated locations.
+- **watch-dir**: String. Path to the watch-dir.
+
+- **watch-dir-cleanup-enable**: Boolean (default = false). When enabled, old or zero-length ".torrent" files will be cleared from watch-dir.
+
+- **only-seed-private**: Boolean (default = false). Only seed private torrents. Public torrents will be removed from the seeding list immediately after the download and file-moving completes.
 
 - **log-level**: String (default = "INFO"). Possible values are "DEBUG", "INFO", "WARNING", "ERROR", and "CRITICAL".
 

@@ -186,11 +186,13 @@ class Categorizer:
 
     def __init__(self, pattern_file: str = None) -> None:
         """Initialize the Categorizer with data from the pattern file."""
+
         if pattern_file is None:
             pattern_file = op.join(op.dirname(__file__), "patterns.json")
-
         with open(pattern_file, "r", encoding="utf-8") as f:
             data = json.load(f)
+        if not all(data.values()):
+            raise ValueError(f"Empty entry in pattern file: '{pattern_file}'")
 
         self.video_ext = frozenset(data["video_exts"])
         self.audio_ext = frozenset(data["audio_exts"])
@@ -198,16 +200,20 @@ class Categorizer:
         self.tv_re = data["tv_regex"]
         self.av_re = data["av_regex"]
 
-    def categorize(self, name: str, files: List[dict]):
-        """Categorize the torrent based on the provided name and file list."""
-        if not files:
-            raise ValueError("Empty file list.")
+    def categorize(self, files: List[dict]):
+        """
+        Categorize the torrent based on the provided list of files. The `files`
+        parameter is the array returned by the Transmission "torrent-get" API.
+        """
 
-        # Does the torrent name pass the AV test?
+        # Does the torrent name pass the AV test? Torrent name is the file name
+        # if there is only one file, or the root directory name otherwise.
+        name = files[0]["name"].partition("/")
+        name = name[0] if name[1] else op.splitext(name[0])[0]
         if re_test(self.av_re, name):
             return Cat.AV
 
-        # The the most common file type, and a list of videos (root, ext)
+        # The most common file type, and a list of videos (root, ext)
         main_type, videos = self._analyze_file_types(files)
 
         # Does any of the videos pass the AV test?
@@ -312,18 +318,21 @@ class StorageManager:
     def __init__(
         self,
         client: TransmissionClient,
-        watch_dir: str = None,
+        seed_dir_cleanup: bool = False,
         size_limit_gb: int = None,
         space_floor_gb: int = None,
+        watch_dir: str = None,
+        watch_dir_cleanup: bool = False,
     ) -> None:
 
         if not client.is_localhost:
             raise ValueError("Cannot manage storage on a remote host.")
 
         self.client = client
-        self.watch_dir = watch_dir
         self.size_limit = self._gb_to_bytes(size_limit_gb)
         self.space_floor = self._gb_to_bytes(space_floor_gb)
+        self.seed_dir_cleanup = seed_dir_cleanup
+        self.watch_dir = watch_dir if watch_dir_cleanup else None
 
         self._init_maindata()
 
@@ -334,41 +343,41 @@ class StorageManager:
         )["torrents"]
 
         self.torrents = torrents = []
-        self.allowed_names = allowed_names = set()
+        self.allowed_files = allowed = set()
         seed_dir = self.client.seed_dir
 
         for t in data:
-            if t["downloadDir"] == seed_dir:
-                allowed_names.add(t["name"])
+            if seed_dir == t["downloadDir"]:
+                allowed.add(t["name"])
             else:
                 path = op.realpath(t["downloadDir"])
-                if op.commonpath((path, seed_dir)) != seed_dir:
+                if seed_dir != op.commonpath((path, seed_dir)):
                     # torrent is outside of seed_dir
                     continue
                 # the first segment after seed_dir
-                allowed_names.add(
+                allowed.add(
                     path[len(seed_dir) :].lstrip(os.sep).partition(os.sep)[0]
                     or t["name"]
                 )
             torrents.append(t)
 
     def cleanup(self):
-        """Clean up `seed_dir` and `watch_dir`."""
-        self._clean_seed_dir()
+        """Perform the enabled cleanup tasks."""
+        if self.seed_dir_cleanup:
+            self._clean_seed_dir()
         if self.watch_dir:
             self._clean_watch_dir()
 
     def _clean_seed_dir(self):
+        """Remove files from seed_dir if they do not exist in Transmission."""
+        allowed = self.allowed_files
         try:
             with os.scandir(self.client.seed_dir) as it:
-                entries = tuple(it)
+                entries = tuple(e for e in it if e.name not in allowed)
         except OSError as e:
             logger.error(e)
             return
-        allowed = self.allowed_names
         for e in entries:
-            if e.name in allowed:
-                continue
             try:
                 if e.is_file() and re_sub(r"\.part$", "", e.name) in allowed:
                     continue
@@ -381,15 +390,15 @@ class StorageManager:
                 logger.error(e)
 
     def _clean_watch_dir(self):
+        """Remove old and zero-length ".torrent" files from watch dir."""
+        assert self.watch_dir, "'watch_dir' is a null value."
         try:
             with os.scandir(self.watch_dir) as it:
-                entries = tuple(it)
+                entries = tuple(e for e in it if e.name.lower().endswith(".torrent"))
         except OSError as e:
             logger.error(e)
             return
         for e in entries:
-            if op.splitext(e.name)[1].lower() != ".torrent":
-                continue
             try:
                 s = e.stat()
                 if e.is_file() and (not s.st_size or s.st_mtime < time.time() - 3600):
@@ -452,7 +461,7 @@ class StorageManager:
         # Status: stopped, queued to seed, seeding
         rm_status = {0, 5, 6}
         # Torrents are only removed if they have been completed for more than an
-        # hour, allowing time for post-processing.
+        # hour, in case they are queueing to be copied.
         one_hour_ago = time.time() - 3600
 
         for t in data:
@@ -535,16 +544,16 @@ def process_torrent_done(
 
     # Determine the destination
     if src_in_seed_dir:
-        dst = Categorizer().categorize(name, data["files"])
+        dst = Categorizer().categorize(data["files"])
         logger.info("Categorize '%s' as: %s", name, dst.name)
         dst = op.realpath(dsts.get(dst.value) or dsts[Cat.DEFAULT.value])
         if not op.isdir(src):
-            # create a directory for a single file
+            # Create a directory for a single file torrent
             dst = op.join(dst, op.splitext(name)[0])
     else:
         dst = seed_dir
 
-    # ensure the dir exists (important!)
+    # Ensure the dir exists (important!)
     os.makedirs(dst, exist_ok=True)
 
     if private_only and not data["isPrivate"]:
@@ -601,11 +610,13 @@ def parse_config(config_path):
         "rpc-port": 9091,
         "rpc-username": "",
         "rpc-password": "",
-        "watch-dir": "",
         "download-dir": "",
+        "download-dir-cleanup-enable": False,
         "download-dir-size-limit-gb": None,
         "download-dir-space-floor-gb": None,
-        "only-seed-private": True,
+        "watch-dir": "",
+        "watch-dir-cleanup-enable": False,
+        "only-seed-private": False,
         "log-level": "INFO",
         "destinations": {c.value: "" for c in Cat},
     }
@@ -622,7 +633,7 @@ def parse_config(config_path):
         if not isinstance(config["rpc-port"], int):
             raise ValueError("The 'rpc-port' must be an integer.")
         if config["download-dir"] and not op.isdir(config["download-dir"]):
-            raise ValueError("The 'download-dir' must be a valid directory.")
+            raise ValueError("The 'download-dir' is not a valid directory.")
         if not op.isdir(config["destinations"][Cat.DEFAULT.value]):
             raise ValueError("The 'destinations' default must be a valid directory.")
 
@@ -717,9 +728,11 @@ def main():
 
         sm = StorageManager(
             client=client,
-            watch_dir=conf["watch-dir"],
             size_limit_gb=conf["download-dir-size-limit-gb"],
             space_floor_gb=conf["download-dir-space-floor-gb"],
+            seed_dir_cleanup=conf["download-dir-cleanup-enable"],
+            watch_dir=conf["watch-dir"],
+            watch_dir_cleanup=conf["watch-dir-cleanup-enable"],
         )
         sm.cleanup()
         sm.apply_quotas()
