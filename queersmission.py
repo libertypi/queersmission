@@ -139,6 +139,8 @@ class TransmissionClient:
     def seed_dir(self) -> str:
         if not self._seed_dir:
             s = self.session_get()["download-dir"]
+            if not s:
+                raise ValueError("Unable to get seed_dir.")
             self._seed_dir = op.realpath(s) if self.is_localhost else s
         return self._seed_dir
 
@@ -370,6 +372,7 @@ class StorageManager:
 
     def _clean_seed_dir(self):
         """Remove files from seed_dir if they do not exist in Transmission."""
+        assert self.seed_dir_cleanup, "'seed_dir_cleanup' should be True."
         allowed = self.allowed_files
         try:
             with os.scandir(self.client.seed_dir) as it:
@@ -391,7 +394,7 @@ class StorageManager:
 
     def _clean_watch_dir(self):
         """Remove old and zero-length ".torrent" files from watch dir."""
-        assert self.watch_dir, "'watch_dir' is a null value."
+        assert self.watch_dir, "'watch_dir' should not be null or empty."
         try:
             with os.scandir(self.watch_dir) as it:
                 entries = tuple(e for e in it if e.name.lower().endswith(".torrent"))
@@ -442,6 +445,7 @@ class StorageManager:
 
     def _get_removable_torrents(self, size_to_free: int):
         """Select torrents to remove to free the required size."""
+        assert size_to_free > 0, f"'size_to_free' should be positive: {size_to_free}"
         ids = []
         data: list = self.client.torrent_get(
             fields=(
