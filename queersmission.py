@@ -83,7 +83,6 @@ class TransmissionClient:
 
     _SSID: str = "X-Transmission-Session-Id"
     _RETRIES: int = 3
-    _seed_dir: str = None
     _session_data: dict = None
 
     def __init__(
@@ -99,9 +98,13 @@ class TransmissionClient:
     ) -> None:
 
         self.url = f"{protocol}://{host}:{port}{path}"
-        self.is_localhost = host.lower() in ("127.0.0.1", "localhost", "::1")
-        if seed_dir:
-            self._seed_dir = op.realpath(seed_dir) if self.is_localhost else seed_dir
+        if host.lower() in ("127.0.0.1", "localhost", "::1"):
+            self.is_localhost = True
+            self.normpath = op.realpath
+        else:
+            self.is_localhost = False
+            self.normpath = op.normpath
+        self._seed_dir = self.normpath(seed_dir) if seed_dir else None
 
         self.session = requests.Session()
         if username and password:
@@ -141,7 +144,7 @@ class TransmissionClient:
             s = self.session_get()["download-dir"]
             if not s:
                 raise ValueError("Unable to get seed_dir.")
-            self._seed_dir = op.realpath(s) if self.is_localhost else s
+            self._seed_dir = self.normpath(s)
         return self._seed_dir
 
     def session_get(self):
@@ -247,8 +250,8 @@ class Categorizer:
     def _analyze_file_types(self, files: List[dict]) -> Tuple[int, list]:
         """Analyze and categorize files by type, finding the most common
         type."""
-        type_to_size = defaultdict(int)
-        video_to_size = defaultdict(int)
+        type_size = defaultdict(int)
+        video_size = defaultdict(int)
 
         for file in files:
             root, ext = op.splitext(file["name"])
@@ -269,19 +272,19 @@ class Categorizer:
                 file_type = self.DEFAULT
 
             size = file["length"]
-            type_to_size[file_type] += size
+            type_size[file_type] += size
             if file_type == self.VIDEO:
-                video_to_size[root, ext] += size
+                video_size[root, ext] += size
 
         # Filter the videos by size
         if any(f["length"] >= self._VIDEO_THRESH for f in files):
-            videos = (k for k, v in video_to_size.items() if v >= self._VIDEO_THRESH)
+            videos = (k for k, v in video_size.items() if v >= self._VIDEO_THRESH)
         else:
-            videos = video_to_size
+            videos = video_size
 
         return (
-            max(type_to_size, key=type_to_size.get),
-            sorted(videos, key=video_to_size.get, reverse=True),
+            max(type_size, key=type_size.get),
+            sorted(videos, key=video_size.get, reverse=True),
         )
 
     @staticmethod
@@ -352,11 +355,11 @@ class StorageManager:
             if seed_dir == t["downloadDir"]:
                 allowed.add(t["name"])
             else:
-                path = op.realpath(t["downloadDir"])
+                path = self.client.normpath(t["downloadDir"])
                 if seed_dir != op.commonpath((path, seed_dir)):
                     # torrent is outside of seed_dir
                     continue
-                # the first segment after seed_dir
+                # the first path segment after seed_dir
                 allowed.add(
                     path[len(seed_dir) :].lstrip(os.sep).partition(os.sep)[0]
                     or t["name"]
@@ -530,11 +533,11 @@ def process_torrent_done(
         ids=tid,
     )["torrents"][0]
 
-    name = data["name"]
     download_dir = op.realpath(data["downloadDir"])
     seed_dir = client.seed_dir
-    src = op.join(download_dir, name)
     src_in_seed_dir = op.commonpath((download_dir, seed_dir)) == seed_dir
+    name = data["name"]
+    src = op.join(download_dir, name)
 
     # Determine the destination
     if src_in_seed_dir:
@@ -578,7 +581,6 @@ def copy_file(src: str, dst: str):
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
         if os.name != "nt":
             logger.warning("Copy command failed: %s", e)
-        # Fallback
         if op.isdir(src):
             shutil.copytree(src, op.join(dst, op.basename(src)), dirs_exist_ok=True)
         else:
