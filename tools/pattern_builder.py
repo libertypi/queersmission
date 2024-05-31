@@ -41,10 +41,10 @@ join_root = Path(__file__).parent.joinpath
 VIDEO_EXTS = {
     "3g2", "3gp", "3gp2", "3gpp", "amv", "asf", "avi", "divx", "dpg", "drc",
     "evo", "f4a", "f4b", "f4p", "f4v", "flv", "ifo", "k3g", "m1v", "m2t",
-    "m2ts", "m2v", "m4b", "m4p", "m4v", "mkv", "mov", "mp2v", "mp4", "mpe",
-    "mpeg", "mpeg2", "mpg", "mpv2", "mts", "mxf", "nsr", "nsv", "ogm", "ogv",
-    "ogx", "qt", "ram", "rm", "rmvb", "rpm", "skm", "swf", "tp", "tpr", "ts",
-    "vid", "viv", "vob", "webm", "wm", "wmp", "wmv", "wtv"
+    "m2ts", "m2v", "m4p", "m4v", "mkv", "mov", "mp2v", "mp4", "mpe", "mpeg",
+    "mpeg2", "mpg", "mpv", "mpv2", "mts", "mxf", "nsr", "nsv", "ogm", "ogv",
+    "ogx", "qt", "ram", "rm", "rmvb", "rpm", "skm", "svi", "swf", "tp", "tpr",
+    "ts", "vid", "viv", "vob", "webm", "wm", "wmp", "wmv", "wtv"
 }
 AUDIO_EXTS = {
     "aac", "ac3", "aif", "aifc", "aiff", "alac", "amr", "ape", "caf", "cda",
@@ -159,6 +159,30 @@ def build_regex(name: str, source: dict, max_items: int, exclude_lst: list = ())
     return regex
 
 
+def validation(av_regex: str):
+
+    for regex in (SOFTWARE_REGEX, TV_REGEX, av_regex):
+        if not regex:
+            raise ValueError("Empty regex.")
+        if "_" in regex:
+            raise ValueError(f'"_" character found in regex: {regex}')
+        if regex.lower() != regex:
+            raise ValueError(f"Upper case character found in regex: {regex}")
+        re.compile(regex)
+
+    for ext_list in (VIDEO_EXTS, AUDIO_EXTS):
+        if not ext_list:
+            raise ValueError("Empty extension list.")
+        if not all(s.lower() == s and s.isalnum() for s in ext_list):
+            raise ValueError("Invalid entry found in extension lists.")
+
+    intersect = VIDEO_EXTS.intersection(AUDIO_EXTS)
+    if intersect:
+        raise ValueError(
+            f"Intersection found between extension lists: {', '.join(intersect)}"
+        )
+
+
 def main():
 
     args = parse_args()
@@ -185,7 +209,6 @@ def main():
         max_items=args.max_keywords,
         exclude_lst=get_common_words(),
     )
-
     # Build regex for prefixes, excluded keywords
     prefixes = build_regex(
         name="prefixes",
@@ -193,25 +216,11 @@ def main():
         max_items=args.max_prefixes,
         exclude_lst=(keywords,),
     )
-
     # Construct
     av_regex = AV_TEMPLATE.format(keywords=keywords, prefixes=prefixes)
 
     # Validation
-    for regex in (SOFTWARE_REGEX, TV_REGEX, av_regex):
-        if not regex:
-            raise ValueError("Empty regex.")
-        if "_" in regex:
-            raise ValueError(f'"_" character found in regex: {regex}')
-        if regex.lower() != regex:
-            raise ValueError(f"Upper case character found in regex: {regex}")
-        re.compile(regex)
-
-    for ext_list in (VIDEO_EXTS, AUDIO_EXTS):
-        if not ext_list:
-            raise ValueError("Empty extension list.")
-        if not all(s.lower() == s and s.isalnum() for s in ext_list):
-            raise ValueError("Invalid entry found in extension list.")
+    validation(av_regex)
 
     # Save to JSON
     result = {

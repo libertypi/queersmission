@@ -28,7 +28,6 @@ import os
 import os.path as op
 import re
 import shutil
-import subprocess
 import sys
 import time
 from collections import defaultdict
@@ -197,7 +196,7 @@ class Categorizer:
         with open(pattern_file, "r", encoding="utf-8") as f:
             data = json.load(f)
         if not all(data.values()):
-            raise ValueError(f"Empty entry in pattern file: '{pattern_file}'")
+            raise ValueError(f"Empty entry in pattern file: {pattern_file}")
 
         self.video_ext = frozenset(data["video_exts"])
         self.audio_ext = frozenset(data["audio_exts"])
@@ -277,8 +276,9 @@ class Categorizer:
                 video_size[root, ext] += size
 
         # Filter the videos by size
-        if any(f["length"] >= self._VIDEO_THRESH for f in files):
-            videos = (k for k, v in video_size.items() if v >= self._VIDEO_THRESH)
+        size = self._VIDEO_THRESH
+        if any(f["length"] >= size for f in files):
+            videos = (k for k, v in video_size.items() if v >= size)
         else:
             videos = video_size
 
@@ -568,23 +568,32 @@ def process_torrent_done(
             client.set_location(tid, seed_dir, move=False)
 
 
-def copy_file(src: str, dst: str):
-    """Copy src to dst, trying to use reflink.
-    Result: `/src_path/name` -> `/dst_path` = `/dst_path/name`
-    """
-    try:
-        subprocess.run(
-            ("cp", "-a", "-f", "--reflink=auto", "--", src,
-             dst if dst.endswith(os.sep) else dst + os.sep),
-            check=True,
-        )  # fmt: skip
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        if os.name != "nt":
+def _copy_file_fallback(src: str, dst: str):
+    """Copy src to dst using shutil."""
+    if op.isdir(src):
+        shutil.copytree(src, op.join(dst, op.basename(src)), dirs_exist_ok=True)
+    else:
+        shutil.copy2(src, dst)
+
+
+if os.name == "nt":
+    copy_file = _copy_file_fallback
+else:
+    import subprocess
+
+    def copy_file(src: str, dst: str):
+        """Copy src to dst, trying to use reflink.
+        Result: `/src_path/name` -> `/dst_path` = `/dst_path/name`
+        """
+        try:
+            subprocess.run(
+                ("cp", "-a", "-f", "--reflink=auto", "--", src,
+                dst if dst.endswith(os.sep) else dst + os.sep),
+                check=True,
+            )  # fmt: skip
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
             logger.warning("Copy command failed: %s", e)
-        if op.isdir(src):
-            shutil.copytree(src, op.join(dst, op.basename(src)), dirs_exist_ok=True)
-        else:
-            shutil.copy2(src, dst)
+            _copy_file_fallback(src, dst)
 
 
 def move_file(src: str, dst: str):
@@ -617,9 +626,9 @@ def parse_config(config_path):
         "destinations": {c.value: "" for c in Cat},
     }
 
-    def _dump_config(config):
+    def _dump_config(data):
         with open(config_path, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=4, ensure_ascii=False)
+            json.dump(data, f, indent=4, ensure_ascii=False)
 
     try:
         with open(config_path, "r", encoding="utf-8") as f:
