@@ -33,7 +33,8 @@ import time
 from collections import defaultdict
 from enum import Enum
 from functools import lru_cache
-from typing import Iterable, List, Tuple
+from posixpath import splitext as posix_splitext
+from typing import List, Tuple
 
 import requests
 
@@ -97,18 +98,40 @@ class TransmissionClient:
     ) -> None:
 
         self.url = f"{protocol}://{host}:{port}{path}"
-        if host.lower() in ("127.0.0.1", "localhost", "::1"):
-            self.is_localhost = True
-            self.normpath = op.realpath
-        else:
-            self.is_localhost = False
-            self.normpath = op.normpath
-        self._seed_dir = self.normpath(seed_dir) if seed_dir else None
 
         self.session = requests.Session()
         if username and password:
             self.session.auth = username, password
         self.session.headers.update({self._SSID: ""})
+
+        if host.lower() in ("127.0.0.1", "localhost", "::1"):
+            self.is_localhost = True
+            self.os_path = op
+            self.normpath = op.realpath
+        else:
+            self.is_localhost = False
+            self.os_path = self._determine_remote_path()
+            self.normpath = self.os_path.normpath
+
+        if not seed_dir:
+            seed_dir = self.session_get()["download-dir"]
+            if not seed_dir:
+                raise ValueError("Unable to get seed_dir.")
+        self.seed_dir = self.normpath(seed_dir)
+
+    def _determine_remote_path(self):
+        """Determine the appropriate path module for the remote host."""
+        session_data = self.session_get()
+        for k in ("config-dir", "download-dir", "incomplete-dir"):
+            p = session_data.get(k)
+            if not p:
+                continue
+            if p[0] in ("/", "~") or ":" not in p:
+                import posixpath as path
+            else:
+                import ntpath as path
+            return path
+        raise ValueError("Unable to determine path type for the remote host.")
 
     def _call(self, method: str, arguments: dict = None) -> dict:
         """Make a call to the Transmission RPC."""
@@ -136,15 +159,6 @@ class TransmissionClient:
                     raise Exception(f"API Error {r.status_code}: {r.text}")
 
         assert False, "Unexpected error in the retry logic."
-
-    @property
-    def seed_dir(self) -> str:
-        if not self._seed_dir:
-            s = self.session_get()["download-dir"]
-            if not s:
-                raise ValueError("Unable to get seed_dir.")
-            self._seed_dir = self.normpath(s)
-        return self._seed_dir
 
     def session_get(self):
         """Get the session details, cached."""
@@ -209,11 +223,11 @@ class Categorizer:
         Categorize the torrent based on the files list. The `files` parameter is
         the array returned by the Transmission "torrent-get" API.
         """
-
         # Does the torrent name pass the AV test? Torrent name is the file name
-        # if there is only one file, or the root directory name otherwise.
-        name = files[0]["name"].partition("/")
-        name = name[0] if name[1] else op.splitext(name[0])[0]
+        # if there is only one file, or the root directory name otherwise. File
+        # names are always POSIX paths.
+        name = files[0]["name"].lstrip("/").partition("/")
+        name = name[0] if name[1] else posix_splitext(name[0])[0]
         if re_test(self.av_re, name):
             return Cat.AV
 
@@ -253,7 +267,7 @@ class Categorizer:
         video_size = defaultdict(int)
 
         for file in files:
-            root, ext = op.splitext(file["name"])
+            root, ext = posix_splitext(file["name"])
             ext = ext[1:].lower()  # Strip leading dot
 
             if ext in self.video_ext:
@@ -318,6 +332,20 @@ class Categorizer:
         return False
 
 
+re_compile = lru_cache(maxsize=None)(re.compile)
+
+
+def re_test(pattern: str, string: str, _flags=re.A | re.I):
+    """Replace all '_' with '-', then perform a ASCII-only and case-insensitive
+    test."""
+    return re_compile(pattern, _flags).search(string.replace("_", "-"))
+
+
+def re_sub(pattern: str, repl, string: str, _flags=re.A | re.I):
+    """Perform a ASCII-only and case-insensitive substitution."""
+    return re_compile(pattern, _flags).sub(repl, string)
+
+
 class StorageManager:
 
     def __init__(
@@ -350,20 +378,19 @@ class StorageManager:
         self.torrents = torrents = []
         self.allowed_files = allowed = set()
         seed_dir = self.client.seed_dir
+        sep = self.client.os_path.sep
 
         for t in data:
             if seed_dir == t["downloadDir"]:
                 allowed.add(t["name"])
             else:
                 path = self.client.normpath(t["downloadDir"])
-                if seed_dir != op.commonpath((path, seed_dir)):
+                if not is_subpath(path, seed_dir, sep):
                     # torrent is outside of seed_dir
                     continue
-                # the first path segment after seed_dir
-                allowed.add(
-                    path[len(seed_dir) :].lstrip(os.sep).partition(os.sep)[0]
-                    or t["name"]
-                )
+                # find the first segment after seed_dir
+                path = path[len(seed_dir) :].lstrip(sep).partition(sep)[0]
+                allowed.add(path or t["name"])
             torrents.append(t)
 
     def cleanup(self):
@@ -488,20 +515,6 @@ class StorageManager:
         return gb * 1073741824 if gb and gb > 0 else 0
 
 
-re_compile = lru_cache(maxsize=None)(re.compile)
-
-
-def re_test(pattern: str, string: str, _flags=re.A | re.I):
-    """Replace all '_' with '-', then perform a ASCII-only and case-insensitive
-    test."""
-    return re_compile(pattern, _flags).search(string.replace("_", "-"))
-
-
-def re_sub(pattern: str, repl, string: str, _flags=re.A | re.I):
-    """Perform a ASCII-only and case-insensitive substitution."""
-    return re_compile(pattern, _flags).sub(repl, string)
-
-
 def process_torrent_done(
     tid: int,
     client: TransmissionClient,
@@ -535,7 +548,7 @@ def process_torrent_done(
 
     download_dir = op.realpath(data["downloadDir"])
     seed_dir = client.seed_dir
-    src_in_seed_dir = op.commonpath((download_dir, seed_dir)) == seed_dir
+    src_in_seed_dir = is_subpath(download_dir, seed_dir)
     name = data["name"]
     src = op.join(download_dir, name)
 
@@ -566,6 +579,16 @@ def process_torrent_done(
         copy_file(src, dst)
         if not src_in_seed_dir:
             client.set_location(tid, seed_dir, move=False)
+
+
+def is_subpath(child: str, parent: str, sep: str = os.sep) -> bool:
+    """Check if `child` is within `parent`. Both paths must be absolute and
+    normalized."""
+    if not child.endswith(sep):
+        child += sep
+    if not parent.endswith(sep):
+        parent += sep
+    return child.startswith(parent)
 
 
 def _copy_file_fallback(src: str, dst: str):
@@ -675,7 +698,7 @@ def config_logger(logger: logging.Logger, logfile, log_level="INFO"):
         "WARNING": logging.WARNING,
         "ERROR": logging.ERROR,
         "CRITICAL": logging.CRITICAL,
-    }.get(log_level, logging.INFO)
+    }.get(log_level.upper(), logging.INFO)
     logger.setLevel(log_level)
 
     # Console handler
@@ -725,7 +748,7 @@ def main():
             except Exception as e:
                 logger.error(
                     "Error processing torrent '%s': %s",
-                    os.environ.get("TR_TORRENT_NAME", tid),
+                    os.getenv("TR_TORRENT_NAME", tid),
                     e,
                 )
 
