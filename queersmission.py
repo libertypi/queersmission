@@ -84,6 +84,7 @@ class TransmissionClient:
     _SSID: str = "X-Transmission-Session-Id"
     _RETRIES: int = 3
     _session_data: dict = None
+    _seed_dir: str = None
 
     def __init__(
         self,
@@ -98,7 +99,6 @@ class TransmissionClient:
     ) -> None:
 
         self.url = f"{protocol}://{host}:{port}{path}"
-
         self.session = requests.Session()
         if username and password:
             self.session.auth = username, password
@@ -106,32 +106,13 @@ class TransmissionClient:
 
         if host.lower() in ("127.0.0.1", "localhost", "::1"):
             self.is_localhost = True
-            self.os_path = op
+            self._path_module = op
             self.normpath = op.realpath
         else:
             self.is_localhost = False
-            self.os_path = self._determine_remote_path()
-            self.normpath = self.os_path.normpath
-
-        if not seed_dir:
-            seed_dir = self.session_get()["download-dir"]
-            if not seed_dir:
-                raise ValueError("Unable to get seed_dir.")
-        self.seed_dir = self.normpath(seed_dir)
-
-    def _determine_remote_path(self):
-        """Determine the appropriate path module for the remote host."""
-        session_data = self.session_get()
-        for k in ("config-dir", "download-dir", "incomplete-dir"):
-            p = session_data.get(k)
-            if not p:
-                continue
-            if p[0] in ("/", "~") or ":" not in p:
-                import posixpath as path
-            else:
-                import ntpath as path
-            return path
-        raise ValueError("Unable to determine path type for the remote host.")
+            self._path_module = None
+            self.normpath = self._init_normpath
+        self._user_seed_dir = seed_dir
 
     def _call(self, method: str, arguments: dict = None) -> dict:
         """Make a call to the Transmission RPC."""
@@ -162,7 +143,7 @@ class TransmissionClient:
 
     def session_get(self):
         """Get the session details, cached."""
-        if not self._session_data:
+        if self._session_data is None:
             self._session_data = self._call("session-get")
         return self._session_data
 
@@ -185,6 +166,37 @@ class TransmissionClient:
             "torrent-set-location",
             {"ids": ids, "location": location, "move": move},
         )
+
+    @property
+    def seed_dir(self) -> str:
+        if self._seed_dir is None:
+            s = self._user_seed_dir or self.session_get()["download-dir"]
+            if not s:
+                raise ValueError("Unable to get seed_dir.")
+            self._seed_dir = self.normpath(s)
+        return self._seed_dir
+
+    def _init_normpath(self, path):
+        """Dynamically update `normpath` for the remote host."""
+        self.normpath = self.get_path_module().normpath
+        return self.normpath(path)
+
+    def get_path_module(self):
+        """Determine the appropriate path module for the remost host."""
+        if self._path_module is not None:
+            return self._path_module
+        session_data = self.session_get()
+        for k in ("config-dir", "download-dir", "incomplete-dir"):
+            p = session_data.get(k)
+            if not p:
+                continue
+            if p[0] in ("/", "~") or ":" not in p:
+                import posixpath as path
+            else:
+                import ntpath as path
+            self._path_module = path
+            return path
+        raise ValueError("Unable to determine path type for the remote host.")
 
 
 class Cat(Enum):
@@ -378,7 +390,7 @@ class StorageManager:
         self.torrents = torrents = []
         self.allowed_files = allowed = set()
         seed_dir = self.client.seed_dir
-        sep = self.client.os_path.sep
+        sep = self.client.get_path_module().sep
 
         for t in data:
             if seed_dir == t["downloadDir"]:
@@ -736,7 +748,7 @@ def main():
         tid = os.environ.get("TR_TORRENT_ID")
         logger.debug("ENV:TR_TORRENT_ID: %s", tid)
         if tid:
-            # The script is invoked by Transmission as 'script-torrent-done'.
+            # The script is invoked by Transmission as 'script-torrent-done.'
             tid = int(tid)
             try:
                 process_torrent_done(
