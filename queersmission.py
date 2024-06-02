@@ -24,11 +24,11 @@ Author:
 import base64
 import json
 import logging
-import logging.handlers
 import os
 import os.path as op
 import re
 import shutil
+import subprocess
 import sys
 import time
 from collections import defaultdict
@@ -40,6 +40,8 @@ from typing import List, Tuple
 import requests
 
 logger = logging.getLogger(__name__)
+is_dir = lru_cache(op.isdir)
+re_compile = lru_cache(maxsize=None)(re.compile)
 
 try:
     import fcntl
@@ -133,12 +135,12 @@ class TransmissionClient:
                         return data["arguments"]
                 elif r.status_code == 409:
                     self.session.headers[self._SSID] = r.headers[self._SSID]
-            except Exception as e:
+            except Exception:
                 if retry == self._RETRIES:
                     raise
             else:
                 if retry == self._RETRIES:
-                    raise Exception(f"API Error {r.status_code}: {r.text}")
+                    raise Exception(f"API Error ({r.status_code}): {r.text}")
 
         assert False, "Unexpected error in the retry logic."
 
@@ -162,11 +164,23 @@ class TransmissionClient:
             {"ids": ids, "delete-local-data": delete_local_data},
         )
 
-    def set_location(self, ids, location, move: bool):
+    def set_location(self, ids, location: str, move: bool):
         self._call(
             "torrent-set-location",
             {"ids": ids, "location": location, "move": move},
         )
+
+    def get_freespace(self, path: str = None) -> int:
+        """Tests how much free space is available in a client-specified folder.
+        If `path` is None, test seed_dir."""
+        if path is None:
+            path = self.seed_dir
+        if self.is_localhost:
+            try:
+                return shutil.disk_usage(path).free
+            except OSError as e:
+                logger.warning(str(e))
+        return int(self._call("free-space", {"path": path})["size-bytes"])
 
     @property
     def seed_dir(self) -> str:
@@ -263,7 +277,7 @@ class StorageManager:
             with os.scandir(self.client.seed_dir) as it:
                 entries = tuple(e for e in it if e.name not in allowed)
         except OSError as e:
-            logger.error(e)
+            logger.error(str(e))
             return
         for e in entries:
             try:
@@ -275,7 +289,7 @@ class StorageManager:
                 else:
                     os.unlink(e.path)
             except OSError as e:
-                logger.error(e)
+                logger.error(str(e))
 
     def _clean_watch_dir(self):
         """Remove old and zero-length ".torrent" files from watch dir."""
@@ -284,7 +298,7 @@ class StorageManager:
             with os.scandir(self.watch_dir) as it:
                 entries = tuple(e for e in it if e.name.lower().endswith(".torrent"))
         except OSError as e:
-            logger.error(e)
+            logger.error(str(e))
             return
         for e in entries:
             try:
@@ -293,7 +307,7 @@ class StorageManager:
                     logger.debug("Cleanup watch-dir: %s", e.path)
                     os.unlink(e.path)
             except OSError as e:
-                logger.error(e)
+                logger.error(str(e))
 
     def apply_quotas(self):
         """Enforce size limits and free space requirements in seed_dir."""
@@ -345,15 +359,11 @@ class StorageManager:
                 logger.debug("Total size limit exceeded by %s bytes.", n)
                 size_to_free = n
         if self.space_floor:
-            try:
-                n = self.space_floor - shutil.disk_usage(self.client.seed_dir).free
-            except OSError as e:
-                logger.error(e)
-            else:
-                if n > 0:
-                    logger.debug("Free space below threshold by %s bytes.", n)
-                    if n > size_to_free:
-                        size_to_free = n
+            n = self.space_floor - self.client.get_freespace()
+            if n > 0:
+                logger.debug("Free space below threshold by %s bytes.", n)
+                if n > size_to_free:
+                    size_to_free = n
         return size_to_free
 
     @staticmethod
@@ -441,7 +451,7 @@ class Categorizer:
         if main_type == self.DEFAULT:
             return Cat.DEFAULT
 
-        raise ValueError(f"Invalid main_type: {main_type}")
+        assert False, f"Unexpected main_type: '{main_type}'"
 
     def _analyze_file_types(self, files: List[dict]) -> Tuple[int, list]:
         """Analyze and categorize files by type, finding the most common
@@ -515,9 +525,6 @@ class Categorizer:
         return False
 
 
-re_compile = lru_cache(maxsize=None)(re.compile)
-
-
 def re_test(pattern: str, string: str, _flags=re.A | re.I):
     """Replace all '_' with '-', then perform a ASCII-only and case-insensitive
     test."""
@@ -571,14 +578,15 @@ def process_torrent_done(
         dst = Categorizer().categorize(data["files"])
         logger.info("Categorize '%s' as: %s", name, dst.name)
         dst = op.realpath(dsts.get(dst.value) or dsts[Cat.DEFAULT.value])
-        if not op.isdir(src):
+        if not is_dir(src):
             # Create a directory for a single file torrent
             dst = op.join(dst, op.splitext(name)[0])
     else:
         dst = seed_dir
 
-    # Ensure the dir exists (important!)
+    # Make sure the parent dir exists
     os.makedirs(dst, exist_ok=True)
+    dst = op.join(dst, name)
 
     if private_only and not data["isPrivate"]:
         # Torrent is not private and user only seeds private
@@ -605,42 +613,49 @@ def is_subpath(child: str, parent: str, sep: str = os.sep) -> bool:
     return child.startswith(parent)
 
 
-def _copy_file_fallback(src: str, dst: str):
-    """Copy src to dst using shutil."""
-    if op.isdir(src):
-        shutil.copytree(src, op.join(dst, op.basename(src)), dirs_exist_ok=True)
-    else:
-        shutil.copy2(src, dst)
+def copy_file(src: str, dst: str):
+    """
+    Copy src to dst, trying to use reflink. If dst exists, it will be
+    overwritten. If src is a file and dst is a directory or vice versa, an
+    error will occur.
 
-
-if os.name == "nt":
-    copy_file = _copy_file_fallback
-else:
-    import subprocess
-
-    def copy_file(src: str, dst: str):
-        """Copy src to dst, trying to use reflink.
-        Result: `/src_path/name` -> `/dst_path` = `/dst_path/name`
-        """
+    Example:
+        `copy_file("/src_dir/name", "/dst_dir/name")` -> "/dst_dir/name"
+    """
+    if os.name != "nt":
         try:
             subprocess.run(
-                ("cp", "-a", "-f", "--reflink=auto", "--", src,
-                dst if dst.endswith(os.sep) else dst + os.sep),
+                ("cp", "-d", "-R", "-f", "-T", "--reflink=auto", "--", src, dst),
                 check=True,
-            )  # fmt: skip
-        except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            logger.warning("Copy command failed: %s", e)
-            _copy_file_fallback(src, dst)
+                capture_output=True,
+            )
+        except subprocess.CalledProcessError as e:
+            logger.warning(e.stderr.strip().decode())
+        except FileNotFoundError as e:
+            logger.warning(str(e))
+        else:
+            return
+
+    if is_dir(src):
+        shutil.copytree(
+            src, dst, symlinks=True, copy_function=shutil.copy, dirs_exist_ok=True
+        )
+    else:
+        # Avoid shutil.copy() because if dst is a dir, we want to throw an error
+        # instead of copying src into it.
+        shutil.copyfile(src, dst, follow_symlinks=False)
+        shutil.copymode(src, dst, follow_symlinks=False)
 
 
 def move_file(src: str, dst: str):
-    """Move src to dst."""
+    """Move src to dst, using the same conflict handling logic as
+    copy_file()."""
     try:
-        os.rename(src, op.join(dst, op.basename(src)))
+        os.rename(src, dst)
     except OSError:
         # dst is a non-empty directory or on a different filesystem
         copy_file(src, dst)
-        if op.isdir(src):
+        if is_dir(src):
             shutil.rmtree(src, ignore_errors=True)
         else:
             os.unlink(src)
@@ -721,7 +736,7 @@ def config_logger(logger: logging.Logger, logfile, log_level="INFO"):
     logger.addHandler(handler)
 
     # File handler
-    handler = logging.handlers.RotatingFileHandler(logfile, maxBytes=1e8, backupCount=3)
+    handler = logging.FileHandler(logfile)
     handler.setFormatter(
         logging.Formatter(
             "[%(asctime)s] %(levelname)s: %(message)s",
@@ -764,7 +779,7 @@ def main():
             except Exception as e:
                 logger.error(
                     "Error processing torrent '%s': %s",
-                    os.getenv("TR_TORRENT_NAME", tid),
+                    os.environ.get("TR_TORRENT_NAME", tid),
                     str(e),
                 )
 

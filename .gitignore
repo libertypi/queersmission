@@ -1,6 +1,6 @@
 *.log
 config*.json
-test/
+test/pattern_tester.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
