@@ -28,7 +28,6 @@ import os
 import os.path as op
 import re
 import shutil
-import subprocess
 import sys
 import time
 from collections import defaultdict
@@ -53,7 +52,7 @@ try:
             self.lockfile = lockfile
             self.fd = None
 
-        def acquire(self):
+        def acquire(self) -> None:
             try:
                 self.fd = open(self.lockfile, "r")
             except FileNotFoundError:
@@ -61,7 +60,7 @@ try:
             fcntl.flock(self.fd, fcntl.LOCK_EX)
             logger.debug("Lock acquired.")
 
-        def release(self):
+        def release(self) -> None:
             if self.fd:
                 fcntl.flock(self.fd, fcntl.LOCK_UN)
                 self.fd.close()
@@ -74,10 +73,10 @@ except ImportError:
         def __init__(self, lockfile: str) -> None:
             pass
 
-        def acquire(self):
+        def acquire(self) -> None:
             pass
 
-        def release(self):
+        def release(self) -> None:
             pass
 
 
@@ -104,7 +103,7 @@ class TransmissionClient:
         self.url = f"{protocol}://{host}:{port}{path}"
         self.session = requests.Session()
         if username and password:
-            self.session.auth = username, password
+            self.session.auth = (username, password)
         self.session.headers.update({self._SSID: ""})
 
         if host.lower() in ("127.0.0.1", "localhost", "::1"):
@@ -144,13 +143,13 @@ class TransmissionClient:
 
         assert False, "Unexpected error in the retry logic."
 
-    def session_get(self):
+    def session_get(self) -> dict:
         """Get the session details, cached."""
         if self._session_data is None:
             self._session_data = self._call("session-get")
         return self._session_data
 
-    def torrent_get(self, fields: List[str], ids=None):
+    def torrent_get(self, fields: List[str], ids=None) -> dict:
         arguments = {"fields": fields}
         if ids is not None:
             # If `ids` is absent, all torrents are returned. If `ids` is an
@@ -158,13 +157,13 @@ class TransmissionClient:
             arguments["ids"] = ids
         return self._call("torrent-get", arguments)
 
-    def torrent_remove(self, ids, delete_local_data: bool):
+    def torrent_remove(self, ids, delete_local_data: bool) -> None:
         self._call(
             "torrent-remove",
             {"ids": ids, "delete-local-data": delete_local_data},
         )
 
-    def set_location(self, ids, location: str, move: bool):
+    def set_location(self, ids, location: str, move: bool) -> None:
         self._call(
             "torrent-set-location",
             {"ids": ids, "location": location, "move": move},
@@ -180,7 +179,7 @@ class TransmissionClient:
                 return shutil.disk_usage(path).free
             except OSError as e:
                 logger.warning(str(e))
-        return int(self._call("free-space", {"path": path})["size-bytes"])
+        return self._call("free-space", {"path": path})["size-bytes"]
 
     @property
     def seed_dir(self) -> str:
@@ -191,13 +190,13 @@ class TransmissionClient:
             self._seed_dir = self.normpath(s)
         return self._seed_dir
 
-    def _init_normpath(self, path):
+    def _init_normpath(self, path: str) -> str:
         """Dynamically update `normpath` for the remote host."""
         self.normpath = self.get_path_module().normpath
         return self.normpath(path)
 
     def get_path_module(self):
-        """Determine the appropriate path module for the remost host."""
+        """Determine the appropriate path module for the remote host."""
         if self._path_module is not None:
             return self._path_module
         session_data = self.session_get()
@@ -237,7 +236,7 @@ class StorageManager:
 
         self._init_maindata()
 
-    def _init_maindata(self):
+    def _init_maindata(self) -> None:
         """Retrieve and filter torrents located in `seed_dir`."""
 
         self.torrents = torrents = []
@@ -262,14 +261,14 @@ class StorageManager:
                 allowed.add(path or t["name"])
             torrents.append(t)
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         """Perform the enabled cleanup tasks."""
         if self.seed_dir_cleanup:
             self._clean_seed_dir()
         if self.watch_dir:
             self._clean_watch_dir()
 
-    def _clean_seed_dir(self):
+    def _clean_seed_dir(self) -> None:
         """Remove files from seed_dir if they do not exist in Transmission."""
         assert self.seed_dir_cleanup, "'seed_dir_cleanup' should be True."
         allowed = self.allowed
@@ -291,7 +290,7 @@ class StorageManager:
             except OSError as e:
                 logger.error(str(e))
 
-    def _clean_watch_dir(self):
+    def _clean_watch_dir(self) -> None:
         """Remove old and zero-length ".torrent" files from watch dir."""
         assert self.watch_dir, "'watch_dir' should not be null or empty."
         try:
@@ -309,7 +308,7 @@ class StorageManager:
             except OSError as e:
                 logger.error(str(e))
 
-    def apply_quotas(self):
+    def apply_quotas(self) -> None:
         """Enforce size limits and free space requirements in seed_dir."""
         size_to_free = self._calculate_size_to_free()
         if size_to_free <= 0:
@@ -350,7 +349,7 @@ class StorageManager:
         if ids:
             self.client.torrent_remove(ids, delete_local_data=True)
 
-    def _calculate_size_to_free(self):
+    def _calculate_size_to_free(self) -> int:
         """Calculate the total size that needs to be freed."""
         size_to_free = 0
         if self.size_limit:
@@ -367,7 +366,7 @@ class StorageManager:
         return size_to_free
 
     @staticmethod
-    def _torrent_value(t: dict):
+    def _torrent_value(t: dict) -> Tuple[float, int]:
         """Return a tuple of `Value` and `activityDate`, where:
         Value = Leechers * (Leechers / Seeders)
         """
@@ -526,13 +525,13 @@ class Categorizer:
 
 
 def re_test(pattern: str, string: str, _flags=re.A | re.I):
-    """Replace all '_' with '-', then perform a ASCII-only and case-insensitive
+    """Replace all '_' with '-', then perform an ASCII-only and case-insensitive
     test."""
     return re_compile(pattern, _flags).search(string.replace("_", "-"))
 
 
 def re_sub(pattern: str, repl, string: str, _flags=re.A | re.I):
-    """Perform a ASCII-only and case-insensitive substitution."""
+    """Perform an ASCII-only and case-insensitive substitution."""
     return re_compile(pattern, _flags).sub(repl, string)
 
 
@@ -613,16 +612,33 @@ def is_subpath(child: str, parent: str, sep: str = os.sep) -> bool:
     return child.startswith(parent)
 
 
-def copy_file(src: str, dst: str):
-    """
-    Copy src to dst, trying to use reflink. If dst exists, it will be
-    overwritten. If src is a file and dst is a directory or vice versa, an
-    error will occur.
+def _copy_file_fallback(src: str, dst: str) -> None:
+    """Copy src to dst using shutil."""
+    if is_dir(src):
+        shutil.copytree(
+            src, dst, symlinks=True, copy_function=shutil.copy, dirs_exist_ok=True
+        )
+    else:
+        # Avoid shutil.copy() because if dst is a dir, we want to throw an error
+        # instead of copying src into it.
+        shutil.copyfile(src, dst, follow_symlinks=False)
+        shutil.copymode(src, dst, follow_symlinks=False)
 
-    Example:
-        `copy_file("/src_dir/name", "/dst_dir/name")` -> "/dst_dir/name"
-    """
-    if os.name != "nt":
+
+if os.name == "nt":
+    copy_file = _copy_file_fallback
+else:
+    import subprocess
+
+    def copy_file(src: str, dst: str) -> None:
+        """
+        Copy src to dst, trying to use reflink. If dst exists, it will be
+        overwritten. If src is a file and dst is a directory or vice versa, an
+        error will occur.
+
+        Example:
+            `copy_file("/src_dir/name", "/dst_dir/name")` -> "/dst_dir/name"
+        """
         try:
             subprocess.run(
                 ("cp", "-d", "-R", "-f", "-T", "--reflink=auto", "--", src, dst),
@@ -635,19 +651,10 @@ def copy_file(src: str, dst: str):
             logger.warning(str(e))
         else:
             return
-
-    if is_dir(src):
-        shutil.copytree(
-            src, dst, symlinks=True, copy_function=shutil.copy, dirs_exist_ok=True
-        )
-    else:
-        # Avoid shutil.copy() because if dst is a dir, we want to throw an error
-        # instead of copying src into it.
-        shutil.copyfile(src, dst, follow_symlinks=False)
-        shutil.copymode(src, dst, follow_symlinks=False)
+        _copy_file_fallback(src, dst)
 
 
-def move_file(src: str, dst: str):
+def move_file(src: str, dst: str) -> None:
     """Move src to dst, using the same conflict handling logic as
     copy_file()."""
     try:
@@ -661,7 +668,7 @@ def move_file(src: str, dst: str):
             os.unlink(src)
 
 
-def parse_config(config_path):
+def parse_config(config_path: str) -> dict:
     """Parse and validate the configuration file."""
     config = {
         "rpc-port": 9091,
@@ -718,7 +725,7 @@ def parse_config(config_path):
         return config
 
 
-def config_logger(logger: logging.Logger, logfile, log_level="INFO"):
+def config_logger(logger: logging.Logger, logfile: str, log_level="INFO") -> None:
     """Configure the logging system with both console and file handlers."""
     logger.handlers.clear()
     log_level = {

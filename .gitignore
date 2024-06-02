@@ -1,6 +1,7 @@
+.vscode/
 *.log
 config*.json
-test/pattern_tester.py
+test/pattern_tester.*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
