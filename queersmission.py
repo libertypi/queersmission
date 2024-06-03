@@ -39,8 +39,6 @@ from typing import List, Tuple
 import requests
 
 logger = logging.getLogger(__name__)
-is_dir = lru_cache(op.isdir)
-re_compile = lru_cache(maxsize=None)(re.compile)
 
 try:
     import fcntl
@@ -280,7 +278,7 @@ class StorageManager:
             return
         for e in entries:
             try:
-                if e.is_file() and re_sub(r"\.part$", "", e.name) in allowed:
+                if e.is_file() and removesuffix(e.name, ".part") in allowed:
                     continue
                 logger.info("Cleanup download-dir: %s", e.path)
                 if e.is_dir():
@@ -331,15 +329,15 @@ class StorageManager:
         data.sort(key=self._torrent_value)
         # Status: stopped, queued to seed, seeding
         rm_status = {0, 5, 6}
-        # Torrents are only removed if they have been completed for more than an
-        # hour, in case they are queueing to be copied.
-        one_hour_ago = time.time() - 3600
+        # Torrents are only removed if they have been completed for more than 12
+        # hours, in case they have not been fully copied.
+        threshold = time.time() - 43200
         ids = []
         for t in data:
             if (
                 t["status"] in rm_status
                 and t["percentDone"] == 1
-                and 0 < t["doneDate"] < one_hour_ago
+                and 0 < t["doneDate"] < threshold
             ):
                 logger.info("Remove torrent: %s", t["name"])
                 ids.append(t["id"])
@@ -524,17 +522,6 @@ class Categorizer:
         return False
 
 
-def re_test(pattern: str, string: str, _flags=re.A | re.I):
-    """Replace all '_' with '-', then perform an ASCII-only and case-insensitive
-    test."""
-    return re_compile(pattern, _flags).search(string.replace("_", "-"))
-
-
-def re_sub(pattern: str, repl, string: str, _flags=re.A | re.I):
-    """Perform an ASCII-only and case-insensitive substitution."""
-    return re_compile(pattern, _flags).sub(repl, string)
-
-
 def process_torrent_done(
     tid: int,
     client: TransmissionClient,
@@ -602,6 +589,9 @@ def process_torrent_done(
             client.set_location(tid, seed_dir, move=False)
 
 
+is_dir = lru_cache(op.isdir)
+
+
 def is_subpath(child: str, parent: str, sep: str = os.sep) -> bool:
     """Check if `child` is within `parent`. Both paths must be absolute and
     normalized."""
@@ -666,6 +656,26 @@ def move_file(src: str, dst: str) -> None:
             shutil.rmtree(src, ignore_errors=True)
         else:
             os.unlink(src)
+
+
+re_compile = lru_cache(maxsize=None)(re.compile)
+
+
+def re_test(pattern: str, string: str, _flags=re.A | re.I):
+    """Replace all '_' with '-', then perform an ASCII-only and case-insensitive
+    test."""
+    return re_compile(pattern, _flags).search(string.replace("_", "-"))
+
+
+def re_sub(pattern: str, repl, string: str, _flags=re.A | re.I):
+    """Perform an ASCII-only and case-insensitive substitution."""
+    return re_compile(pattern, _flags).sub(repl, string)
+
+
+try:
+    removesuffix = str.removesuffix  # Python 3.9+
+except AttributeError:
+    removesuffix = lambda s, f: s[: -len(f)] if f and s.endswith(f) else s
 
 
 def parse_config(config_path: str) -> dict:
