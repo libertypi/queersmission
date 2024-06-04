@@ -388,10 +388,11 @@ class StorageManager:
             ),
             ids=[t["id"] for t in self.torrents],
         )["torrents"]
-        data.sort(key=self._torrent_value, reverse=True)
+        data.sort(key=self._torrent_value)
 
-        while data and size_to_free > 0:
-            t = data.pop()
+        for t in data:
+            if size_to_free <= 0:
+                break
             if (
                 t["status"] in rm_status
                 and t["percentDone"] == 1
