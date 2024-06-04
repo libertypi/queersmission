@@ -21,6 +21,7 @@ Template:
 ```json
 {
     "rpc-port": 9091,
+    "rpc-url": "/transmission/rpc",
     "rpc-username": "",
     "rpc-password": "",
     "download-dir": "",
@@ -43,6 +44,8 @@ Template:
 
 - **rpc-port**: Number (default = 9091)
 
+- **rpc-url**: String (default = /transmission/rpc)
+
 - **rpc-username**: String.
 
 - **rpc-password**: String. Queersmission will obfuscate and rewrite this field after its first read.
@@ -51,9 +54,9 @@ Template:
 
 - **download-dir-cleanup-enable**: Boolean (default = false). When enabled, removes all files from the `download-dir` that are not in Transmission's downloads list. **Avoid storing personal or unrelated files in the `download-dir`, as they will be automatically deleted when this option is active!**
 
-- **download-dir-size-limit-gb**: Integer. Sets the maximum allowed size (in gigabytes) of the download-dir. If the total size of the files exceeds this limit, the script will remove the least active torrents to free up space. Set to null to disable.
+- **download-dir-size-limit-gb**: Integer (default = null). Sets the maximum allowed size (in gigabytes) of the download-dir. If the total size of the files exceeds this limit, the script will remove the least active torrents to free up space. Set to null to disable.
 
-- **download-dir-space-floor-gb**: Integer. Specifies a minimum free space threshold (in gigabytes) for the download-dir. Set to null to disable.
+- **download-dir-space-floor-gb**: Integer (default = null). Specifies a minimum free space threshold (in gigabytes) for the download-dir. Set to null to disable.
 
 - **watch-dir**: String. Path to the watch-dir.
 
@@ -61,7 +64,7 @@ Template:
 
 - **only-seed-private**: Boolean (default = false). Only seed private torrents. Public torrents will be removed from the seeding list immediately after the download and file-moving completes.
 
-- **log-level**: String (default = "INFO"). Possible values are "DEBUG", "INFO", "WARNING", "ERROR", and "CRITICAL".
+- **log-level**: String (default = INFO). Possible values are "DEBUG", "INFO", "WARNING", "ERROR", and "CRITICAL".
 
 - **destinations:** Object. Specifies paths where categorized files should be copied after download completion. Entries include: `default`, `movies`, `tv-shows`, `music`, and `av`. The `default` must be a valid directory, and others can be left empty to use the default value.
 

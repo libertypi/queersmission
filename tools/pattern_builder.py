@@ -35,7 +35,8 @@ from pathlib import Path
 
 from regen import Regen
 
-join_root = Path(__file__).parent.resolve().joinpath
+script_dir = Path(__file__).resolve().parent
+entry_dir = script_dir.parent
 
 # fmt: off
 VIDEO_EXTS = {
@@ -79,7 +80,7 @@ def parse_args():
 
 def get_common_words(filename: str = "google-10000-english-usa-no-swears.txt"):
     # https://github.com/first20hours/google-10000-english
-    with open(join_root(filename), "r", encoding="utf-8") as f:
+    with open(script_dir.joinpath(filename), "r", encoding="utf-8") as f:
         words = tuple(map(str.lower, filter(None, map(str.strip, f))))
     if not words:
         raise ValueError(f"{filename} is empty.")
@@ -87,7 +88,7 @@ def get_common_words(filename: str = "google-10000-english-usa-no-swears.txt"):
 
 
 def read_pattern_file(filename: str):
-    path = join_root(filename)
+    path = script_dir.joinpath(filename)
     try:
         with open(path, "r+", encoding="utf-8") as f:
             old_data = f.read().splitlines()
@@ -185,14 +186,14 @@ def main():
 
     args = parse_args()
 
-    src = join_root("footprints-statistics.json")
-    dst = src.parents[1].joinpath("patterns.json")
+    src = script_dir.joinpath("footprints-statistics.json")
+    dst = entry_dir.joinpath("patterns.json")
     print(f"Source: {src}\nOutput: {dst}")
 
     # Read data from footprints
     try:
         shutil.copy(
-            src.parents[2].joinpath("footprints/data/footprints-statistics.json"), src
+            entry_dir.parent.joinpath("footprints/data/footprints-statistics.json"), src
         )
     except FileNotFoundError:
         print("Warning: Unable to update data file from footprints.")

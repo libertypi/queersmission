@@ -22,6 +22,7 @@ Author:
 """
 
 import base64
+import enum
 import json
 import logging
 import os
@@ -32,7 +33,6 @@ import subprocess
 import sys
 import time
 from collections import defaultdict
-from enum import Enum
 from functools import lru_cache
 from posixpath import splitext as posix_splitext
 from typing import List, Tuple
@@ -76,7 +76,17 @@ except ImportError:
             return self._noop
 
 
-class TransmissionClient:
+class TRStatus(enum.IntEnum):
+    STOPPED = 0
+    CHECK_WAIT = 1
+    CHECK = 2
+    DOWNLOAD_WAIT = 3
+    DOWNLOAD = 4
+    SEED_WAIT = 5
+    SEED = 6
+
+
+class TRClient:
     """A client for interacting with the Transmission RPC interface."""
 
     _SSID: str = "X-Transmission-Session-Id"
@@ -140,10 +150,8 @@ class TransmissionClient:
         assert False, "Unexpected error in the retry logic."
 
     def _torrent_action(self, method: str, ids=None, arguments: dict = None):
-        """
-        A handler for torrent-related actions. If `ids` is omitted, all torrents
-        are used. If `ids` is an empty list, no torrent is returned.
-        """
+        """A handler for torrent-related actions. If `ids` is omitted, all
+        torrents are used. If `ids` is an empty list, no torrent is returned."""
         if ids is not None:
             if arguments is None:
                 arguments = {"ids": ids}
@@ -241,7 +249,7 @@ class StorageManager:
 
     def __init__(
         self,
-        client: TransmissionClient,
+        client: TRClient,
         seed_dir_cleanup: bool = False,
         size_limit_gb: int = None,
         space_floor_gb: int = None,
@@ -353,11 +361,10 @@ class StorageManager:
             ids=[t["id"] for t in self.torrents],
         )["torrents"]
         data.sort(key=self._torrent_value)
-        # Status: stopped, queued to seed, seeding
-        rm_status = {0, 5, 6}
         # Torrents are only removed if they have been completed for more than 12
         # hours, in case they have not been fully copied.
         threshold = time.time() - 43200
+        rm_status = {TRStatus.STOPPED, TRStatus.SEED_WAIT, TRStatus.SEED}
         ids = []
         for t in data:
             if (
@@ -403,7 +410,7 @@ class StorageManager:
         return gb * 1073741824 if gb and gb > 0 else 0
 
 
-class Cat(Enum):
+class Cat(enum.Enum):
     """Enumeration for categorizing torrent files."""
 
     DEFAULT = "default"
@@ -550,7 +557,7 @@ class Categorizer:
 
 def process_torrent_done(
     tid: int,
-    client: TransmissionClient,
+    client: TRClient,
     dsts: dict,
     private_only: bool,
 ):
@@ -688,6 +695,7 @@ def parse_config(config_path: str) -> dict:
     """Parse and validate the configuration file."""
     config = {
         "rpc-port": 9091,
+        "rpc-url": "/transmission/rpc",
         "rpc-username": "",
         "rpc-password": "",
         "download-dir": "",
@@ -710,12 +718,11 @@ def parse_config(config_path: str) -> dict:
             config.update(json.load(f))
 
         # Validation
-        if not isinstance(config["rpc-port"], int):
-            raise ValueError("The 'rpc-port' must be an integer.")
-        if config["download-dir"] and not op.isdir(config["download-dir"]):
+        d = config["download-dir"]
+        if d and not op.isdir(d):
             raise ValueError("The 'download-dir' is not a valid directory.")
         if not op.isdir(config["destinations"][Cat.DEFAULT.value]):
-            raise ValueError("The 'destinations' default must be a valid directory.")
+            raise ValueError("The 'destinations.default' is not a valid directory.")
 
         # Password
         p: str = config["rpc-password"]
@@ -741,17 +748,15 @@ def parse_config(config_path: str) -> dict:
         return config
 
 
-def config_logger(logger: logging.Logger, logfile: str, log_level="INFO") -> None:
+def config_logger(logger: logging.Logger, logfile: str, level="INFO") -> None:
     """Configure the logging system with both console and file handlers."""
     logger.handlers.clear()
-    log_level = {
-        "DEBUG": logging.DEBUG,
-        "INFO": logging.INFO,
-        "WARNING": logging.WARNING,
-        "ERROR": logging.ERROR,
-        "CRITICAL": logging.CRITICAL,
-    }.get(log_level.upper(), logging.INFO)
-    logger.setLevel(log_level)
+    level = level.upper()
+    if level in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
+        level = getattr(logging, level)
+    else:
+        level = logging.INFO
+    logger.setLevel(level)
 
     # Console handler
     handler = logging.StreamHandler()
@@ -780,8 +785,9 @@ def main():
         flock.acquire()
         start = time.time()
 
-        client = TransmissionClient(
+        client = TRClient(
             port=conf["rpc-port"],
+            path=conf["rpc-url"],
             username=conf["rpc-username"],
             password=conf["rpc-password"],
             seed_dir=conf["download-dir"],

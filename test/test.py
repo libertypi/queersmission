@@ -6,8 +6,10 @@ import os.path as op
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
-sys.path.append(op.realpath(f"{__file__}/../.."))
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+
 from queersmission import copy_file
 
 
