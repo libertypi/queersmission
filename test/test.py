@@ -8,10 +8,7 @@ import tempfile
 import unittest
 
 sys.path.append(op.realpath(f"{__file__}/../.."))
-import queersmission
-from queersmission import copy_file, move_file
-
-queersmission.logger.setLevel(logging.ERROR)
+from queersmission import copy_file
 
 
 class TestFileOperations(unittest.TestCase):
@@ -37,47 +34,39 @@ class TestFileOperations(unittest.TestCase):
         with open(file, "r") as f:
             self.assertEqual(f.read(), content)
 
-    def _run(self, src, dst, func):
+    def run_copy(self, src, dst_dir):
         src = op.normpath(src)
-        dst = op.normpath(dst)
+        dst_dir = op.normpath(dst_dir)
         if not op.isdir(src):
-            dst = op.join(dst, op.splitext(op.basename(src))[0])
-        os.makedirs(dst, exist_ok=True)
-        dst = op.join(dst, op.basename(src))
-        func(src, dst)
-
-    def run_copy(self, src, dst):
-        self._run(src, dst, copy_file)
-
-    def run_move(self, src, dst):
-        self._run(src, dst, move_file)
+            dst_dir = op.join(dst_dir, op.splitext(op.basename(src))[0])
+        os.makedirs(dst_dir, exist_ok=True)
+        dst = op.join(dst_dir, op.basename(src))
+        copy_file(src, dst)
 
     def test_raise1(self):
         src, dst = self.src, self.dst
+        logging.disable(logging.WARNING)
         # dir -> file
         self.touch(f"{src}/dir/file.txt")
         self.touch(f"{dst}/dir")
         with self.assertRaises(OSError):
             self.run_copy(f"{src}/dir", dst)
-        with self.assertRaises(OSError):
-            self.run_move(f"{src}/dir", dst)
+        logging.disable(logging.NOTSET)
 
     def test_raise2(self):
         src, dst = self.src, self.dst
+        logging.disable(logging.WARNING)
         # file -> dir
         self.touch(f"{src}/file.txt")
         # empty dst dir
         os.makedirs(f"{dst}/file/file.txt")
         with self.assertRaises(OSError):
             self.run_copy(f"{src}/file.txt", dst)
-        with self.assertRaises(OSError):
-            self.run_move(f"{src}/file.txt", dst)
         # non-empty
         self.touch(f"{dst}/file/file.txt/file.txt")
         with self.assertRaises(OSError):
             self.run_copy(f"{src}/file.txt", dst)
-        with self.assertRaises(OSError):
-            self.run_move(f"{src}/file.txt", dst)
+        logging.disable(logging.NOTSET)
 
     def test_copy_dir1(self):
         src, dst = self.src, self.dst
@@ -111,38 +100,6 @@ class TestFileOperations(unittest.TestCase):
         self.assertFileContent(f"{dst}/dir/file2.txt", "src")
         self.assertTrue(op.isfile(f"{dst}/dir/file3.txt"))
 
-    def test_move_dir1(self):
-        src, dst = self.src, self.dst
-        # move dir
-        self.touch(f"{src}/dir/file.txt")
-        self.run_move(f"{src}/dir", dst)
-        self.assertFalse(op.exists(f"{src}/dir"))
-        self.assertTrue(op.isfile(f"{dst}/dir/file.txt"))
-
-    def test_move_dir2(self):
-        src, dst = self.src, self.dst
-        # overwrite move
-        self.touch(f"{src}/dir/file.txt", "src")
-        self.touch(f"{dst}/dir/file.txt")
-        self.run_move(f"{src}/dir", dst)
-        self.assertFalse(op.exists(f"{src}/dir"))
-        self.assertFileContent(f"{dst}/dir/file.txt", "src")
-        self.assertFalse(op.exists(f"{dst}/dir/dir"))
-
-    def test_move_dir3(self):
-        src, dst = self.src, self.dst
-        # merge move
-        self.touch(f"{src}/dir/file1.txt", "src")
-        self.touch(f"{src}/dir/file2.txt", "src")
-        self.touch(f"{dst}/dir/file1.txt")
-        self.touch(f"{dst}/dir/file3.txt")
-
-        self.run_move(f"{src}/dir", dst)
-        self.assertFalse(op.exists(f"{src}/dir"))
-        self.assertFileContent(f"{dst}/dir/file1.txt", "src")
-        self.assertFileContent(f"{dst}/dir/file2.txt", "src")
-        self.assertTrue(op.isfile(f"{dst}/dir/file3.txt"))
-
     def test_copy_file1(self):
         src, dst = self.src, self.dst
         # copy file
@@ -158,23 +115,6 @@ class TestFileOperations(unittest.TestCase):
         self.touch(f"{dst}/file/file.txt")
         self.run_copy(f"{src}/file.txt", dst)
         self.assertTrue(op.isfile(f"{src}/file.txt"))
-        self.assertFileContent(f"{dst}/file/file.txt", "src")
-
-    def test_move_file1(self):
-        src, dst = self.src, self.dst
-        # move file
-        self.touch(f"{src}/file.txt")
-        self.run_move(f"{src}/file.txt", dst)
-        self.assertFalse(op.exists(f"{src}/file.txt"))
-        self.assertTrue(op.isfile(f"{dst}/file/file.txt"))
-
-    def test_move_file2(self):
-        src, dst = self.src, self.dst
-        # overwrite file
-        self.touch(f"{src}/file.txt", "src")
-        self.touch(f"{dst}/file/file.txt")
-        self.run_move(f"{src}/file.txt", dst)
-        self.assertFalse(op.exists(f"{src}/file.txt"))
         self.assertFileContent(f"{dst}/file/file.txt", "src")
 
 

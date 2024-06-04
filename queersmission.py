@@ -28,6 +28,7 @@ import os
 import os.path as op
 import re
 import shutil
+import subprocess
 import sys
 import time
 from collections import defaultdict
@@ -59,7 +60,7 @@ try:
             logger.debug("Lock acquired.")
 
         def release(self) -> None:
-            if self.fd:
+            if self.fd is not None:
                 fcntl.flock(self.fd, fcntl.LOCK_UN)
                 self.fd.close()
                 self.fd = None
@@ -68,14 +69,11 @@ try:
 except ImportError:
 
     class FileLocker:
-        def __init__(self, lockfile: str) -> None:
-            pass
+        def __init__(self, *args, **kwargs):
+            self._noop = lambda *args, **kwargs: None
 
-        def acquire(self) -> None:
-            pass
-
-        def release(self) -> None:
-            pass
+        def __getattr__(self, _):
+            return self._noop
 
 
 class TransmissionClient:
@@ -111,7 +109,7 @@ class TransmissionClient:
         else:
             self.is_localhost = False
             self._path_module = None
-            self.normpath = self._init_normpath
+            self.normpath = self._set_normpath
         self._user_seed_dir = seed_dir
 
     def _call(self, method: str, arguments: dict = None) -> dict:
@@ -141,31 +139,59 @@ class TransmissionClient:
 
         assert False, "Unexpected error in the retry logic."
 
+    def _torrent_action(self, method: str, ids=None, arguments: dict = None):
+        """
+        A handler for torrent-related actions. If `ids` is omitted, all torrents
+        are used. If `ids` is an empty list, no torrent is returned.
+        """
+        if ids is not None:
+            if arguments is None:
+                arguments = {"ids": ids}
+            else:
+                arguments["ids"] = ids
+        return self._call(method, arguments)
+
+    def torrent_start(self, ids=None):
+        self._torrent_action("torrent-start", ids)
+
+    def torrent_start_now(self, ids=None):
+        self._torrent_action("torrent-start-now", ids)
+
+    def torrent_stop(self, ids=None):
+        self._torrent_action("torrent-stop", ids)
+
+    def torrent_verify(self, ids=None):
+        self._torrent_action("torrent-verify", ids)
+
+    def torrent_reannounce(self, ids=None):
+        self._torrent_action("torrent-reannounce", ids)
+
+    def torrent_get(self, fields: List[str], ids=None) -> dict:
+        return self._torrent_action(
+            "torrent-get",
+            ids=ids,
+            arguments={"fields": fields},
+        )
+
+    def torrent_remove(self, ids, delete_local_data: bool):
+        self._torrent_action(
+            "torrent-remove",
+            ids=ids,
+            arguments={"delete-local-data": delete_local_data},
+        )
+
+    def torrent_set_location(self, ids, location: str, move: bool):
+        self._torrent_action(
+            "torrent-set-location",
+            ids=ids,
+            arguments={"location": location, "move": move},
+        )
+
     def session_get(self) -> dict:
         """Get the session details, cached."""
         if self._session_data is None:
             self._session_data = self._call("session-get")
         return self._session_data
-
-    def torrent_get(self, fields: List[str], ids=None) -> dict:
-        arguments = {"fields": fields}
-        if ids is not None:
-            # If `ids` is absent, all torrents are returned. If `ids` is an
-            # empty list, an empty list is returned.
-            arguments["ids"] = ids
-        return self._call("torrent-get", arguments)
-
-    def torrent_remove(self, ids, delete_local_data: bool) -> None:
-        self._call(
-            "torrent-remove",
-            {"ids": ids, "delete-local-data": delete_local_data},
-        )
-
-    def set_location(self, ids, location: str, move: bool) -> None:
-        self._call(
-            "torrent-set-location",
-            {"ids": ids, "location": location, "move": move},
-        )
 
     def get_freespace(self, path: str = None) -> int:
         """Tests how much free space is available in a client-specified folder.
@@ -188,7 +214,7 @@ class TransmissionClient:
             self._seed_dir = self.normpath(s)
         return self._seed_dir
 
-    def _init_normpath(self, path: str) -> str:
+    def _set_normpath(self, path: str) -> str:
         """Dynamically update `normpath` for the remote host."""
         self.normpath = self.get_path_module().normpath
         return self.normpath(path)
@@ -311,8 +337,8 @@ class StorageManager:
         size_to_free = self._calculate_size_to_free()
         if size_to_free <= 0:
             return
-
         logger.debug("%s bytes need to be freed from disk.", size_to_free)
+
         data: list = self.client.torrent_get(
             fields=(
                 "activityDate",
@@ -529,67 +555,61 @@ def process_torrent_done(
     private_only: bool,
 ):
     """Process the completion of a torrent download."""
-    # +------------+--------------+-----------------+---------------------------+
-    # | is_private | private_only | src_in_seed_dir | Action                    |
-    # +------------+--------------+-----------------+---------------------------+
-    # | No         | Yes          | Yes             | Remove from Transmission, |
-    # |            |              |                 | move src to dst.          |
-    # +------------+--------------+-----------------+---------------------------+
-    # | No         | Yes          | No              | Remove from Transmission. |
-    # +------------+--------------+-----------------+---------------------------+
-    # | Yes/No     | No           | Yes             | Copy src to dst.          |
-    # | Yes        | Yes          |                 |                           |
-    # +------------+--------------+-----------------+---------------------------+
-    # | Yes/No     | No           | No              | Copy src to seed_dir,     |
-    # | Ye         | Yes          |                 | set new location.         |
-    # +------------+--------------+-----------------+---------------------------+
+    # +-----------------+-------------------+---------------------------+
+    # | src_in_seed_dir | remove_after_copy | Action                    |
+    # +-----------------+-------------------+---------------------------+
+    # | Yes             | Yes               | Copy src to dst.          |
+    # |                 |                   | Delete files and remove.  |
+    # +-----------------+-------------------+---------------------------+
+    # | Yes             | No                | Copy src to dst.          |
+    # +-----------------+-------------------+---------------------------+
+    # | No              | Yes               | Keep files and remove.    |
+    # +-----------------+-------------------+---------------------------+
+    # | No              | No                | Copy src to seed_dir,     |
+    # |                 |                   | set new location.         |
+    # +-----------------+-------------------+---------------------------+
+    # *remove_after_copy: True if user only seed private and torrent is public
 
     assert isinstance(tid, int), "Torrent ID must be an integer."
     if not client.is_localhost:
         raise ValueError("Cannot manage download completion on a remote host.")
 
     data = client.torrent_get(
-        fields=("name", "downloadDir", "files", "isPrivate"),
-        ids=tid,
+        fields=("downloadDir", "files", "isPrivate", "name"), ids=tid
     )["torrents"][0]
 
-    download_dir = op.realpath(data["downloadDir"])
-    seed_dir = client.seed_dir
-    src_in_seed_dir = is_subpath(download_dir, seed_dir)
+    src_dir = op.realpath(data["downloadDir"])
     name = data["name"]
-    src = op.join(download_dir, name)
+    src = op.join(src_dir, name)
+    seed_dir = client.seed_dir
+
+    src_in_seed_dir = is_subpath(src_dir, seed_dir)
+    remove_after_copy = private_only and not data["isPrivate"]
 
     # Determine the destination
     if src_in_seed_dir:
-        dst = Categorizer().categorize(data["files"])
-        logger.info("Categorize '%s' as: %s", name, dst.name)
-        dst = op.realpath(dsts.get(dst.value) or dsts[Cat.DEFAULT.value])
-        if not is_dir(src):
-            # Create a directory for a single file torrent
-            dst = op.join(dst, op.splitext(name)[0])
+        cat = Categorizer().categorize(data["files"])
+        logger.info("Categorize '%s' as: %s", name, cat.name)
+        dst_dir = op.realpath(dsts.get(cat.value) or dsts[Cat.DEFAULT.value])
+        # Create a directory for a single file torrent
+        if not op.isdir(src):
+            dst_dir = op.join(dst_dir, op.splitext(name)[0])
     else:
-        dst = seed_dir
+        dst_dir = seed_dir
 
-    # Make sure the parent dir exists
-    os.makedirs(dst, exist_ok=True)
-    dst = op.join(dst, name)
-
-    if private_only and not data["isPrivate"]:
-        # Torrent is not private and user only seeds private
-        logger.info("Remove public torrent: %s", name)
-        client.torrent_remove(tid, delete_local_data=False)
-        if src_in_seed_dir:
-            logger.info("Move: '%s' -> '%s'", src, dst)
-            move_file(src, dst)
-    else:
-        # Torrent is private or user seeds any torrents
+    # File operations
+    if src_in_seed_dir or not remove_after_copy:
+        dst = op.join(dst_dir, name)
         logger.info("Copy: '%s' -> '%s'", src, dst)
+        os.makedirs(dst_dir, exist_ok=True)
         copy_file(src, dst)
-        if not src_in_seed_dir:
-            client.set_location(tid, seed_dir, move=False)
 
-
-is_dir = lru_cache(op.isdir)
+    # Remove or redirect the torrent
+    if remove_after_copy:
+        logger.info("Remove public torrent: %s", name)
+        client.torrent_remove(tid, delete_local_data=src_in_seed_dir)
+    elif not src_in_seed_dir:
+        client.torrent_set_location(tid, seed_dir, move=False)
 
 
 def is_subpath(child: str, parent: str, sep: str = os.sep) -> bool:
@@ -604,7 +624,7 @@ def is_subpath(child: str, parent: str, sep: str = os.sep) -> bool:
 
 def _copy_file_fallback(src: str, dst: str) -> None:
     """Copy src to dst using shutil."""
-    if is_dir(src):
+    if op.isdir(src):
         shutil.copytree(
             src, dst, symlinks=True, copy_function=shutil.copy, dirs_exist_ok=True
         )
@@ -618,7 +638,6 @@ def _copy_file_fallback(src: str, dst: str) -> None:
 if os.name == "nt":
     copy_file = _copy_file_fallback
 else:
-    import subprocess
 
     def copy_file(src: str, dst: str) -> None:
         """
@@ -631,10 +650,11 @@ else:
         """
         try:
             subprocess.run(
-                ("cp", "-d", "-R", "-f", "-T", "--reflink=auto", "--", src, dst),
+                ("cp", "-d", "--force", "--recursive", "--reflink=auto",
+                 "--no-target-directory", "--", src, dst),
                 check=True,
                 capture_output=True,
-            )
+            )  # fmt: skip
         except subprocess.CalledProcessError as e:
             logger.warning(e.stderr.strip().decode())
         except FileNotFoundError as e:
@@ -642,20 +662,6 @@ else:
         else:
             return
         _copy_file_fallback(src, dst)
-
-
-def move_file(src: str, dst: str) -> None:
-    """Move src to dst, using the same conflict handling logic as
-    copy_file()."""
-    try:
-        os.rename(src, dst)
-    except OSError:
-        # dst is a non-empty directory or on a different filesystem
-        copy_file(src, dst)
-        if is_dir(src):
-            shutil.rmtree(src, ignore_errors=True)
-        else:
-            os.unlink(src)
 
 
 re_compile = lru_cache(maxsize=None)(re.compile)

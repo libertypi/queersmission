@@ -35,7 +35,7 @@ from pathlib import Path
 
 from regen import Regen
 
-join_root = Path(__file__).parent.joinpath
+join_root = Path(__file__).parent.resolve().joinpath
 
 # fmt: off
 VIDEO_EXTS = {
@@ -63,7 +63,6 @@ def parse_args():
     parser.add_argument(
         "-n",
         dest="max_prefixes",
-        action="store",
         type=int,
         default=4000,
         help="Maximum number of prefixes to draw from data (default: %(default)s).",
@@ -71,7 +70,6 @@ def parse_args():
     parser.add_argument(
         "-m",
         dest="max_keywords",
-        action="store",
         type=int,
         default=150,
         help="Maximum number of keywords to draw from data (default: %(default)s).",
