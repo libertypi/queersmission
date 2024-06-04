@@ -247,6 +247,8 @@ class TRClient:
 
 class StorageManager:
 
+    _maindata = None
+
     def __init__(
         self,
         client: TRClient,
@@ -266,32 +268,39 @@ class StorageManager:
         self.seed_dir_cleanup = seed_dir_cleanup
         self.watch_dir = watch_dir if watch_dir_cleanup else None
 
-        self._init_maindata()
+    def _get_maindata(self) -> Tuple[List[dict], set]:
+        """Retrieve a list of torrents located in `seed_dir`, and a set of their
+        first path segment after `seed_dir`."""
+        if self._maindata is None:
+            torrents = []
+            allowed = set()
+            seed_dir = self.client.seed_dir
+            sep = self.client.get_path_module().sep
+            data = self.client.torrent_get(
+                fields=("downloadDir", "id", "name", "sizeWhenDone")
+            )["torrents"]
+            for t in data:
+                if seed_dir == t["downloadDir"]:
+                    allowed.add(t["name"])
+                else:
+                    path = self.client.normpath(t["downloadDir"])
+                    if not is_subpath(path, seed_dir, sep):
+                        # torrent is outside of seed_dir
+                        continue
+                    # find the first segment after seed_dir
+                    path = path[len(seed_dir) :].lstrip(sep).partition(sep)[0]
+                    allowed.add(path or t["name"])
+                torrents.append(t)
+            self._maindata = torrents, allowed
+        return self._maindata
 
-    def _init_maindata(self) -> None:
-        """Retrieve and filter torrents located in `seed_dir`."""
+    @property
+    def torrents(self) -> List[dict]:
+        return self._get_maindata()[0]
 
-        self.torrents = torrents = []
-        self.allowed = allowed = set()
-
-        data = self.client.torrent_get(
-            fields=("downloadDir", "id", "name", "sizeWhenDone")
-        )["torrents"]
-        seed_dir = self.client.seed_dir
-        sep = self.client.get_path_module().sep
-
-        for t in data:
-            if seed_dir == t["downloadDir"]:
-                allowed.add(t["name"])
-            else:
-                path = self.client.normpath(t["downloadDir"])
-                if not is_subpath(path, seed_dir, sep):
-                    # torrent is outside of seed_dir
-                    continue
-                # find the first segment after seed_dir
-                path = path[len(seed_dir) :].lstrip(sep).partition(sep)[0]
-                allowed.add(path or t["name"])
-            torrents.append(t)
+    @property
+    def allowed(self) -> set:
+        return self._get_maindata()[1]
 
     def cleanup(self) -> None:
         """Perform the enabled cleanup tasks."""
@@ -718,23 +727,23 @@ def parse_config(config_path: str) -> dict:
             config.update(json.load(f))
 
         # Validation
-        d = config["download-dir"]
-        if d and not op.isdir(d):
+        v = config["download-dir"]
+        if v and not op.isdir(v):
             raise ValueError("The 'download-dir' is not a valid directory.")
         if not op.isdir(config["destinations"][Cat.DEFAULT.value]):
             raise ValueError("The 'destinations.default' is not a valid directory.")
 
         # Password
-        p: str = config["rpc-password"]
-        if p:
-            if p[0] == "{" and p[-1] == "}":
-                config["rpc-password"] = base64.b64decode(p[-2:0:-1]).decode()
+        v = config["rpc-password"]
+        if v:
+            if v[0] == "{" and v[-1] == "}":
+                config["rpc-password"] = base64.b64decode(v[-2:0:-1]).decode()
             else:
                 config["rpc-password"] = (
-                    f"{{{base64.b64encode(p.encode()).decode()[::-1]}}}"
+                    f"{{{base64.b64encode(v.encode()).decode()[::-1]}}}"
                 )
                 _dump_config(config)
-                config["rpc-password"] = p
+                config["rpc-password"] = v
 
     except FileNotFoundError:
         _dump_config(config)
@@ -812,7 +821,7 @@ def main():
                     str(e),
                 )
 
-        sm = StorageManager(
+        storage = StorageManager(
             client=client,
             seed_dir_cleanup=conf["download-dir-cleanup-enable"],
             size_limit_gb=conf["download-dir-size-limit-gb"],
@@ -820,8 +829,8 @@ def main():
             watch_dir=conf["watch-dir"],
             watch_dir_cleanup=conf["watch-dir-cleanup-enable"],
         )
-        sm.cleanup()
-        sm.apply_quotas()
+        storage.cleanup()
+        storage.apply_quotas()
 
     except Exception as e:
         logger.critical(str(e))
