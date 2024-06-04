@@ -351,10 +351,29 @@ class StorageManager:
 
     def apply_quotas(self) -> None:
         """Enforce size limits and free space requirements in seed_dir."""
-        size_to_free = self._calculate_size_to_free()
-        if size_to_free <= 0:
-            return
-        logger.debug("%s bytes need to be freed from disk.", size_to_free)
+        # Calculate the total size that needs to be freed.
+        size_to_free = 0
+        if self.size_limit:
+            n = sum(t["sizeWhenDone"] for t in self.torrents) - self.size_limit
+            if n > 0:
+                logger.debug("Total size limit exceeded by %s bytes.", n)
+                size_to_free = n
+        if self.space_floor:
+            n = self.space_floor - self.client.get_freespace()
+            if n > 0:
+                logger.debug("Free space below threshold by %s bytes.", n)
+                if n > size_to_free:
+                    size_to_free = n
+        if size_to_free > 0:
+            logger.debug("%s bytes need to be freed from disk.", size_to_free)
+            self._remove_inactive_torrents(size_to_free)
+
+    def _remove_inactive_torrents(self, size_to_free: int):
+        # Torrents are only removed if they have been completed for more than 12
+        # hours, in case they have not been fully copied.
+        threshold = time.time() - 43200
+        rm_status = {TRStatus.STOPPED, TRStatus.SEED_WAIT, TRStatus.SEED}
+        ids = []
 
         data: list = self.client.torrent_get(
             fields=(
@@ -369,13 +388,10 @@ class StorageManager:
             ),
             ids=[t["id"] for t in self.torrents],
         )["torrents"]
-        data.sort(key=self._torrent_value)
-        # Torrents are only removed if they have been completed for more than 12
-        # hours, in case they have not been fully copied.
-        threshold = time.time() - 43200
-        rm_status = {TRStatus.STOPPED, TRStatus.SEED_WAIT, TRStatus.SEED}
-        ids = []
-        for t in data:
+        data.sort(key=self._torrent_value, reverse=True)
+
+        while data and size_to_free > 0:
+            t = data.pop()
             if (
                 t["status"] in rm_status
                 and t["percentDone"] == 1
@@ -384,26 +400,9 @@ class StorageManager:
                 logger.info("Remove torrent: %s", t["name"])
                 ids.append(t["id"])
                 size_to_free -= t["sizeWhenDone"]
-                if size_to_free <= 0:
-                    break
+
         if ids:
             self.client.torrent_remove(ids, delete_local_data=True)
-
-    def _calculate_size_to_free(self) -> int:
-        """Calculate the total size that needs to be freed."""
-        size_to_free = 0
-        if self.size_limit:
-            n = sum(t["sizeWhenDone"] for t in self.torrents) - self.size_limit
-            if n > 0:
-                logger.debug("Total size limit exceeded by %s bytes.", n)
-                size_to_free = n
-        if self.space_floor:
-            n = self.space_floor - self.client.get_freespace()
-            if n > 0:
-                logger.debug("Free space below threshold by %s bytes.", n)
-                if n > size_to_free:
-                    size_to_free = n
-        return size_to_free
 
     @staticmethod
     def _torrent_value(t: dict) -> Tuple[float, int]:
