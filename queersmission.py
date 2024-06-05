@@ -40,6 +40,7 @@ from typing import List, Tuple
 import requests
 
 logger = logging.getLogger(__name__)
+script_root = op.abspath(op.dirname(__file__))
 
 try:
     import fcntl
@@ -434,15 +435,15 @@ class Categorizer:
     _VIDEO_THRESH = 52428800  # 50 MiB
     VIDEO, AUDIO, DEFAULT = range(3)
 
-    def __init__(self, pattern_file: str = None) -> None:
+    def __init__(self, patternfile: str = None) -> None:
         """Initialize the Categorizer with data from the pattern file."""
 
-        if pattern_file is None:
-            pattern_file = op.join(op.dirname(__file__), "patterns.json")
-        with open(pattern_file, "r", encoding="utf-8") as f:
+        if patternfile is None:
+            patternfile = op.join(script_root, "patterns.json")
+        with open(patternfile, "r", encoding="utf-8") as f:
             data = json.load(f)
         if not all(data.values()):
-            raise ValueError(f"Empty entry in pattern file: {pattern_file}")
+            raise ValueError(f"Empty entry in pattern file: {patternfile}")
 
         self.video_ext = frozenset(data["video_exts"])
         self.audio_ext = frozenset(data["audio_exts"])
@@ -700,7 +701,7 @@ except AttributeError:
     removesuffix = lambda s, f: s[: -len(f)] if f and s.endswith(f) else s
 
 
-def parse_config(config_path: str) -> dict:
+def parse_config(configfile: str) -> dict:
     """Parse and validate the configuration file."""
     config = {
         "rpc-port": 9091,
@@ -719,11 +720,11 @@ def parse_config(config_path: str) -> dict:
     }
 
     def _dump_config(data):
-        with open(config_path, "w", encoding="utf-8") as f:
+        with open(configfile, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4, ensure_ascii=False)
 
     try:
-        with open(config_path, "r", encoding="utf-8") as f:
+        with open(configfile, "r", encoding="utf-8") as f:
             config.update(json.load(f))
 
         # Validation
@@ -748,7 +749,7 @@ def parse_config(config_path: str) -> dict:
     except FileNotFoundError:
         _dump_config(config)
         sys.exit(
-            f"A blank configuration file has been created at '{config_path}'. "
+            f"A blank configuration file has been created at '{configfile}'. "
             "Edit the settings before running this script again."
         )
     except Exception as e:
@@ -785,9 +786,8 @@ def config_logger(logger: logging.Logger, logfile: str, level="INFO") -> None:
 
 def main():
 
-    script_dir = op.dirname(__file__)
-    conf = parse_config(op.join(script_dir, "config.json"))
-    config_logger(logger, op.join(script_dir, "logfile.log"), conf["log-level"])
+    conf = parse_config(op.join(script_root, "config.json"))
+    config_logger(logger, op.join(script_root, "logfile.log"), conf["log-level"])
 
     flock = FileLocker(__file__)
     try:
