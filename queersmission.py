@@ -416,7 +416,7 @@ class StorageManager:
 
     @staticmethod
     def _gb_to_bytes(gb: int):
-        return gb * 1073741824 if gb and gb > 0 else 0
+        return gb * 1073741824 if gb and gb > 0 else None
 
 
 class Cat(enum.Enum):
@@ -606,7 +606,7 @@ def process_torrent_done(
     if src_in_seed_dir:
         cat = Categorizer().categorize(data["files"])
         logger.info("Categorize '%s' as: %s", name, cat.name)
-        dst_dir = op.realpath(dsts.get(cat.value) or dsts[Cat.DEFAULT.value])
+        dst_dir = op.normpath(dsts.get(cat.value) or dsts[Cat.DEFAULT.value])
         # Create a directory for a single file torrent
         if not op.isdir(src):
             dst_dir = op.join(dst_dir, op.splitext(name)[0])
