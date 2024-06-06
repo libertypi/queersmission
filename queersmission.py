@@ -333,7 +333,7 @@ class StorageManager:
                 logger.error(str(e))
 
     def _clean_watch_dir(self) -> None:
-        """Remove old and zero-length ".torrent" files from watch dir."""
+        """Remove old or zero-length '.torrent' files from the watch-dir."""
         assert self.watch_dir, "'watch_dir' should not be null or empty."
         try:
             with os.scandir(self.watch_dir) as it:
@@ -352,7 +352,6 @@ class StorageManager:
 
     def apply_quotas(self) -> None:
         """Enforce size limits and free space requirements in seed_dir."""
-        # Calculate the total size that needs to be freed.
         size_to_free = 0
         if self.size_limit:
             n = sum(t["sizeWhenDone"] for t in self.torrents) - self.size_limit
@@ -365,18 +364,27 @@ class StorageManager:
                 logger.debug("Free space below threshold by %s bytes.", n)
                 if n > size_to_free:
                     size_to_free = n
-        if size_to_free > 0:
-            logger.debug("%s bytes need to be freed from disk.", size_to_free)
-            self._remove_inactive_torrents(size_to_free)
+        if size_to_free <= 0:
+            logger.debug("No need to free up space.")
+            return
 
-    def _remove_inactive_torrents(self, size_to_free: int):
-        # Torrents are only removed if they have been completed for more than 12
-        # hours, in case they have not been fully copied.
-        threshold = time.time() - 43200
-        rm_status = {TRStatus.STOPPED, TRStatus.SEED_WAIT, TRStatus.SEED}
-        ids = []
+        logger.debug("%s bytes need to be freed from disk.", size_to_free)
+        results = self._find_inactive_torrents(size_to_free)
+        if results:
+            logger.info(
+                "Remove %s torrent(s) to free up %s bytes: %s",
+                len(results),
+                sum(t["sizeWhenDone"] for t in results),
+                ", ".join(t["name"] for t in results),
+            )
+            self.client.torrent_remove(
+                ids=tuple(t["id"] for t in results),
+                delete_local_data=True,
+            )
 
-        data: list = self.client.torrent_get(
+    def _find_inactive_torrents(self, size_to_free: int) -> List[dict]:
+        """Find the least active torrents to free up space."""
+        torrents = self.client.torrent_get(
             fields=(
                 "activityDate",
                 "doneDate",
@@ -387,33 +395,38 @@ class StorageManager:
                 "status",
                 "trackerStats",
             ),
-            ids=[t["id"] for t in self.torrents],
+            ids=tuple(t["id"] for t in self.torrents),
         )["torrents"]
-        data.sort(key=self._torrent_value)
 
-        for t in data:
+        # Filter out torrents. Torrents are only removed if they have been
+        # completed for more than 12 hours to avoid race conditions.
+        threshold = time.time() - 43200
+        rm_status = {TRStatus.STOPPED, TRStatus.SEED_WAIT, TRStatus.SEED}
+        torrents = (
+            t
+            for t in torrents
+            if t["status"] in rm_status
+            and t["percentDone"] == 1
+            and 0 < t["doneDate"] < threshold
+        )
+
+        # Use a greedy approach to select torrents by leechers and idle time
+        results = []
+        for t in sorted(torrents, key=self._torrent_value):
             if size_to_free <= 0:
                 break
-            if (
-                t["status"] in rm_status
-                and t["percentDone"] == 1
-                and 0 < t["doneDate"] < threshold
-            ):
-                logger.info("Remove torrent: %s", t["name"])
-                ids.append(t["id"])
-                size_to_free -= t["sizeWhenDone"]
-
-        if ids:
-            self.client.torrent_remove(ids, delete_local_data=True)
+            size_to_free -= t["sizeWhenDone"]
+            results.append(t)
+        return results
 
     @staticmethod
-    def _torrent_value(t: dict) -> Tuple[float, int]:
-        """Return a tuple of `Value` and `activityDate`, where:
-        Value = Leechers * (Leechers / Seeders)
-        """
-        l = sum(i["leecherCount"] for i in t["trackerStats"])
-        s = sum(i["seederCount"] for i in t["trackerStats"]) or 1
-        return (l**2 / s, t["activityDate"])
+    def _torrent_value(t: dict) -> Tuple[int, int]:
+        leechers = sum(
+            tracker["leecherCount"]
+            for tracker in t["trackerStats"]
+            if tracker["leecherCount"] > 0
+        )
+        return leechers, t["activityDate"]
 
     @staticmethod
     def _gb_to_bytes(gb: int):
