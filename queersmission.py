@@ -312,7 +312,8 @@ class StorageManager:
 
     def _clean_seed_dir(self) -> None:
         """Remove files from seed_dir if they do not exist in Transmission."""
-        assert self.seed_dir_cleanup, "'seed_dir_cleanup' should be True."
+        if not self.seed_dir_cleanup:
+            raise ValueError("Flag 'seed_dir_cleanup' should be True.")
         allowed = self.allowed
         try:
             with os.scandir(self.client.seed_dir) as it:
@@ -334,7 +335,8 @@ class StorageManager:
 
     def _clean_watch_dir(self) -> None:
         """Remove old or zero-length '.torrent' files from the watch-dir."""
-        assert self.watch_dir, "'watch_dir' should not be null or empty."
+        if not self.watch_dir:
+            raise ValueError("'watch_dir' should not be null or empty.")
         try:
             with os.scandir(self.watch_dir) as it:
                 entries = tuple(e for e in it if e.name.lower().endswith(".torrent"))
@@ -382,8 +384,7 @@ class StorageManager:
                 delete_local_data=True,
             )
 
-    def _find_inactive_torrents(self, size_to_free: int) -> List[dict]:
-        """Find the least active torrents to free up space."""
+    def _get_removables(self):
         torrents = self.client.torrent_get(
             fields=(
                 "activityDate",
@@ -397,12 +398,11 @@ class StorageManager:
             ),
             ids=tuple(t["id"] for t in self.torrents),
         )["torrents"]
-
         # Filter out torrents. Torrents are only removed if they have been
         # completed for more than 12 hours to avoid race conditions.
         threshold = time.time() - 43200
         rm_status = {TRStatus.STOPPED, TRStatus.SEED_WAIT, TRStatus.SEED}
-        torrents = (
+        return (
             t
             for t in torrents
             if t["status"] in rm_status
@@ -410,27 +410,107 @@ class StorageManager:
             and 0 < t["doneDate"] < threshold
         )
 
-        # Use a greedy approach to select torrents by leechers and idle time
+    def _find_inactive_torrents(self, size_to_free: int) -> List[dict]:
+        """Find the least active torrents to delete to free up `size_to_free`
+        bytes of space.
+        """
         results = []
-        for t in sorted(torrents, key=self._torrent_value):
-            if size_to_free <= 0:
-                break
-            size_to_free -= t["sizeWhenDone"]
-            results.append(t)
-        return results
+        if size_to_free <= 0:
+            return results
 
-    @staticmethod
-    def _torrent_value(t: dict) -> Tuple[int, int]:
-        leechers = sum(
-            tracker["leecherCount"]
-            for tracker in t["trackerStats"]
-            if tracker["leecherCount"] > 0
+        # Categorize torrents based on leecher count.
+        with_leechers = []
+        leechers = []
+        for t in self._get_removables():
+            leecher = 0
+            for tracker in t["trackerStats"]:
+                i = tracker["leecherCount"]
+                if i > 0:  # skip "unknown" (-1)
+                    leecher += i
+            if leecher:
+                with_leechers.append(t)
+                leechers.append(leecher)
+            else:
+                # Add zero-leecher torrents to the results.
+                results.append(t)
+
+        # Select zero-leecher torrents from the least active ones until the
+        # required size is reached.
+        results.sort(key=lambda t: t["activityDate"])
+        for i, t in enumerate(results):
+            size_to_free -= t["sizeWhenDone"]
+            if size_to_free <= 0:
+                return results[: i + 1]
+
+        # Select torrents with leechers. The question is inverted to fit into
+        # the classical knapsack problem: How to select torrents to keep in
+        # order to maximize the total number of leechers?
+        sizes = tuple(t["sizeWhenDone"] for t in with_leechers)
+        survived = Knapsack(max_cells=1024**2).solve(
+            weights=sizes,
+            values=leechers,
+            capacity=sum(sizes) - size_to_free,
         )
-        return leechers, t["activityDate"]
+        results.extend(t for i, t in enumerate(with_leechers) if i not in survived)
+        return results
 
     @staticmethod
     def _gb_to_bytes(gb: int):
         return gb * 1073741824 if gb and gb > 0 else None
+
+
+class Knapsack:
+
+    def __init__(self, max_cells: int = None) -> None:
+        """If `max_cells` is None, no scaling is applied."""
+        if max_cells is not None and max_cells <= 0:
+            raise ValueError("max_cells must be None or a positive integer.")
+        self.max_cells = max_cells
+
+    def solve(self, weights: List[int], values: List[int], capacity: int):
+        """Solve the 0-1 knapsack problem. Return a set of indices of the items
+        to include to maximize value.
+        """
+        if capacity <= 0:
+            return set()
+
+        n = len(weights)
+        if capacity >= sum(weights):
+            return set(range(n))
+
+        # Scale down
+        if self.max_cells is not None:
+            i = self.ceil(capacity * n / self.max_cells)
+            if i > 1:
+                weights = tuple(self.ceil(w / i) for w in weights)
+                capacity //= i  # round up weights, round down capacity
+
+        # Fill dynamic programming table
+        dp = [[0] * (capacity + 1) for _ in range(n + 1)]
+        for i in range(1, n + 1):
+            weight = weights[i - 1]
+            value = values[i - 1]
+            for w in range(1, capacity + 1):
+                if weight <= w:
+                    dp[i][w] = max(dp[i - 1][w], dp[i - 1][w - weight] + value)
+                else:
+                    dp[i][w] = dp[i - 1][w]
+
+        # Backtrack to find which items are included
+        res = set()
+        w = capacity
+        for i in range(n, 0, -1):
+            if dp[i][w] != dp[i - 1][w]:
+                res.add(i - 1)
+                w -= weights[i - 1]
+
+        return res
+
+    @staticmethod
+    def ceil(n: float) -> int:
+        """Computes the ceiling of a number."""
+        i = int(n)
+        return i + 1 if n != i and n > 0 else i
 
 
 class Cat(enum.Enum):
@@ -578,6 +658,20 @@ class Categorizer:
         return False
 
 
+re_compile = lru_cache(maxsize=None)(re.compile)
+
+
+def re_test(pattern: str, string: str, _flags=re.A | re.I):
+    """Replace all '_' with '-', then perform an ASCII-only and case-insensitive
+    test."""
+    return re_compile(pattern, _flags).search(string.replace("_", "-"))
+
+
+def re_sub(pattern: str, repl, string: str, _flags=re.A | re.I):
+    """Perform an ASCII-only and case-insensitive substitution."""
+    return re_compile(pattern, _flags).sub(repl, string)
+
+
 def process_torrent_done(
     tid: int,
     client: TRClient,
@@ -600,7 +694,8 @@ def process_torrent_done(
     # +-----------------+-------------------+---------------------------+
     # *remove_after_copy: True if user only seed private and torrent is public
 
-    assert isinstance(tid, int), "Torrent ID must be an integer."
+    if not isinstance(tid, int):
+        raise ValueError("Torrent ID must be an integer.")
     if not client.is_localhost:
         raise ValueError("Cannot manage download completion on a remote host.")
 
@@ -680,11 +775,10 @@ else:
         """
         try:
             subprocess.run(
-                ("cp", "-d", "--force", "--recursive", "--reflink=auto",
-                 "--no-target-directory", "--", src, dst),
+                ("cp", "-d", "-f", "-R", "--reflink=auto", "-T", "--", src, dst),
                 check=True,
                 capture_output=True,
-            )  # fmt: skip
+            )
         except subprocess.CalledProcessError as e:
             logger.warning(e.stderr.strip().decode())
         except FileNotFoundError as e:
@@ -692,20 +786,6 @@ else:
         else:
             return
         _copy_file_fallback(src, dst)
-
-
-re_compile = lru_cache(maxsize=None)(re.compile)
-
-
-def re_test(pattern: str, string: str, _flags=re.A | re.I):
-    """Replace all '_' with '-', then perform an ASCII-only and case-insensitive
-    test."""
-    return re_compile(pattern, _flags).search(string.replace("_", "-"))
-
-
-def re_sub(pattern: str, repl, string: str, _flags=re.A | re.I):
-    """Perform an ASCII-only and case-insensitive substitution."""
-    return re_compile(pattern, _flags).sub(repl, string)
 
 
 try:
