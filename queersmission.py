@@ -212,7 +212,7 @@ class TRClient:
                 return shutil.disk_usage(path).free
             except OSError as e:
                 logger.warning(str(e))
-        return self._call("free-space", {"path": path})["size-bytes"]
+        return int(self._call("free-space", {"path": path})["size-bytes"])
 
     @property
     def seed_dir(self) -> str:
@@ -354,35 +354,37 @@ class StorageManager:
 
     def apply_quotas(self) -> None:
         """Enforce size limits and free space requirements in seed_dir."""
-        size_to_free = 0
-        if self.size_limit:
-            n = sum(t["sizeWhenDone"] for t in self.torrents) - self.size_limit
-            if n > 0:
-                logger.debug("Total size limit exceeded by %s bytes.", n)
-                size_to_free = n
+        size_to_free = excess = 0
         if self.space_floor:
-            n = self.space_floor - self.client.get_freespace()
-            if n > 0:
-                logger.debug("Free space below threshold by %s bytes.", n)
-                if n > size_to_free:
-                    size_to_free = n
+            size_to_free = self.space_floor - self.client.get_freespace()
+        if self.size_limit:
+            excess = sum(t["sizeWhenDone"] for t in self.torrents) - self.size_limit
+            if excess > size_to_free:
+                size_to_free = excess
+
         if size_to_free <= 0:
             logger.debug("No need to free up space.")
             return
+        if size_to_free == excess:
+            logger.info("Total size limit exceeded by %s.", humansize(size_to_free))
+        else:
+            logger.info("Free space below threshold by %s.", humansize(size_to_free))
 
-        logger.debug("%s bytes need to be freed from disk.", size_to_free)
         results = self._find_inactive_torrents(size_to_free)
         if results:
             logger.info(
-                "Remove %s torrent(s) to free up %s bytes: %s",
+                "Remove %d torrent%s to free %s: %s",
                 len(results),
-                sum(t["sizeWhenDone"] for t in results),
+                "" if len(results) == 1 else "s",
+                humansize(sum(t["sizeWhenDone"] for t in results)),
                 ", ".join(t["name"] for t in results),
             )
             self.client.torrent_remove(
                 ids=tuple(t["id"] for t in results),
                 delete_local_data=True,
             )
+        else:
+            logger.warning("No suitable torrents found for removal.")
 
     def _get_removables(self):
         """Retrieves a list of torrents that are candidates for removal."""
@@ -457,6 +459,7 @@ class StorageManager:
 
     @staticmethod
     def _gb_to_bytes(gb):
+        # Ensure output is int as `gb` is from user input which can be float
         return int(gb * 1073741824) if gb and gb > 0 else None
 
 
@@ -804,6 +807,15 @@ try:
     removesuffix = str.removesuffix  # Python 3.9+
 except AttributeError:
     removesuffix = lambda s, f: s[: -len(f)] if f and s.endswith(f) else s
+
+
+def humansize(size: int) -> str:
+    """Convert bytes to human readable sizes."""
+    for suffix in ("", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"):
+        if -1024 < size < 1024:
+            return f"{size:.2f} {suffix}B"
+        size /= 1024
+    return f"{size:.2f} YiB"
 
 
 def parse_config(configfile: str) -> dict:
