@@ -9,6 +9,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
+try:
+    from ortools.algorithms.python import knapsack_solver
+except ImportError:
+    knapsack_solver = None
+
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from queersmission import KnapsackSolver, copy_file
@@ -28,16 +33,18 @@ class TestFileOperations(unittest.TestCase):
         # Clean up the temporary directory after each test
         self.root.cleanup()
 
-    def touch(self, file, content: str = "Claire"):
-        os.makedirs(op.dirname(file), exist_ok=True)
-        with open(file, "w") as f:
-            f.write(content)
-
     def assertFileContent(self, file, content):
         with open(file, "r") as f:
             self.assertEqual(f.read(), content)
 
-    def run_copy(self, src, dst_dir):
+    @staticmethod
+    def _touch(file, content: str = "Claire"):
+        os.makedirs(op.dirname(file), exist_ok=True)
+        with open(file, "w") as f:
+            f.write(content)
+
+    @staticmethod
+    def _run_copy(src, dst_dir):
         src = op.normpath(src)
         dst_dir = op.normpath(dst_dir)
         if not op.isdir(src):
@@ -50,41 +57,41 @@ class TestFileOperations(unittest.TestCase):
         src, dst = self.src, self.dst
         logging.disable(logging.WARNING)
         # dir -> file
-        self.touch(f"{src}/dir/file.txt")
-        self.touch(f"{dst}/dir")
+        self._touch(f"{src}/dir/file.txt")
+        self._touch(f"{dst}/dir")
         with self.assertRaises(OSError):
-            self.run_copy(f"{src}/dir", dst)
+            self._run_copy(f"{src}/dir", dst)
         logging.disable(logging.NOTSET)
 
     def test_raise2(self):
         src, dst = self.src, self.dst
         logging.disable(logging.WARNING)
         # file -> dir
-        self.touch(f"{src}/file.txt")
+        self._touch(f"{src}/file.txt")
         # empty dst dir
         os.makedirs(f"{dst}/file/file.txt")
         with self.assertRaises(OSError):
-            self.run_copy(f"{src}/file.txt", dst)
+            self._run_copy(f"{src}/file.txt", dst)
         # non-empty
-        self.touch(f"{dst}/file/file.txt/file.txt")
+        self._touch(f"{dst}/file/file.txt/file.txt")
         with self.assertRaises(OSError):
-            self.run_copy(f"{src}/file.txt", dst)
+            self._run_copy(f"{src}/file.txt", dst)
         logging.disable(logging.NOTSET)
 
     def test_copy_dir1(self):
         src, dst = self.src, self.dst
         # copy dir
-        self.touch(f"{src}/dir/file.txt")
-        self.run_copy(f"{src}/dir", dst)
+        self._touch(f"{src}/dir/file.txt")
+        self._run_copy(f"{src}/dir", dst)
         self.assertTrue(op.isfile(f"{src}/dir/file.txt"))
         self.assertTrue(op.isfile(f"{dst}/dir/file.txt"))
 
     def test_copy_dir2(self):
         src, dst = self.src, self.dst
         # overwrite dir
-        self.touch(f"{src}/dir/file.txt", "src")
-        self.touch(f"{dst}/dir/file.txt")
-        self.run_copy(f"{src}/dir", dst)
+        self._touch(f"{src}/dir/file.txt", "src")
+        self._touch(f"{dst}/dir/file.txt")
+        self._run_copy(f"{src}/dir", dst)
         self.assertTrue(op.isfile(f"{src}/dir/file.txt"))
         self.assertFileContent(f"{dst}/dir/file.txt", "src")
         self.assertFalse(op.exists(f"{dst}/dir/dir"))
@@ -92,12 +99,12 @@ class TestFileOperations(unittest.TestCase):
     def test_copy_dir3(self):
         src, dst = self.src, self.dst
         # merge copy
-        self.touch(f"{src}/dir/file1.txt", "src")
-        self.touch(f"{src}/dir/file2.txt", "src")
-        self.touch(f"{dst}/dir/file1.txt")
-        self.touch(f"{dst}/dir/file3.txt")
+        self._touch(f"{src}/dir/file1.txt", "src")
+        self._touch(f"{src}/dir/file2.txt", "src")
+        self._touch(f"{dst}/dir/file1.txt")
+        self._touch(f"{dst}/dir/file3.txt")
 
-        self.run_copy(f"{src}/dir", dst)
+        self._run_copy(f"{src}/dir", dst)
         self.assertTrue(op.isfile(f"{src}/dir/file1.txt"))
         self.assertFileContent(f"{dst}/dir/file1.txt", "src")
         self.assertFileContent(f"{dst}/dir/file2.txt", "src")
@@ -106,17 +113,17 @@ class TestFileOperations(unittest.TestCase):
     def test_copy_file1(self):
         src, dst = self.src, self.dst
         # copy file
-        self.touch(f"{src}/file.txt")
-        self.run_copy(f"{src}/file.txt", dst)
+        self._touch(f"{src}/file.txt")
+        self._run_copy(f"{src}/file.txt", dst)
         self.assertTrue(op.isfile(f"{src}/file.txt"))
         self.assertTrue(op.isfile(f"{dst}/file/file.txt"))
 
     def test_copy_file2(self):
         src, dst = self.src, self.dst
         # overwrite file
-        self.touch(f"{src}/file.txt", "src")
-        self.touch(f"{dst}/file/file.txt")
-        self.run_copy(f"{src}/file.txt", dst)
+        self._touch(f"{src}/file.txt", "src")
+        self._touch(f"{dst}/file/file.txt")
+        self._run_copy(f"{src}/file.txt", dst)
         self.assertTrue(op.isfile(f"{src}/file.txt"))
         self.assertFileContent(f"{dst}/file/file.txt", "src")
 
@@ -125,14 +132,26 @@ class TestKnapsack(unittest.TestCase):
 
     _MC = 1024**2
 
-    def _get_random(self):
-        n = random.choice(range(200))
-        weights = random.choices(range(1024**3, 1024**4), k=n)
-        values = random.choices(range(1, 1000), k=n)
-        capacity = sum(random.choices(weights, k=n // 3))
+    @staticmethod
+    def _get_random():
+        n = random.randint(10, 300)
+        weights = random.choices(range(500 * 1024**2, 10 * 1024**4), k=n)
+        values = random.choices(range(1, 5000), k=n)
+        capacity = sum(weights) // random.randint(2, 6)
         return weights, values, capacity
 
-    def test_lo(self):
+    @staticmethod
+    def _ortools_solve(weights, values, capacity):
+        solver = knapsack_solver.KnapsackSolver(
+            knapsack_solver.SolverType.KNAPSACK_DYNAMIC_PROGRAMMING_SOLVER,
+            "Knapsack",
+        )
+        solver.init(profits=values, weights=[weights], capacities=[capacity])
+        solver.solve()
+        return {i for i in range(len(weights)) if solver.best_solution_contains(i)}
+
+    def test_empty(self):
+        # weights or capacity is 0
         data = [
             ([], [], 100),
             ([1], [2], 0),
@@ -141,29 +160,54 @@ class TestKnapsack(unittest.TestCase):
         answer = set()
         knapsack = KnapsackSolver(self._MC)
         for w, v, c in data:
-            self.assertEqual(knapsack.solve(w, v, c), answer)
+            self.assertSetEqual(knapsack.solve(w, v, c), answer)
 
-    def test_hi(self):
+    def test_full(self):
+        # capacity >= sum(weights)
         knapsack = KnapsackSolver(self._MC)
         for i in range(3):
             w, v, _ = self._get_random()
             c = sum(w) + i
             answer = set(range(len(w)))
-            self.assertEqual(knapsack.solve(w, v, c), answer)
+            self.assertSetEqual(knapsack.solve(w, v, c), answer)
 
     def test_sum(self):
+        # sum of result's weights should <= capacity
         knapsack = KnapsackSolver(self._MC)
-        for _ in range(5):
+        for _ in range(3):
             w, v, c = self._get_random()
-            self.assertLessEqual(sum(w[i] for i in knapsack.solve(w, v, c)), c)
+            result = knapsack.solve(w, v, c)
+            self.assertLessEqual(sum(w[i] for i in result), c)
 
-    def test_optimal(self):
+    def test_simple(self):
+        # a simple problem
         w = [21, 11, 15, 9, 34, 25, 41, 52]
         v = [22, 12, 16, 10, 35, 26, 42, 53]
         c = 100
         answer = {0, 1, 3, 4, 5}
         knapsack = KnapsackSolver(self._MC)
-        self.assertEqual(knapsack.solve(w, v, c), answer)
+        self.assertSetEqual(knapsack.solve(w, v, c), answer)
+
+    @unittest.skipIf(knapsack_solver is None, "OR-Tools not available")
+    def test_comparative(self):
+        # compare with OR-Tools
+        knapsack = KnapsackSolver()
+        for _ in range(500):
+            n = random.randint(10, 30)
+            weights = random.choices(range(1, 200), k=n)
+            values = random.choices(range(1, 200), k=n)
+            capacity = sum(weights) // random.randint(2, 4)
+
+            result = knapsack.solve(weights, values, capacity)
+            answer = self._ortools_solve(weights, values, capacity)
+
+            # Different solver types in ortools may yield solutions with
+            # different item selections but the same optimal value.
+            self.assertLessEqual(sum(weights[i] for i in result), capacity)
+            self.assertEqual(
+                sum(values[i] for i in result),
+                sum(values[i] for i in answer),
+            )
 
 
 if __name__ == "__main__":

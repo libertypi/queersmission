@@ -264,10 +264,10 @@ class StorageManager:
             raise ValueError("Cannot manage storage on a remote host.")
 
         self.client = client
-        self.size_limit = self._gb_to_bytes(size_limit_gb)
-        self.space_floor = self._gb_to_bytes(space_floor_gb)
+        self.size_limit = self._to_bytes(size_limit_gb)
+        self.space_floor = self._to_bytes(space_floor_gb)
         self.seed_dir_cleanup = seed_dir_cleanup
-        self.watch_dir = watch_dir if watch_dir_cleanup else None
+        self.watch_dir = watch_dir if watch_dir_cleanup and watch_dir else None
 
     def _get_maindata(self):
         """Retrieve a list of torrents located in `seed_dir`, and a set of their
@@ -458,9 +458,14 @@ class StorageManager:
         return results
 
     @staticmethod
-    def _gb_to_bytes(gb):
-        # Ensure output is int as `gb` is from user input which can be float
-        return int(gb * 1073741824) if gb and gb > 0 else None
+    def _to_bytes(size, unit=1073741824):
+        """Converts a size to bytes, returning None if the input is invalid
+        or non-positive. Default unit is bytes per gigabyte."""
+        try:
+            if size and size > 0:
+                return int(size * unit)
+        except TypeError as e:
+            logger.error("Invalid type for value '%s': %s", size, str(e))
 
 
 class KnapsackSolver:
@@ -921,7 +926,6 @@ def main():
 
         tid = os.environ.get("TR_TORRENT_ID")
         if tid:
-            # Invoked by Transmission
             logger.info("Triggered with torrent ID: %s", tid)
             tid = int(tid)
             try:
