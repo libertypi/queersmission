@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from queersmission import Knapsack, copy_file
+from queersmission import KnapsackSolver, copy_file
 
 
 class TestFileOperations(unittest.TestCase):
@@ -132,37 +132,38 @@ class TestKnapsack(unittest.TestCase):
         capacity = sum(random.choices(weights, k=n // 3))
         return weights, values, capacity
 
-    def test_low(self):
+    def test_lo(self):
         data = [
             ([], [], 100),
             ([1], [2], 0),
             ([1], [2], -100),
         ]
-        knapsack = Knapsack(self._MC)
+        answer = set()
+        knapsack = KnapsackSolver(self._MC)
         for w, v, c in data:
-            self.assertEqual(knapsack.solve(w, v, c), set())
+            self.assertEqual(knapsack.solve(w, v, c), answer)
 
-    def test_high(self):
-        knapsack = Knapsack(self._MC)
+    def test_hi(self):
+        knapsack = KnapsackSolver(self._MC)
         for i in range(3):
             w, v, _ = self._get_random()
             c = sum(w) + i
-            self.assertEqual(knapsack.solve(w, v, c), set(range(len(w))))
+            answer = set(range(len(w)))
+            self.assertEqual(knapsack.solve(w, v, c), answer)
 
     def test_sum(self):
-        knapsack = Knapsack(self._MC)
+        knapsack = KnapsackSolver(self._MC)
         for _ in range(5):
             w, v, c = self._get_random()
-            _sum = sum(w[i] for i in knapsack.solve(w, v, c))
-            self.assertLessEqual(_sum, c)
+            self.assertLessEqual(sum(w[i] for i in knapsack.solve(w, v, c)), c)
 
     def test_optimal(self):
         w = [21, 11, 15, 9, 34, 25, 41, 52]
         v = [22, 12, 16, 10, 35, 26, 42, 53]
         c = 100
         answer = {0, 1, 3, 4, 5}
-        self.assertEqual(Knapsack().solve(w, v, c), answer)
-        self.assertEqual(Knapsack(self._MC).solve(w, v, c), answer)
+        knapsack = KnapsackSolver(self._MC)
+        self.assertEqual(knapsack.solve(w, v, c), answer)
 
 
 if __name__ == "__main__":

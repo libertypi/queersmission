@@ -446,7 +446,7 @@ class StorageManager:
         # the classical knapsack problem: How to select torrents to keep in
         # order to maximize the total number of leechers?
         sizes = tuple(t["sizeWhenDone"] for t in with_leechers)
-        survived = Knapsack(max_cells=1024**2).solve(
+        survived = KnapsackSolver(max_cells=1024**2).solve(
             weights=sizes,
             values=leechers,
             capacity=sum(sizes) - size_to_free,
@@ -459,17 +459,29 @@ class StorageManager:
         return gb * 1073741824 if gb and gb > 0 else None
 
 
-class Knapsack:
+class KnapsackSolver:
 
     def __init__(self, max_cells: int = None) -> None:
-        """If `max_cells` is None, no scaling is applied."""
+        """Initialize the KnapsackSolver.
+
+        Args:
+            max_cells (int, optional): Maximum number of cells for scaling. If
+            None, no scaling is applied.
+        """
         if max_cells is not None and max_cells <= 0:
             raise ValueError("max_cells must be None or a positive integer.")
         self.max_cells = max_cells
 
     def solve(self, weights: List[int], values: List[int], capacity: int):
-        """Solve the 0-1 knapsack problem. Return a set of indices of the items
-        to include to maximize value.
+        """Solve the 0-1 knapsack problem using dynamic programming.
+
+        Args:
+            weights (List[int]): The weights of the items.
+            values (List[int]): The values of the items.
+            capacity (int): The maximum capacity of the knapsack.
+
+        Returns:
+            Set[int]: A set of indices of the items to include to maximize value.
         """
         if capacity <= 0:
             return set()
@@ -503,7 +515,6 @@ class Knapsack:
             if dp[i][w] != dp[i - 1][w]:
                 res.add(i - 1)
                 w -= weights[i - 1]
-
         return res
 
     @staticmethod
