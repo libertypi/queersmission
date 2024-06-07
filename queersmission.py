@@ -35,7 +35,7 @@ import time
 from collections import defaultdict
 from functools import lru_cache
 from posixpath import splitext as posix_splitext
-from typing import List, Tuple
+from typing import List, Optional, Set, Tuple
 
 import requests
 
@@ -90,8 +90,8 @@ class TRStatus(enum.IntEnum):
 class TRClient:
     """A client for interacting with the Transmission RPC interface."""
 
-    _SSID: str = "X-Transmission-Session-Id"
-    _RETRIES: int = 3
+    _SSID = "X-Transmission-Session-Id"
+    _RETRIES = 3
     _session_data: dict = None
     _seed_dir: str = None
 
@@ -102,9 +102,9 @@ class TRClient:
         host: str = "127.0.0.1",
         port: int = 9091,
         path: str = "/transmission/rpc",
-        username: str = None,
-        password: str = None,
-        seed_dir: str = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+        seed_dir: Optional[str] = None,
     ) -> None:
 
         self.url = f"{protocol}://{host}:{port}{path}"
@@ -123,7 +123,7 @@ class TRClient:
             self.normpath = self._set_normpath
         self._user_seed_dir = seed_dir
 
-    def _call(self, method: str, arguments: dict = None) -> dict:
+    def _call(self, method: str, arguments: Optional[dict] = None) -> dict:
         """Make a call to the Transmission RPC."""
         query = {"method": method}
         if arguments is not None:
@@ -150,7 +150,7 @@ class TRClient:
 
         assert False, "Unexpected error in the retry logic."
 
-    def _torrent_action(self, method: str, ids=None, arguments: dict = None):
+    def _torrent_action(self, method: str, ids=None, arguments: Optional[dict] = None):
         """A handler for torrent-related actions. If `ids` is omitted, all
         torrents are used. If `ids` is an empty list, no torrent is returned."""
         if ids is not None:
@@ -202,7 +202,7 @@ class TRClient:
             self._session_data = self._call("session-get")
         return self._session_data
 
-    def get_freespace(self, path: str = None) -> int:
+    def get_freespace(self, path: Optional[str] = None) -> int:
         """Tests how much free space is available in a client-specified folder.
         If `path` is None, test seed_dir."""
         if path is None:
@@ -254,9 +254,9 @@ class StorageManager:
         self,
         client: TRClient,
         seed_dir_cleanup: bool = False,
-        size_limit_gb: int = None,
-        space_floor_gb: int = None,
-        watch_dir: str = None,
+        size_limit_gb: Optional[int] = None,
+        space_floor_gb: Optional[int] = None,
+        watch_dir: Optional[str] = None,
         watch_dir_cleanup: bool = False,
     ) -> None:
 
@@ -269,7 +269,7 @@ class StorageManager:
         self.seed_dir_cleanup = seed_dir_cleanup
         self.watch_dir = watch_dir if watch_dir_cleanup else None
 
-    def _get_maindata(self) -> Tuple[List[dict], set]:
+    def _get_maindata(self):
         """Retrieve a list of torrents located in `seed_dir`, and a set of their
         first path segment after `seed_dir`."""
         if self._maindata is None:
@@ -300,7 +300,7 @@ class StorageManager:
         return self._get_maindata()[0]
 
     @property
-    def allowed(self) -> set:
+    def allowed(self) -> Set[str]:
         return self._get_maindata()[1]
 
     def cleanup(self) -> None:
@@ -385,6 +385,7 @@ class StorageManager:
             )
 
     def _get_removables(self):
+        """Retrieves a list of torrents that are candidates for removal."""
         torrents = self.client.torrent_get(
             fields=(
                 "activityDate",
@@ -398,8 +399,8 @@ class StorageManager:
             ),
             ids=tuple(t["id"] for t in self.torrents),
         )["torrents"]
-        # Filter out torrents. Torrents are only removed if they have been
-        # completed for more than 12 hours to avoid race conditions.
+        # Torrents are only removed if they have been completed for more than 12
+        # hours to avoid race conditions.
         threshold = time.time() - 43200
         rm_status = {TRStatus.STOPPED, TRStatus.SEED_WAIT, TRStatus.SEED}
         return (
@@ -455,13 +456,13 @@ class StorageManager:
         return results
 
     @staticmethod
-    def _gb_to_bytes(gb: int):
-        return gb * 1073741824 if gb and gb > 0 else None
+    def _gb_to_bytes(gb):
+        return int(gb * 1073741824) if gb and gb > 0 else None
 
 
 class KnapsackSolver:
 
-    def __init__(self, max_cells: int = None) -> None:
+    def __init__(self, max_cells: Optional[int] = None) -> None:
         """Initialize the KnapsackSolver.
 
         Args:
@@ -472,7 +473,7 @@ class KnapsackSolver:
             raise ValueError("max_cells must be None or a positive integer.")
         self.max_cells = max_cells
 
-    def solve(self, weights: List[int], values: List[int], capacity: int):
+    def solve(self, weights: List[int], values: List[int], capacity: int) -> Set[int]:
         """Solve the 0-1 knapsack problem using dynamic programming.
 
         Args:
@@ -539,7 +540,7 @@ class Categorizer:
     _VIDEO_THRESH = 52428800  # 50 MiB
     VIDEO, AUDIO, DEFAULT = range(3)
 
-    def __init__(self, patternfile: str = None) -> None:
+    def __init__(self, patternfile: Optional[str] = None) -> None:
         """Initialize the Categorizer with data from the pattern file."""
 
         if patternfile is None:
@@ -557,8 +558,8 @@ class Categorizer:
 
     def categorize(self, files: List[dict]):
         """
-        Categorize the torrent based on the files list. The `files` parameter is
-        the array returned by the Transmission "torrent-get" API.
+        Categorize the torrent based on the `files` list returned by the
+        Transmission "torrent-get" API.
         """
         # Does the torrent name pass the AV test? Torrent name is the file name
         # if there is only one file, or the root directory name otherwise. File
@@ -862,7 +863,7 @@ def parse_config(configfile: str) -> dict:
         return config
 
 
-def config_logger(logger: logging.Logger, logfile: str, level="INFO") -> None:
+def config_logger(logger: logging.Logger, logfile: str, level: str = "INFO"):
     """Configure the logging system with both console and file handlers."""
     logger.handlers.clear()
     level = level.upper()
