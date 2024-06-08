@@ -122,7 +122,7 @@ class TRClient:
             self.is_localhost = False
             self._path_module = None
             self.normpath = self._set_normpath
-        self._user_seed_dir = str(seed_dir) if seed_dir else None
+        self._user_seed_dir = seed_dir
 
     def _call(self, method: str, arguments: Optional[dict] = None) -> dict:
         """Make a call to the Transmission RPC."""
@@ -577,7 +577,7 @@ class Categorizer:
         """
         # Does the torrent name pass the AV test? Torrent name is the file name
         # if there is only one file, or the root directory name otherwise. File
-        # names are always POSIX paths.
+        # paths are always POSIX paths.
         name = files[0]["name"].lstrip("/").partition("/")
         name = name[0] if name[1] else posix_splitext(name[0])[0]
         if re_test(self.av_re, name):
@@ -721,7 +721,7 @@ def process_torrent_done(
     # *remove_after_copy: True if user only seed private and torrent is public
 
     if not isinstance(tid, int):
-        raise ValueError("Torrent ID must be an integer.")
+        raise TypeError("Torrent ID must be an integer.")
     if not client.is_localhost:
         raise ValueError("Cannot manage download completion on a remote host.")
 
@@ -806,7 +806,7 @@ else:
                 capture_output=True,
             )
         except subprocess.CalledProcessError as e:
-            logger.warning(e.stderr.strip().decode())
+            logger.warning(e.stderr.strip().decode() or str(e))
         except FileNotFoundError as e:
             logger.warning(str(e))
         else:
