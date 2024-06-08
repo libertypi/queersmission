@@ -2,7 +2,7 @@
 
 *Queer's mission... is to help Transmission.*
 
-**Queersmission** is a [post-download script](https://github.com/transmission/transmission/blob/main/docs/Scripts.md) for the [Transmission](https://transmissionbt.com/) client. It allows users to dedicate storage for torrent uploading and to copy the finished downloads to user destinations. This ensures that file sharing continues, even if the user deletes the content, which is useful for Private Torrent (PT) users who need to maintain a sharing ratio.
+**Queersmission** is a [post-download script](https://github.com/transmission/transmission/blob/main/docs/Scripts.md) for the [Transmission](https://transmissionbt.com/) client. It copies completed downloads to user-specified locations and manages a dedicated seeding space. This ensures that file sharing continues, even if the user deletes the content, which is useful for Private Torrent (PT) users who need to maintain a sharing ratio.
 
 ### Features
 

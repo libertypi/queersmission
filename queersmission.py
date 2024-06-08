@@ -6,12 +6,13 @@ Queersmission - Smart Categorization for Transmission
 
 Description:
 ------------
-Queersmission is a post-download script for the Transmission client. It allows
-users to dedicate storage for torrent uploading and to copy the finished
-downloads to user destinations.
+Queersmission is a post-download script for the Transmission client. It copies
+completed downloads to user-specified locations and manages a dedicated seeding
+space.
 
 Features:
 ---------
+- Copy finished downloads to user destinations.
 - Smart torrent categorization.
 - Automatic storage management based on quota settings.
 
@@ -121,7 +122,7 @@ class TRClient:
             self.is_localhost = False
             self._path_module = None
             self.normpath = self._set_normpath
-        self._user_seed_dir = seed_dir
+        self._user_seed_dir = str(seed_dir) if seed_dir else None
 
     def _call(self, method: str, arguments: Optional[dict] = None) -> dict:
         """Make a call to the Transmission RPC."""
@@ -477,8 +478,11 @@ class KnapsackSolver:
             max_cells (int, optional): Maximum number of cells for scaling. If
             None, no scaling is applied.
         """
-        if max_cells is not None and max_cells <= 0:
-            raise ValueError("max_cells must be None or a positive integer.")
+        if max_cells is not None:
+            if not isinstance(max_cells, int):
+                raise TypeError("Expect 'max_cells' to be of type 'int.'")
+            if max_cells < 1:
+                raise ValueError("max_cells must be a positive integer.")
         self.max_cells = max_cells
 
     def solve(self, weights: List[int], values: List[int], capacity: int) -> Set[int]:
@@ -492,9 +496,11 @@ class KnapsackSolver:
         Returns:
             Set[int]: A set of indices of the items to include to maximize value.
         """
+        if not isinstance(capacity, int):
+            raise TypeError("Expect 'capacity' to be of type 'int.'")
+
         if capacity <= 0:
             return set()
-
         n = len(weights)
         if capacity >= sum(weights):
             return set(range(n))
@@ -509,11 +515,11 @@ class KnapsackSolver:
         # Fill dynamic programming table
         dp = [[0] * (capacity + 1) for _ in range(n + 1)]
         for i in range(1, n + 1):
-            weight = weights[i - 1]
-            value = values[i - 1]
+            wt = weights[i - 1]
+            vl = values[i - 1]
             for w in range(1, capacity + 1):
-                if weight <= w:
-                    dp[i][w] = max(dp[i - 1][w], dp[i - 1][w - weight] + value)
+                if wt <= w:
+                    dp[i][w] = max(dp[i - 1][w], dp[i - 1][w - wt] + vl)
                 else:
                     dp[i][w] = dp[i - 1][w]
 
