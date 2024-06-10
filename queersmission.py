@@ -34,7 +34,7 @@ import subprocess
 import sys
 import time
 from collections import defaultdict
-from functools import lru_cache
+from functools import cached_property, lru_cache
 from posixpath import splitext as posix_splitext
 from typing import List, Optional, Set, Tuple
 
@@ -93,8 +93,6 @@ class TRClient:
 
     _SSID = "X-Transmission-Session-Id"
     _RETRIES = 3
-    _session_data: dict = None
-    _seed_dir: str = None
 
     def __init__(
         self,
@@ -109,23 +107,31 @@ class TRClient:
     ) -> None:
 
         self.url = f"{protocol}://{host}:{port}{path}"
+        self._user_seed_dir = seed_dir
+
+        if host.lower() in ("127.0.0.1", "localhost", "::1"):
+            self.is_localhost = True
+            self.path_module = op
+            self.normpath = op.realpath
+        else:
+            self.is_localhost = False
+
         self.session = requests.Session()
         if username and password:
             self.session.auth = (username, password)
         self.session.headers.update({self._SSID: ""})
 
-        if host.lower() in ("127.0.0.1", "localhost", "::1"):
-            self.is_localhost = True
-            self._path_module = op
-            self.normpath = op.realpath
-        else:
-            self.is_localhost = False
-            self._path_module = None
-            self.normpath = self._set_normpath
-        self._user_seed_dir = seed_dir
-
-    def _call(self, method: str, arguments: Optional[dict] = None) -> dict:
+    def _call(self, method: str, arguments: Optional[dict] = None, *, ids=None) -> dict:
         """Make a call to the Transmission RPC."""
+
+        # If `ids` is omitted, all torrents are used.
+        if ids is not None:
+            self._check_ids(ids)
+            if arguments is None:
+                arguments = {"ids": ids}
+            else:
+                arguments["ids"] = ids
+
         query = {"method": method}
         if arguments is not None:
             query["arguments"] = arguments
@@ -151,57 +157,76 @@ class TRClient:
 
         assert False, "Unexpected error in the retry logic."
 
-    def _torrent_action(self, method: str, ids=None, arguments: Optional[dict] = None):
-        """A handler for torrent-related actions. If `ids` is omitted, all
-        torrents are used. If `ids` is an empty list, no torrent is returned."""
-        if ids is not None:
-            if arguments is None:
-                arguments = {"ids": ids}
-            else:
-                arguments["ids"] = ids
-        return self._call(method, arguments)
+    @staticmethod
+    def _check_ids(ids):
+        """Validate the IDs passed to the Transmission RPC.
+
+        ids should be one of the following:
+        - an integer referring to a torrent id
+        - a list of torrent id numbers, SHA1 hash strings, or both
+        - a string, 'recently-active', for recently-active torrents
+        """
+        for i in ids if isinstance(ids, (list, tuple)) else (ids,):
+            if isinstance(i, int):
+                if i > 0:
+                    continue
+            elif isinstance(i, str):
+                if re_compile(r"[A-Fa-f0-9]{40}").fullmatch(i):
+                    continue
+                if ids == "recently-active":
+                    return
+            raise ValueError(f"Invalid torrent ID '{i}' in IDs: '{ids}'")
 
     def torrent_start(self, ids=None):
-        self._torrent_action("torrent-start", ids)
+        self._call("torrent-start", ids=ids)
 
     def torrent_start_now(self, ids=None):
-        self._torrent_action("torrent-start-now", ids)
+        self._call("torrent-start-now", ids=ids)
 
     def torrent_stop(self, ids=None):
-        self._torrent_action("torrent-stop", ids)
+        self._call("torrent-stop", ids=ids)
 
     def torrent_verify(self, ids=None):
-        self._torrent_action("torrent-verify", ids)
+        self._call("torrent-verify", ids=ids)
 
     def torrent_reannounce(self, ids=None):
-        self._torrent_action("torrent-reannounce", ids)
+        self._call("torrent-reannounce", ids=ids)
 
     def torrent_get(self, fields: List[str], ids=None) -> dict:
-        return self._torrent_action(
-            "torrent-get",
-            ids=ids,
-            arguments={"fields": fields},
-        )
+        return self._call("torrent-get", {"fields": fields}, ids=ids)
 
     def torrent_remove(self, ids, delete_local_data: bool):
-        self._torrent_action(
+        self._call(
             "torrent-remove",
+            {"delete-local-data": delete_local_data},
             ids=ids,
-            arguments={"delete-local-data": delete_local_data},
         )
 
     def torrent_set_location(self, ids, location: str, move: bool):
-        self._torrent_action(
+        self._call(
             "torrent-set-location",
+            {"location": location, "move": move},
             ids=ids,
-            arguments={"location": location, "move": move},
         )
 
-    def session_get(self) -> dict:
-        """Get the session details, cached."""
-        if self._session_data is None:
-            self._session_data = self._call("session-get")
-        return self._session_data
+    def wait_status(self, ids, status: Set[TRStatus], timeout: int = None):
+        """Waits until all specified torrents reach given status or timeout."""
+        interval = 0.5
+        if isinstance(status, TRStatus):
+            status = (status,)
+        if timeout is not None:
+            timeout += time.time()
+        while True:
+            torrents = self.torrent_get(("status",), ids)["torrents"]
+            if all(t["status"] in status for t in torrents):
+                return
+            if timeout is not None:
+                remain = timeout - time.time()
+                if remain <= 0:
+                    raise TimeoutError("Timeout while waiting for desired status.")
+                if remain < interval:
+                    interval = remain
+            time.sleep(interval)
 
     def get_freespace(self, path: Optional[str] = None) -> int:
         """Tests how much free space is available in a client-specified folder.
@@ -215,41 +240,42 @@ class TRClient:
                 logger.warning(str(e))
         return int(self._call("free-space", {"path": path})["size-bytes"])
 
-    @property
-    def seed_dir(self) -> str:
-        if self._seed_dir is None:
-            s = self._user_seed_dir or self.session_get()["download-dir"]
-            if not s:
-                raise ValueError("Unable to get seed_dir.")
-            self._seed_dir = self.normpath(s)
-        return self._seed_dir
+    @cached_property
+    def session_settings(self):
+        """The complete setting list returned by the "session-get" API."""
+        return self._call("session-get")
 
-    def _set_normpath(self, path: str) -> str:
-        """Dynamically update `normpath` for the remote host."""
-        self.normpath = self.get_path_module().normpath
-        return self.normpath(path)
-
-    def get_path_module(self):
-        """Determine the appropriate path module for the remote host."""
-        if self._path_module is not None:
-            return self._path_module
-        session_data = self.session_get()
+    @cached_property
+    def path_module(self):
+        """The appropriate path module for the remote host."""
+        # Only called when is_localhost is False.
         for k in ("config-dir", "download-dir", "incomplete-dir"):
-            p = session_data.get(k)
+            p = self.session_settings.get(k)
             if not p:
                 continue
             if p[0] in ("/", "~") or ":" not in p:
                 import posixpath as path
             else:
                 import ntpath as path
-            self._path_module = path
             return path
         raise ValueError("Unable to determine path type for the remote host.")
 
+    @cached_property
+    def normpath(self):
+        """The appropriate normpath function for the remote host."""
+        # Only called when is_localhost is False.
+        return self.path_module.normpath
+
+    @cached_property
+    def seed_dir(self) -> str:
+        """The seeding directory of the host."""
+        s = self._user_seed_dir or self.session_settings["download-dir"]
+        if not s:
+            raise ValueError("Unable to get seed_dir.")
+        return self.normpath(s)
+
 
 class StorageManager:
-
-    _maindata = None
 
     def __init__(
         self,
@@ -270,39 +296,39 @@ class StorageManager:
         self.seed_dir_cleanup = seed_dir_cleanup
         self.watch_dir = watch_dir if watch_dir_cleanup and watch_dir else None
 
-    def _get_maindata(self):
-        """Retrieve a list of torrents located in `seed_dir`, and a set of their
+    @cached_property
+    def _maindata(self):
+        """A list of torrents located in `seed_dir`, and a set of their
         first path segment after `seed_dir`."""
-        if self._maindata is None:
-            torrents = []
-            allowed = set()
-            seed_dir = self.client.seed_dir
-            sep = self.client.get_path_module().sep
-            data = self.client.torrent_get(
-                fields=("downloadDir", "id", "name", "sizeWhenDone")
-            )["torrents"]
-            for t in data:
-                if seed_dir == t["downloadDir"]:
-                    allowed.add(t["name"])
-                else:
-                    path = self.client.normpath(t["downloadDir"])
-                    if not is_subpath(path, seed_dir, sep):
-                        # torrent is outside of seed_dir
-                        continue
-                    # find the first segment after seed_dir
-                    path = path[len(seed_dir) :].lstrip(sep).partition(sep)[0]
-                    allowed.add(path or t["name"])
-                torrents.append(t)
-            self._maindata = torrents, allowed
-        return self._maindata
+        torrents = []
+        allowed = set()
+        data = self.client.torrent_get(
+            fields=("downloadDir", "id", "name", "sizeWhenDone")
+        )["torrents"]
+        seed_dir = self.client.seed_dir
+        sep = self.client.path_module.sep
+
+        for t in data:
+            if seed_dir == t["downloadDir"]:
+                allowed.add(t["name"])
+            else:
+                path = self.client.normpath(t["downloadDir"])
+                if not is_subpath(path, seed_dir, sep):
+                    # torrent is outside of seed_dir
+                    continue
+                # find the first segment after seed_dir
+                path = path[len(seed_dir) :].lstrip(sep).partition(sep)[0]
+                allowed.add(path or t["name"])
+            torrents.append(t)
+        return torrents, allowed
 
     @property
     def torrents(self) -> List[dict]:
-        return self._get_maindata()[0]
+        return self._maindata[0]
 
     @property
     def allowed(self) -> Set[str]:
-        return self._get_maindata()[1]
+        return self._maindata[1]
 
     def cleanup(self) -> None:
         """Perform the enabled cleanup tasks."""
@@ -718,16 +744,21 @@ def process_torrent_done(
     # | No              | No                | Copy src to seed_dir,     |
     # |                 |                   | set new location.         |
     # +-----------------+-------------------+---------------------------+
+    # *src_in_seed_dir: True if the torrent's downloadDir is within seed_dir
     # *remove_after_copy: True if user only seed private and torrent is public
 
-    if not isinstance(tid, int):
-        raise TypeError("Torrent ID must be an integer.")
     if not client.is_localhost:
         raise ValueError("Cannot manage download completion on a remote host.")
 
     data = client.torrent_get(
-        fields=("downloadDir", "files", "isPrivate", "name"), ids=tid
+        fields=("downloadDir", "files", "isPrivate", "name", "status"),
+        ids=tid,
     )["torrents"][0]
+
+    # Check for torrent status
+    ok_status = {TRStatus.STOPPED, TRStatus.SEED_WAIT, TRStatus.SEED}
+    if data["status"] not in ok_status:
+        client.wait_status(tid, ok_status, timeout=10)
 
     src_dir = op.realpath(data["downloadDir"])
     name = data["name"]

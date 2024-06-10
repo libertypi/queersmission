@@ -137,7 +137,7 @@ class TestKnapsack(unittest.TestCase):
         n = random.randint(10, 300)
         weights = random.choices(range(500 * 1024**2, 10 * 1024**4), k=n)
         values = random.choices(range(1, 5000), k=n)
-        capacity = sum(weights) // random.randint(2, 6)
+        capacity = sum(weights) // random.randint(2, 5)
         return weights, values, capacity
 
     @staticmethod
@@ -146,9 +146,8 @@ class TestKnapsack(unittest.TestCase):
             knapsack_solver.SolverType.KNAPSACK_DYNAMIC_PROGRAMMING_SOLVER,
             "Knapsack",
         )
-        solver.init(profits=values, weights=[weights], capacities=[capacity])
-        solver.solve()
-        return {i for i in range(len(weights)) if solver.best_solution_contains(i)}
+        solver.init(values, [weights], [capacity])
+        return solver.solve()
 
     def test_empty(self):
         # weights or capacity is 0
@@ -192,22 +191,17 @@ class TestKnapsack(unittest.TestCase):
     def test_comparative(self):
         # compare with OR-Tools
         knapsack = KnapsackSolver()
-        for _ in range(500):
-            n = random.randint(10, 30)
-            weights = random.choices(range(1, 200), k=n)
-            values = random.choices(range(1, 200), k=n)
+        for _ in range(50):
+            n = random.randint(10, 50)
+            weights = random.choices(range(1, 500), k=n)
+            values = random.choices(range(1, 500), k=n)
             capacity = sum(weights) // random.randint(2, 4)
 
             result = knapsack.solve(weights, values, capacity)
             answer = self._ortools_solve(weights, values, capacity)
 
-            # Different solver types in ortools may yield solutions with
-            # different item selections but the same optimal value.
             self.assertLessEqual(sum(weights[i] for i in result), capacity)
-            self.assertEqual(
-                sum(values[i] for i in result),
-                sum(values[i] for i in answer),
-            )
+            self.assertEqual(sum(values[i] for i in result), answer)
 
 
 if __name__ == "__main__":
