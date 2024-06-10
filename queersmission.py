@@ -175,7 +175,7 @@ class TRClient:
                     continue
                 if ids == "recently-active":
                     return
-            raise ValueError(f"Invalid torrent ID '{i}' in IDs: '{ids}'")
+            raise ValueError(f"Invalid torrent ID '{i}' in IDs: {ids}")
 
     def torrent_start(self, ids=None):
         self._call("torrent-start", ids=ids)

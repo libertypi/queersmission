@@ -14,8 +14,8 @@ Data Files:
 -----------
 - footprints-statistics.json: Statistical data from the footprints project for
   building regex patterns.
-- google-10000-english-usa-no-swears.txt: Common English words to be excluded
-  from the regex.
+- google-10000-english-usa-no-swears.txt, common-female-names.txt,
+  common-male-names.txt: Common English words to be excluded from the regex.
 - prefixes-include.txt: Prefixes to include in the regex.
 - prefixes-exclude.txt: Prefixes to exclude from the regex.
 - keywords-include.txt: Keywords to include in the regex.
@@ -78,13 +78,19 @@ def parse_args():
     return parser.parse_args()
 
 
-def get_common_words(filename: str = "google-10000-english-usa-no-swears.txt"):
+def get_common_words():
     # https://github.com/first20hours/google-10000-english
-    with open(script_dir.joinpath(filename), "r", encoding="utf-8") as f:
-        words = tuple(map(str.lower, filter(None, map(str.strip, f))))
-    if not words:
-        raise ValueError(f"{filename} is empty.")
-    return words
+    # https://www.cs.cmu.edu/Groups/AI/areas/nlp/corpora/names/
+    files = (
+        "google-10000-english-usa-no-swears.txt",
+        "common-female-names.txt",
+        "common-male-names.txt",
+    )
+    result = set()
+    for file in files:
+        with open(script_dir.joinpath(file), "r", encoding="utf-8") as f:
+            result.update(map(str.lower, filter(str.isalpha, map(str.strip, f))))
+    return result
 
 
 def read_pattern_file(filename: str):
@@ -106,7 +112,7 @@ def read_pattern_file(filename: str):
         return new_data
 
 
-def build_regex(name: str, source: dict, max_items: int, exclude_lst: list = ()):
+def build_regex(name: str, source: dict, max_items: int, exclude_lst=()):
 
     assert name in ("prefixes", "keywords")
 
