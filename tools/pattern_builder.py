@@ -63,17 +63,17 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-n",
-        dest="max_prefixes",
-        type=int,
-        default=4000,
-        help="Maximum number of prefixes to draw from data (default: %(default)s).",
-    )
-    parser.add_argument(
-        "-m",
         dest="max_keywords",
         type=int,
         default=150,
         help="Maximum number of keywords to draw from data (default: %(default)s).",
+    )
+    parser.add_argument(
+        "-m",
+        dest="max_prefixes",
+        type=int,
+        default=4000,
+        help="Maximum number of prefixes to draw from data (default: %(default)s).",
     )
     return parser.parse_args()
 
@@ -112,20 +112,32 @@ def read_pattern_file(filename: str):
         return new_data
 
 
-def build_regex(name: str, source: dict, max_items: int, exclude_lst=()):
+def build_regex(
+    name: str,
+    source: dict,
+    max_items: int,
+    ex_set: set = None,
+    ex_lst: list = (),
+):
+    # ex_set: a set of strings to be excluded (literal match)
+    # ex_lst: a list of regex to filter the source (regex match)
 
-    assert name in ("prefixes", "keywords")
+    assert name in ("keywords", "prefixes")
 
     # Data from footprints, sorted by frequency
     source: dict = source[name]
-    data: list = sorted(source, key=source.get, reverse=True)
+    data: list = sorted(
+        (source.keys() - ex_set) if ex_set else source,
+        key=source.get,
+        reverse=True,
+    )
 
     # Inclusion and exclusion pattern files
     include = read_pattern_file(f"{name}-include.txt")
     exclude = read_pattern_file(f"{name}-exclude.txt")
 
-    # Remove anything that overlaps the pattern files or 'exclude_lst'
-    regex = re.compile("|".join(chain(include, exclude, exclude_lst)))
+    # Remove anything that overlaps the pattern files or 'ex_lst'
+    regex = re.compile("|".join(chain(include, exclude, ex_lst)))
     data[:] = islice(filterfalse(regex.fullmatch, data), max_items)
 
     print(
@@ -175,16 +187,16 @@ def validation(av_regex: str):
             raise ValueError(f"Upper case character found in regex: {regex}")
         re.compile(regex)
 
-    for ext_list in (VIDEO_EXTS, AUDIO_EXTS):
-        if not ext_list:
-            raise ValueError("Empty extension list.")
-        if not all(s.lower() == s and s.isalnum() for s in ext_list):
-            raise ValueError("Invalid entry found in extension lists.")
+    for ext_set in (VIDEO_EXTS, AUDIO_EXTS):
+        if not ext_set:
+            raise ValueError("Empty extension set.")
+        if not all(s.lower() == s and s.isalnum() for s in ext_set):
+            raise ValueError("Invalid entry found in extension set.")
 
     intersect = VIDEO_EXTS.intersection(AUDIO_EXTS)
     if intersect:
         raise ValueError(
-            f"Intersection found between extension lists: {', '.join(intersect)}"
+            f"Intersection found between extension sets: {', '.join(intersect)}"
         )
 
 
@@ -196,11 +208,9 @@ def main():
     dst = entry_dir.joinpath("patterns.json")
     print(f"Source: {src}\nOutput: {dst}")
 
-    # Read data from footprints
+    # Update data from footprints
     try:
-        shutil.copy(
-            entry_dir.parent.joinpath("footprints/data/footprints-statistics.json"), src
-        )
+        shutil.copy(entry_dir.parent.joinpath("footprints/data", src.name), src)
     except FileNotFoundError:
         print("Warning: Unable to update data file from footprints.")
 
@@ -212,14 +222,14 @@ def main():
         name="keywords",
         source=data,
         max_items=args.max_keywords,
-        exclude_lst=get_common_words(),
+        ex_set=get_common_words(),
     )
     # Build regex for prefixes, excluded keywords
     prefixes = build_regex(
         name="prefixes",
         source=data,
         max_items=args.max_prefixes,
-        exclude_lst=(keywords,),
+        ex_lst=(keywords,),
     )
     # Construct
     av_regex = AV_TEMPLATE.format(keywords=keywords, prefixes=prefixes)
