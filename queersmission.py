@@ -238,7 +238,7 @@ class TRClient:
                 return shutil.disk_usage(path).free
             except OSError as e:
                 logger.warning(str(e))
-        return int(self._call("free-space", {"path": path})["size-bytes"])
+        return self._call("free-space", {"path": path})["size-bytes"]
 
     @cached_property
     def session_settings(self):
@@ -400,7 +400,7 @@ class StorageManager:
         results = self._find_inactive_torrents(size_to_free)
         if results:
             logger.info(
-                "Remove %d torrent%s to free %s: %s",
+                "Remove %d torrent%s (%s): %s",
                 len(results),
                 "" if len(results) == 1 else "s",
                 humansize(sum(t["sizeWhenDone"] for t in results)),
@@ -421,6 +421,7 @@ class StorageManager:
                 "doneDate",
                 "id",
                 "name",
+                "peers",
                 "percentDone",
                 "sizeWhenDone",
                 "status",
@@ -454,9 +455,10 @@ class StorageManager:
         for t in self._get_removables():
             leecher = 0
             for tracker in t["trackerStats"]:
-                i = tracker["leecherCount"]
+                i = tracker["leecherCount"]  # int
                 if i > 0:  # skip "unknown" (-1)
                     leecher += i
+            leecher = max(leecher, sum(p["progress"] < 1 for p in t["peers"]))
             if leecher:
                 with_leechers.append(t)
                 leechers.append(leecher)
@@ -464,16 +466,16 @@ class StorageManager:
                 # Add zero-leecher torrents to the results.
                 results.append(t)
 
-        # Select zero-leecher torrents from the least active ones until the
-        # required size is reached.
+        # First: Select zero-leecher torrents from the least active ones until
+        # the required size is reached.
         results.sort(key=lambda t: t["activityDate"])
         for i, t in enumerate(results):
-            size_to_free -= t["sizeWhenDone"]
+            size_to_free -= t["sizeWhenDone"]  # uint64_t
             if size_to_free <= 0:
                 return results[: i + 1]
 
-        # Select torrents with leechers. The question is inverted to fit into
-        # the classical knapsack problem: How to select torrents to keep in
+        # Second: Pick torrents with leechers. The question is inverted to fit
+        # into the classical knapsack problem: How to select torrents to keep in
         # order to maximize the total number of leechers?
         sizes = tuple(t["sizeWhenDone"] for t in with_leechers)
         survived = KnapsackSolver(max_cells=1024**2).solve(
