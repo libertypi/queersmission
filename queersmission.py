@@ -332,10 +332,29 @@ class StorageManager:
 
     def cleanup(self) -> None:
         """Perform the enabled cleanup tasks."""
-        if self.seed_dir_cleanup:
-            self._clean_seed_dir()
         if self.watch_dir:
             self._clean_watch_dir()
+        if self.seed_dir_cleanup:
+            self._clean_seed_dir()
+
+    def _clean_watch_dir(self) -> None:
+        """Remove old or zero-length '.torrent' files from the watch-dir."""
+        if not self.watch_dir:
+            raise ValueError("'watch_dir' should not be null or empty.")
+        try:
+            with os.scandir(self.watch_dir) as it:
+                entries = tuple(e for e in it if e.name.lower().endswith(".torrent"))
+        except OSError as e:
+            logger.error(str(e))
+            return
+        for e in entries:
+            try:
+                s = e.stat()
+                if e.is_file() and (not s.st_size or s.st_mtime < time.time() - 3600):
+                    logger.debug("Cleanup watch-dir: %s", e.path)
+                    os.unlink(e.path)
+            except OSError as e:
+                logger.error(str(e))
 
     def _clean_seed_dir(self) -> None:
         """Remove files from seed_dir if they do not exist in Transmission."""
@@ -356,25 +375,6 @@ class StorageManager:
                 if e.is_dir():
                     shutil.rmtree(e.path, ignore_errors=True)
                 else:
-                    os.unlink(e.path)
-            except OSError as e:
-                logger.error(str(e))
-
-    def _clean_watch_dir(self) -> None:
-        """Remove old or zero-length '.torrent' files from the watch-dir."""
-        if not self.watch_dir:
-            raise ValueError("'watch_dir' should not be null or empty.")
-        try:
-            with os.scandir(self.watch_dir) as it:
-                entries = tuple(e for e in it if e.name.lower().endswith(".torrent"))
-        except OSError as e:
-            logger.error(str(e))
-            return
-        for e in entries:
-            try:
-                s = e.stat()
-                if e.is_file() and (not s.st_size or s.st_mtime < time.time() - 3600):
-                    logger.debug("Cleanup watch-dir: %s", e.path)
                     os.unlink(e.path)
             except OSError as e:
                 logger.error(str(e))
@@ -592,8 +592,8 @@ class Categorizer:
         if not all(data.values()):
             raise ValueError(f"Empty entry in pattern file: {patternfile}")
 
-        self.video_ext = frozenset(data["video_exts"])
-        self.audio_ext = frozenset(data["audio_exts"])
+        self.video_exts = frozenset(data["video_exts"])
+        self.audio_exts = frozenset(data["audio_exts"])
         self.software_re = data["software_regex"]
         self.tv_re = data["tv_regex"]
         self.av_re = data["av_regex"]
@@ -650,13 +650,13 @@ class Categorizer:
             root, ext = posix_splitext(file["name"])
             ext = ext[1:].lower()  # Strip leading dot
 
-            if ext in self.video_ext:
+            if ext in self.video_exts:
                 if ext == "m2ts":
                     root = re_sub(r"/bdmv/stream/[^/]+$", "", root)
                 elif ext == "vob":
                     root = re_sub(r"/([^/]*vts[0-9_]+|video_ts)$", "", root)
                 file_type = self.VIDEO
-            elif ext in self.audio_ext:
+            elif ext in self.audio_exts:
                 file_type = self.AUDIO
             elif ext == "iso" and not re_test(self.software_re, root):
                 # ISO could be software or video image
