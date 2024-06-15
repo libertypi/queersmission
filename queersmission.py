@@ -715,13 +715,13 @@ class Categorizer:
 re_compile = lru_cache(maxsize=None)(re.compile)
 
 
-def re_test(pattern: str, string: str, _flags=re.A | re.I):
+def re_test(pattern: str, string: str, _flags=re.A | re.I) -> bool:
     """Replace all '_' with '-', then perform an ASCII-only and case-insensitive
     test."""
-    return re_compile(pattern, _flags).search(string.replace("_", "-"))
+    return re_compile(pattern, _flags).search(string.replace("_", "-")) is not None
 
 
-def re_sub(pattern: str, repl, string: str, _flags=re.A | re.I):
+def re_sub(pattern: str, repl, string: str, _flags=re.A | re.I) -> str:
     """Perform an ASCII-only and case-insensitive substitution."""
     return re_compile(pattern, _flags).sub(repl, string)
 
@@ -765,9 +765,8 @@ def process_torrent_done(
     src_dir = op.realpath(data["downloadDir"])
     name = data["name"]
     src = op.join(src_dir, name)
-    seed_dir = client.seed_dir
 
-    src_in_seed_dir = is_subpath(src_dir, seed_dir)
+    src_in_seed_dir = is_subpath(src_dir, client.seed_dir)
     remove_after_copy = private_only and not data["isPrivate"]
 
     # Determine the destination
@@ -779,7 +778,7 @@ def process_torrent_done(
         if not op.isdir(src):
             dst_dir = op.join(dst_dir, op.splitext(name)[0])
     else:
-        dst_dir = seed_dir
+        dst_dir = client.seed_dir
 
     # File operations
     if src_in_seed_dir or not remove_after_copy:
@@ -793,7 +792,7 @@ def process_torrent_done(
         logger.info("Remove public torrent: %s", name)
         client.torrent_remove(tid, delete_local_data=src_in_seed_dir)
     elif not src_in_seed_dir:
-        client.torrent_set_location(tid, seed_dir, move=False)
+        client.torrent_set_location(tid, dst_dir, move=False)
 
 
 def is_subpath(child: str, parent: str, sep: str = os.sep) -> bool:
