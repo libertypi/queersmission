@@ -952,7 +952,7 @@ def main():
     flock = FileLocker(__file__)
     try:
         flock.acquire()
-        start = time.time()
+        start = time.perf_counter()
 
         client = TRClient(
             port=conf["rpc-port"],
@@ -995,7 +995,7 @@ def main():
         logger.critical(str(e))
 
     else:
-        logger.info("Execution completed in %.2f seconds.", time.time() - start)
+        logger.info("Execution completed in %.2f seconds.", time.perf_counter() - start)
 
     finally:
         flock.release()
