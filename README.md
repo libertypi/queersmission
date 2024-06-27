@@ -18,9 +18,9 @@ Queersmission is designed to be run as a `script-torrent-added` to perform stora
 
 `download-dir` should be set to the dedicated seeding space, both in Transmission's settings.json and the script's config.json.
 
-After stopping the Transmission client, edit its `settings.json`. On a Synology NAS, this file may be located at `/volume1/@appdata/transmission/settings.json`. Default locations on other platforms can be found [here](https://github.com/transmission/transmission/blob/main/docs/Configuration-Files.md). **The bellow settings must be set correctly:**
+After stopping the Transmission client, edit its `settings.json`. On a Synology NAS, this file may be located at `/volume1/@appdata/transmission/settings.json`. Default locations on other platforms can be found [here](https://github.com/transmission/transmission/blob/main/docs/Configuration-Files.md). 
 
-Transmission `settings.json`:
+**The bellow settings in Transmission `settings.json` must be set correctly:**
 
 ```json
 "download-dir": "/path_to/download-dir",
