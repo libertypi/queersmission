@@ -15,7 +15,7 @@ Data Files:
 - footprints-statistics.json: Statistical data from the footprints project for
   building regex patterns.
 - google-10000-english-usa-no-swears.txt, common-female-names.txt,
-  common-male-names.txt: Common English words to be excluded from the regex.
+  common-male-names.txt: Common English words to be excluded from the keywords.
 - prefixes-include.txt: Prefixes to include in the regex.
 - prefixes-exclude.txt: Prefixes to exclude from the regex.
 - keywords-include.txt: Keywords to include in the regex.
