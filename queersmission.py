@@ -281,36 +281,16 @@ class StorageManager:
     def __init__(
         self,
         client: TRClient,
-        add_id: Optional[int] = None,
-        torrent_added: bool = True,
         seed_dir_cleanup: bool = False,
         size_limit_gb: Optional[int] = None,
         space_floor_gb: Optional[int] = None,
         watch_dir: Optional[str] = None,
     ) -> None:
-        """
-        Initializes a StorageManager.
 
-        Args:
-         - client: A TRClient instance.
-         - add_id: Ensure additional free space for this torrent ID.
-         - torrent_added: If True, run as script-torrent-added, otherwise as
-           script-torrent-done.
-         - seed_dir_cleanup: If True, removes all files from the seed_dir that
-           are not in Transmission's downloads list.
-         - size_limit_gb: The maximum allowed size (in gigabytes) of the
-           seed_dir.
-         - space_floor_gb: The minimum free space threshold (in gigabytes) for
-           the seed_dir.
-         - watch_dir: When set, old or empty ".torrent" files will be cleared
-           from watch_dir.
-        """
         if not client.is_localhost:
             raise ValueError("Cannot manage storage on a remote host.")
 
         self.client = client
-        self.add_id = add_id
-        self.torrent_added = bool(torrent_added)
         self.seed_dir_cleanup = seed_dir_cleanup
         self.size_limit = self._gb_to_bytes(size_limit_gb)
         self.space_floor = self._gb_to_bytes(space_floor_gb)
@@ -320,6 +300,7 @@ class StorageManager:
     def _maindata(self):
         torrents = {}
         allowed = set()
+
         seed_dir = self.client.seed_dir
         data = self.client.torrent_get(
             fields=("downloadDir", "id", "name", "sizeWhenDone")
@@ -338,34 +319,18 @@ class StorageManager:
                     path[len(seed_dir) :].lstrip(os.sep).partition(os.sep)[0]
                     or t["name"]
                 )
-            torrents[t["id"]] = t
-
-        # Find the size of add_id
-        i = self.add_id
-        add_size = 0
-        if i is not None:
-            t = torrents.get(i) or next((t for t in data if t["id"] == i), None)
-            if t is None:
-                logger.error("Cannot find ID '%s' in torrent list.", i)
-            else:
-                add_size = t["sizeWhenDone"]
-
-        return torrents, allowed, add_size
+            torrents[t["id"]] = t["sizeWhenDone"]
+        return torrents, allowed
 
     @property
-    def torrents(self) -> Dict[int, dict]:
-        """Torrents located in `seed_dir`."""
+    def torrents(self) -> Dict[int, int]:
+        """(id: sizeWhenDone) pairs of torrents located in seed_dir."""
         return self._maindata[0]
 
     @property
     def allowed(self) -> Set[str]:
-        """The torrents' first path segments in `seed_dir`."""
+        """First path segments after seed_dir of current torrents."""
         return self._maindata[1]
-
-    @property
-    def add_size(self) -> int:
-        """The size of torrent `self.add_id`."""
-        return self._maindata[2]
 
     def cleanup(self) -> None:
         """Perform the enabled cleanup tasks."""
@@ -416,39 +381,41 @@ class StorageManager:
             except OSError as e:
                 logger.error(str(e))
 
-    def enforce_quotas(self):
-        """Enforce size limits and free space requirements in seed_dir."""
-        # Handling self.add_id:
-        # +---------------+-------------+------------------------------------------+
-        # | Mode          | In Seed Dir | Action                                   |
-        # +---------------+-------------+------------------------------------------+
-        # | torrent_added | True        | free -= add_size                         |
-        # | torrent_added | False       | No-op                                    |
-        # | torrent-done  | True        | No-op                                    |
-        # | torrent-done  | False       | free -= add_size; total_size += add_size |
-        # +---------------+-------------+------------------------------------------+
+    def apply_quotas(self, add_size: Optional[int] = None, torrent_added: bool = True):
+        """Enforce size limits and free space requirements in seed_dir. If
+        `add_size` is set, ensure additional free space."""
+        # +---+---------------+-------------+------------------------------------------+
+        # |   | Mode          | In Seed Dir | Action                                   |
+        # +---+---------------+-------------+------------------------------------------+
+        # | 1 | torrent_added | True        | free -= add_size                         |
+        # | 2 | torrent_added | False       | No-op                                    |
+        # | 3 | torrent-done  | True        | No-op                                    |
+        # | 4 | torrent-done  | False       | free -= add_size; total_size += add_size |
+        # +---+---------------+-------------+------------------------------------------+
+        # *add_size should only be set in condition 1, 4
 
         total, free = self.client.get_freespace()
-        total_size = sum(t["sizeWhenDone"] for t in self.torrents.values())
+        total_size = sum(self.torrents.values())
 
-        if (
-            self.add_id is not None
-            and (self.add_id in self.torrents) == self.torrent_added  # condition 1, 4
-        ):
-            free -= self.add_size
-            if not self.torrent_added:  # condition 4
-                total_size += self.add_size
+        if add_size is not None:  # condition 1, 4
+            free -= add_size
+            if not torrent_added:  # condition 4
+                total_size += add_size
 
-        size_limit = total - self.space_floor
+        size_limit = total - self.space_floor  # disk capacity
         if 0 < self.size_limit < size_limit:
-            size_limit = self.size_limit
+            size_limit = self.size_limit  # user limit
 
-        size_to_free = max(total_size - size_limit, self.space_floor - free)
+        size_to_free = max(
+            total_size - size_limit,  # size limit
+            self.space_floor - free,  # free space
+        )
+
         if size_to_free <= 0:
             logger.debug("No need to free up space.")
             return
 
-        logger.info("Total size exceeded by %s.", humansize(size_to_free))
+        logger.info("Storage limits exceeded by %s.", humansize(size_to_free))
         results = self._find_optimal_removals(size_to_free)
         if results:
             logger.info(
@@ -724,7 +691,7 @@ class Categorizer:
             if file_type == self.VIDEO:
                 video_size[root, ext] += size
 
-        # Filter the videos by size
+        # Apply a conditional threshold for videos
         size = self.VIDEO_THRESH
         if any(f["length"] >= size for f in files):
             videos = (k for k, v in video_size.items() if v >= size)
@@ -789,19 +756,19 @@ def process_torrent_done(
     private_only: bool,
 ):
     """Process the completion of a torrent download."""
-    # +-----------------+-------------------+---------------------------+
-    # | src_in_seed_dir | remove_torrent    | Action                    |
-    # +-----------------+-------------------+---------------------------+
-    # | Yes             | Yes               | Copy src to dst.          |
-    # |                 |                   | Delete files and remove.  |
-    # +-----------------+-------------------+---------------------------+
-    # | Yes             | No                | Copy src to dst.          |
-    # +-----------------+-------------------+---------------------------+
-    # | No              | Yes               | Keep files and remove.    |
-    # +-----------------+-------------------+---------------------------+
-    # | No              | No                | Copy src to seed_dir,     |
-    # |                 |                   | set new location.         |
-    # +-----------------+-------------------+---------------------------+
+    # +-----------------+----------------+---------------------------+
+    # | src_in_seed_dir | remove_torrent | Action                    |
+    # +-----------------+----------------+---------------------------+
+    # | True            | True           | Copy src to dst.          |
+    # |                 |                | Delete files and remove.  |
+    # +-----------------+----------------+---------------------------+
+    # | True            | False          | Copy src to dst.          |
+    # +-----------------+----------------+---------------------------+
+    # | False           | True           | Keep files and remove.    |
+    # +-----------------+----------------+---------------------------+
+    # | False           | False          | Copy src to seed_dir,     |
+    # |                 |                | set new location.         |
+    # +-----------------+----------------+---------------------------+
     # * src_in_seed_dir: True if the torrent's downloadDir is within seed_dir
     # * remove_torrent: True if user only seed private and torrent is public
 
@@ -809,7 +776,7 @@ def process_torrent_done(
         raise ValueError("Cannot manage download completion on a remote host.")
 
     data = client.torrent_get(
-        fields=("downloadDir", "files", "isPrivate", "name", "status"),
+        fields=("downloadDir", "files", "isPrivate", "name", "sizeWhenDone", "status"),
         ids=tid,
     )["torrents"][0]
 
@@ -837,7 +804,7 @@ def process_torrent_done(
         dst_dir = client.seed_dir
         # Ensure free space in seed_dir
         if not remove_torrent:
-            storage.enforce_quotas()
+            storage.apply_quotas(data["sizeWhenDone"], torrent_added=False)
 
     # File operations
     if src_in_seed_dir or not remove_torrent:
@@ -1002,7 +969,7 @@ def config_logger(logger: logging.Logger, logfile: str, level: str = "INFO"):
 
 
 def main(torrent_added: bool):
-    """Entry point for this script.
+    """Entry point for the script.
 
     Parameters:
      - torrent_added (bool): Indicates the mode of operation. If True, the
@@ -1037,8 +1004,6 @@ def main(torrent_added: bool):
         )
         storage = StorageManager(
             client=client,
-            add_id=tid,
-            torrent_added=torrent_added,
             seed_dir_cleanup=conf["download-dir-cleanup-enable"],
             size_limit_gb=conf["download-dir-size-limit-gb"],
             space_floor_gb=conf["download-dir-space-floor-gb"],
@@ -1047,7 +1012,10 @@ def main(torrent_added: bool):
 
         if torrent_added:
             storage.cleanup()
-            storage.enforce_quotas()
+            if tid is None:
+                storage.apply_quotas()
+            elif tid in storage.torrents:
+                storage.apply_quotas(storage.torrents[tid], torrent_added=True)
 
         elif tid is not None:
             try:
