@@ -342,7 +342,7 @@ class StorageManager:
     def _clean_watch_dir(self) -> None:
         """Remove old or zero-length '.torrent' files from the watch-dir."""
         if not self.watch_dir:
-            raise ValueError("'watch_dir' should not be null or empty.")
+            raise ValueError('Value "watch_dir" should not be null.')
         try:
             with os.scandir(self.watch_dir) as it:
                 entries = tuple(e for e in it if e.name.lower().endswith(".torrent"))
@@ -361,7 +361,7 @@ class StorageManager:
     def _clean_seed_dir(self) -> None:
         """Remove files from seed_dir if they do not exist in Transmission."""
         if not self.seed_dir_cleanup:
-            raise ValueError("'seed_dir_cleanup' should be True.")
+            raise ValueError('Flag "seed_dir_cleanup" should be True.')
         allowed = self.allowed
         try:
             with os.scandir(self.client.seed_dir) as it:
@@ -381,7 +381,7 @@ class StorageManager:
             except OSError as e:
                 logger.error(str(e))
 
-    def apply_quotas(self, add_size: Optional[int] = None, torrent_added: bool = True):
+    def apply_quotas(self, add_size: Optional[int] = None, in_seed_dir: bool = True):
         """Enforce size limits and free space requirements in seed_dir. If
         `add_size` is set, ensure additional free space."""
         # +---+---------------+-------------+------------------------------------------+
@@ -392,14 +392,14 @@ class StorageManager:
         # | 3 | torrent-done  | True        | No-op                                    |
         # | 4 | torrent-done  | False       | free -= add_size; total_size += add_size |
         # +---+---------------+-------------+------------------------------------------+
-        # *add_size should only be set in condition 1, 4
+        # NOTE: add_size should only be set in condition 1, 4
 
         total, free = self.client.get_freespace()
         total_size = sum(self.torrents.values())
 
         if add_size is not None:  # condition 1, 4
             free -= add_size
-            if not torrent_added:  # condition 4
+            if not in_seed_dir:  # condition 4
                 total_size += add_size
 
         size_limit = total - self.space_floor  # disk capacity
@@ -465,9 +465,7 @@ class StorageManager:
         bytes of space.
         """
         if size_to_free <= 0:
-            raise ValueError(
-                f"Expect 'size_to_free' to be a positive integer, got '{size_to_free}'"
-            )
+            raise ValueError('Expect "size_to_free" to be a positive integer.')
         # Categorize torrents based on leecher count.
         results = []
         with_leechers = []
@@ -514,7 +512,7 @@ class StorageManager:
             if size and size > 0:
                 return int(size * 1073741824)
         except (TypeError, ValueError) as e:
-            logger.error("Invalid value '%s': %s", size, str(e))
+            logger.error('Invalid value "%s": %s', size, str(e))
         return 0
 
 
@@ -529,9 +527,9 @@ class KnapsackSolver:
         """
         if max_cells is not None:
             if not isinstance(max_cells, int):
-                raise TypeError("Expect 'max_cells' to be of type 'int.'")
+                raise TypeError('Expect "max_cells" to be of type "int".')
             if max_cells < 1:
-                raise ValueError("max_cells must be a positive integer.")
+                raise ValueError('Expect "max_cells" to be a positive integer.')
         self.max_cells = max_cells
 
     def solve(self, weights: List[int], values: List[int], capacity: int) -> Set[int]:
@@ -546,7 +544,7 @@ class KnapsackSolver:
             Set[int]: A set of indices of the items to include to maximize value.
         """
         if not isinstance(capacity, int):
-            raise TypeError("Expect 'capacity' to be of type 'int.'")
+            raise TypeError('Expect "capacity" to be of type "int".')
 
         if capacity <= 0:
             return set()
@@ -795,7 +793,7 @@ def process_torrent_done(
     # Determine the destination
     if src_in_seed_dir:
         cat = Categorizer().categorize(data["files"])
-        logger.info("Categorize '%s' as: %s", name, cat.name)
+        logger.info('Categorize "%s" as: %s', name, cat.name)
         dst_dir = op.normpath(dsts.get(cat.value) or dsts[Cat.DEFAULT.value])
         # Create a directory for a single file torrent
         if not op.isdir(src):
@@ -804,12 +802,12 @@ def process_torrent_done(
         dst_dir = client.seed_dir
         # Ensure free space in seed_dir
         if not remove_torrent:
-            storage.apply_quotas(data["sizeWhenDone"], torrent_added=False)
+            storage.apply_quotas(data["sizeWhenDone"], in_seed_dir=False)
 
     # File operations
     if src_in_seed_dir or not remove_torrent:
         dst = op.join(dst_dir, name)
-        logger.info("Copy: '%s' -> '%s'", src, dst)
+        logger.info('Copy: "%s" -> "%s"', src, dst)
         os.makedirs(dst_dir, exist_ok=True)
         copy_file(src, dst)
 
@@ -915,9 +913,9 @@ def parse_config(configfile: str) -> dict:
         # Validation
         v = config["download-dir"]
         if v and not op.isdir(v):
-            raise ValueError("The 'download-dir' is not a valid directory.")
+            raise ValueError('The "download-dir" is not a valid directory.')
         if not op.isdir(config["destinations"][Cat.DEFAULT.value]):
-            raise ValueError("The 'destinations.default' is not a valid directory.")
+            raise ValueError('The "destinations.default" is not a valid directory.')
 
         # Password
         v = config["rpc-password"]
@@ -934,7 +932,7 @@ def parse_config(configfile: str) -> dict:
     except FileNotFoundError:
         _dump_config(config)
         sys.exit(
-            f"A blank configuration file has been created at '{configfile}'. "
+            f'A blank configuration file has been created at "{configfile}". '
             "Edit the settings before running this script again."
         )
     except Exception as e:
@@ -1015,23 +1013,16 @@ def main(torrent_added: bool):
             if tid is None:
                 storage.apply_quotas()
             elif tid in storage.torrents:
-                storage.apply_quotas(storage.torrents[tid], torrent_added=True)
+                storage.apply_quotas(storage.torrents[tid], in_seed_dir=True)
 
         elif tid is not None:
-            try:
-                process_torrent_done(
-                    tid=tid,
-                    client=client,
-                    storage=storage,
-                    dsts=conf["destinations"],
-                    private_only=conf["only-seed-private"],
-                )
-            except Exception as e:
-                logger.error(
-                    "Error processing torrent '%s': %s",
-                    os.environ.get("TR_TORRENT_NAME", ""),
-                    str(e),
-                )
+            process_torrent_done(
+                tid=tid,
+                client=client,
+                storage=storage,
+                dsts=conf["destinations"],
+                private_only=conf["only-seed-private"],
+            )
 
     except Exception as e:
         logger.critical(str(e))

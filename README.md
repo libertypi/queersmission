@@ -20,7 +20,7 @@ Queersmission is designed to be run as a `script-torrent-added` to perform stora
 
 After stopping the Transmission client, edit its `settings.json`. On a Synology NAS, this file may be located at `/volume1/@appdata/transmission/settings.json`. Default locations on other platforms can be found [here](https://github.com/transmission/transmission/blob/main/docs/Configuration-Files.md). 
 
-**The bellow settings in Transmission `settings.json` must be set correctly:**
+**The bellow settings in Transmission's `settings.json` must be set correctly:**
 
 ```json
 "download-dir": "/path_to/download-dir",
@@ -71,7 +71,7 @@ Template:
 
 - **download-dir-cleanup-enable**: Boolean (default = false). When enabled, removes all files from the `download-dir` that are not in Transmission's downloads list. **Avoid storing personal or unrelated files in the `download-dir`, as they will be automatically deleted when this option is active!**
 
-- **download-dir-size-limit-gb**: Integer (default = 0). Sets the maximum allowed size (in gigabytes) of the download-dir. If the total size of the files exceeds this limit, the script will remove the least active torrents to free up space. Set to 0 to disable.
+- **download-dir-size-limit-gb**: Integer (default = 0). Sets the maximum allowed size (in gigabytes) of the download-dir. If the total size of the files exceeds this limit, the script will remove inactive torrents to free up space. Set to 0 to disable.
 
 - **download-dir-space-floor-gb**: Integer (default = 0). Specifies a minimum free space threshold (in gigabytes) for the download-dir. Set to 0 to disable.
 
