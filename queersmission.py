@@ -135,26 +135,24 @@ class TRClient:
         if arguments is not None:
             query["arguments"] = arguments
 
+        res = None
         for retry in range(1, self._RETRIES + 1):
             logger.debug("Requesting: %s, Attempt: %s", query, retry)
             try:
-                r = self.session.post(self.url, json=query)
-
-                if r.status_code not in {401, 403, 409}:
-                    data = r.json()
+                res = self.session.post(self.url, json=query)
+                if res.status_code not in {401, 403, 409}:
+                    data = res.json()
                     logger.debug("Response: %s", data)
                     if data["result"] == "success":
                         return data["arguments"]
-                elif r.status_code == 409:
-                    self.session.headers[self._SSID] = r.headers[self._SSID]
+                elif res.status_code == 409:
+                    self.session.headers[self._SSID] = res.headers[self._SSID]
             except Exception:
                 if retry == self._RETRIES:
                     raise
-            else:
-                if retry == self._RETRIES:
-                    raise Exception(f"API Error ({r.status_code}): {r.text}")
 
-        assert False, "Unexpected error in the retry logic."
+        assert res is not None, 'Response "res" should never be None at this point.'
+        raise Exception(f"API Error ({res.status_code}): {res.text}")
 
     @staticmethod
     def _check_ids(ids):
@@ -228,7 +226,7 @@ class TRClient:
             time.sleep(interval)
 
     def get_freespace(self, path: Optional[str] = None) -> Tuple[int, int]:
-        """Tests how much free space is available in a client-specified folder.
+        """Tests how much space is available in a client-specified folder.
         If `path` is None, test seed_dir."""
         if path is None:
             path = self.seed_dir
@@ -300,7 +298,6 @@ class StorageManager:
     def _maindata(self):
         torrents = {}
         allowed = set()
-
         seed_dir = self.client.seed_dir
         data = self.client.torrent_get(
             fields=("downloadDir", "id", "name", "sizeWhenDone")
@@ -461,7 +458,7 @@ class StorageManager:
         )
 
     def _find_optimal_removals(self, size_to_free: int) -> List[dict]:
-        """Find the least active torrents to delete to free up `size_to_free`
+        """Find an optimal set of torrents to remove to free up `size_to_free`
         bytes of space.
         """
         if size_to_free <= 0:
@@ -509,11 +506,10 @@ class StorageManager:
         """Converts GiB to bytes. Returns 0 if the input is invalid or
         negative."""
         try:
-            if size and size > 0:
-                return int(size * 1073741824)
+            return int(size * 1073741824) if size and size > 0 else 0
         except (TypeError, ValueError) as e:
             logger.error('Invalid value "%s": %s', size, str(e))
-        return 0
+            return 0
 
 
 class KnapsackSolver:
@@ -658,7 +654,7 @@ class Categorizer:
         if main_type == self.DEFAULT:
             return Cat.DEFAULT
 
-        assert False, f"Unexpected main_type: '{main_type}'"
+        raise ValueError(f'Unexpected "main_type": {main_type}')
 
     def _analyze_file_types(self, files: List[dict]) -> Tuple[int, list]:
         """Analyze and categorize files by type, finding the most common
