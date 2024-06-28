@@ -154,26 +154,6 @@ class TRClient:
         assert res is not None, 'Response "res" should never be None at this point.'
         raise Exception(f"API Error ({res.status_code}): {res.text}")
 
-    @staticmethod
-    def _check_ids(ids):
-        """Validate the IDs passed to the Transmission RPC.
-
-        ids should be one of the following:
-        - an integer referring to a torrent id
-        - a list of torrent id numbers, SHA1 hash strings, or both
-        - a string, 'recently-active', for recently-active torrents
-        """
-        for i in ids if isinstance(ids, (list, tuple)) else (ids,):
-            if isinstance(i, int):
-                if i > 0:
-                    continue
-            elif isinstance(i, str):
-                if re_compile(r"[A-Fa-f0-9]{40}").fullmatch(i):
-                    continue
-                if ids == "recently-active":
-                    return
-            raise ValueError(f"Invalid torrent ID '{i}' in IDs: {ids}")
-
     def torrent_start(self, ids=None):
         self._call("torrent-start", ids=ids)
 
@@ -272,6 +252,26 @@ class TRClient:
         if not s:
             raise ValueError("Unable to get seed_dir.")
         return self.normpath(s)
+
+    @staticmethod
+    def _check_ids(ids):
+        """Validate the IDs passed to the Transmission RPC.
+
+        ids should be one of the following:
+        - an integer referring to a torrent id
+        - a list of torrent id numbers, SHA1 hash strings, or both
+        - a string, 'recently-active', for recently-active torrents
+        """
+        for i in ids if isinstance(ids, (tuple, list)) else (ids,):
+            if isinstance(i, int):
+                if i > 0:
+                    continue
+            elif isinstance(i, str):
+                if re_compile(r"[A-Fa-f0-9]{40}").fullmatch(i):
+                    continue
+                if ids == "recently-active":
+                    return
+            raise ValueError(f"Invalid torrent ID '{i}' in IDs: {ids}")
 
 
 class StorageManager:
@@ -384,8 +384,8 @@ class StorageManager:
         # +---+---------------+-------------+------------------------------------------+
         # |   | Mode          | In Seed Dir | Action                                   |
         # +---+---------------+-------------+------------------------------------------+
-        # | 1 | torrent_added | True        | free -= add_size                         |
-        # | 2 | torrent_added | False       | No-op                                    |
+        # | 1 | torrent-added | True        | free -= add_size                         |
+        # | 2 | torrent-added | False       | No-op                                    |
         # | 3 | torrent-done  | True        | No-op                                    |
         # | 4 | torrent-done  | False       | free -= add_size; total_size += add_size |
         # +---+---------------+-------------+------------------------------------------+
@@ -769,26 +769,26 @@ def process_torrent_done(
     if not client.is_localhost:
         raise ValueError("Cannot manage download completion on a remote host.")
 
-    data = client.torrent_get(
+    t = client.torrent_get(
         fields=("downloadDir", "files", "isPrivate", "name", "sizeWhenDone", "status"),
         ids=tid,
     )["torrents"][0]
 
     # Check for torrent status
     ok_status = {TRStatus.STOPPED, TRStatus.SEED_WAIT, TRStatus.SEED}
-    if data["status"] not in ok_status:
+    if t["status"] not in ok_status:
         client.wait_status(tid, ok_status, timeout=15)
 
-    src_dir = op.realpath(data["downloadDir"])
-    name = data["name"]
+    src_dir = op.realpath(t["downloadDir"])
+    name = t["name"]
     src = op.join(src_dir, name)
 
     src_in_seed_dir = is_subpath(src_dir, client.seed_dir)
-    remove_torrent = private_only and not data["isPrivate"]
+    remove_torrent = private_only and not t["isPrivate"]
 
     # Determine the destination
     if src_in_seed_dir:
-        cat = Categorizer().categorize(data["files"])
+        cat = Categorizer().categorize(t["files"])
         logger.info('Categorize "%s" as: %s', name, cat.name)
         dst_dir = op.normpath(dsts.get(cat.value) or dsts[Cat.DEFAULT.value])
         # Create a directory for a single file torrent
@@ -798,12 +798,12 @@ def process_torrent_done(
         dst_dir = client.seed_dir
         # Ensure free space in seed_dir
         if not remove_torrent:
-            storage.apply_quotas(data["sizeWhenDone"], in_seed_dir=False)
+            storage.apply_quotas(t["sizeWhenDone"], in_seed_dir=False)
 
     # File operations
     if src_in_seed_dir or not remove_torrent:
         dst = op.join(dst_dir, name)
-        logger.info('Copy: "%s" -> "%s"', src, dst)
+        logger.info('Copy: "%s" -> "%s" (%s)', src, dst, humansize(t["sizeWhenDone"]))
         os.makedirs(dst_dir, exist_ok=True)
         copy_file(src, dst)
 
@@ -883,7 +883,7 @@ def humansize(size: int) -> str:
 
 def parse_config(configfile: str) -> dict:
     """Parse and validate the configuration file."""
-    config = {
+    conf = {
         "rpc-port": 9091,
         "rpc-url": "/transmission/rpc",
         "rpc-username": "",
@@ -904,37 +904,33 @@ def parse_config(configfile: str) -> dict:
 
     try:
         with open(configfile, "r", encoding="utf-8") as f:
-            config.update(json.load(f))
+            conf.update(json.load(f))
 
         # Validation
-        v = config["download-dir"]
-        if v and not op.isdir(v):
-            raise ValueError('The "download-dir" is not a valid directory.')
-        if not op.isdir(config["destinations"][Cat.DEFAULT.value]):
-            raise ValueError('The "destinations.default" is not a valid directory.')
+        if not conf["destinations"][Cat.DEFAULT.value]:
+            raise ValueError("The default destination path is not set.")
 
         # Password
-        v = config["rpc-password"]
-        if v:
-            if v[0] == "{" and v[-1] == "}":
-                config["rpc-password"] = base64.b64decode(v[-2:0:-1]).decode()
-            else:
-                config["rpc-password"] = (
-                    f"{{{base64.b64encode(v.encode()).decode()[::-1]}}}"
-                )
-                _dump_config(config)
-                config["rpc-password"] = v
+        p = conf["rpc-password"]
+        if not p:
+            pass
+        elif p[0] == "{" and p[-1] == "}":
+            conf["rpc-password"] = base64.b64decode(p[-2:0:-1]).decode()
+        else:
+            conf["rpc-password"] = f"{{{base64.b64encode(p.encode()).decode()[::-1]}}}"
+            _dump_config(conf)
+            conf["rpc-password"] = p
 
     except FileNotFoundError:
-        _dump_config(config)
+        _dump_config(conf)
         sys.exit(
             f'A blank configuration file has been created at "{configfile}". '
             "Edit the settings before running this script again."
         )
     except Exception as e:
         sys.exit(f"Configuration error: {e}")
-    else:
-        return config
+
+    return conf
 
 
 def config_logger(logger: logging.Logger, logfile: str, level: str = "INFO"):
