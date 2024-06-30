@@ -117,7 +117,7 @@ def build_regex(
     source: dict,
     max_items: int,
     ex_set: set = None,
-    ex_lst: list = (),
+    ex_lst: tuple = (),
 ):
     # ex_set: a set of strings to be excluded (literal match)
     # ex_lst: a list of regex to filter the source (regex match)
@@ -205,7 +205,7 @@ def main():
     args = parse_args()
 
     src = script_dir.joinpath("footprints-statistics.json")
-    dst = entry_dir.joinpath("patterns.json")
+    dst = entry_dir.joinpath("queersmission/patterns.json")
     print(f"Source: {src}\nOutput: {dst}")
 
     # Update data from footprints

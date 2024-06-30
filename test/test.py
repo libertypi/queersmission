@@ -16,7 +16,8 @@ except ImportError:
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from queersmission import KnapsackSolver, copy_file
+from queersmission.storage import knapsack
+from queersmission.utils import copy_file
 
 
 class TestFileOperations(unittest.TestCase):
@@ -130,7 +131,7 @@ class TestFileOperations(unittest.TestCase):
 
 class TestKnapsack(unittest.TestCase):
 
-    _MC = 1024**2
+    max_cells = 1024**2
 
     @staticmethod
     def _get_random():
@@ -157,25 +158,22 @@ class TestKnapsack(unittest.TestCase):
             ([1], [2], -100),
         ]
         answer = set()
-        knapsack = KnapsackSolver(self._MC)
         for w, v, c in data:
-            self.assertSetEqual(knapsack.solve(w, v, c), answer)
+            self.assertSetEqual(knapsack(w, v, c, self.max_cells), answer)
 
     def test_full(self):
         # capacity >= sum(weights)
-        knapsack = KnapsackSolver(self._MC)
         for i in range(3):
             w, v, _ = self._get_random()
             c = sum(w) + i
             answer = set(range(len(w)))
-            self.assertSetEqual(knapsack.solve(w, v, c), answer)
+            self.assertSetEqual(knapsack(w, v, c, self.max_cells), answer)
 
     def test_sum(self):
         # sum of result's weights should <= capacity
-        knapsack = KnapsackSolver(self._MC)
         for _ in range(3):
             w, v, c = self._get_random()
-            result = knapsack.solve(w, v, c)
+            result = knapsack(w, v, c, self.max_cells)
             self.assertLessEqual(sum(w[i] for i in result), c)
 
     def test_simple(self):
@@ -184,20 +182,18 @@ class TestKnapsack(unittest.TestCase):
         v = [22, 12, 16, 10, 35, 26, 42, 53]
         c = 100
         answer = {0, 1, 3, 4, 5}
-        knapsack = KnapsackSolver(self._MC)
-        self.assertSetEqual(knapsack.solve(w, v, c), answer)
+        self.assertSetEqual(knapsack(w, v, c, self.max_cells), answer)
 
     @unittest.skipIf(knapsack_solver is None, "OR-Tools not available")
     def test_comparative(self):
         # compare with OR-Tools
-        knapsack = KnapsackSolver()
         for _ in range(50):
             n = random.randint(10, 50)
             weights = random.choices(range(1, 500), k=n)
             values = random.choices(range(1, 500), k=n)
             capacity = sum(weights) // random.randint(2, 4)
 
-            result = knapsack.solve(weights, values, capacity)
+            result = knapsack(weights, values, capacity)
             answer = self._ortools_solve(weights, values, capacity)
 
             self.assertLessEqual(sum(weights[i] for i in result), capacity)
