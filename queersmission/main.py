@@ -17,6 +17,10 @@ def config_logger(logfile: str, level: str = "INFO"):
     """Configure the logging system with both console and file handlers."""
     logger.handlers.clear()
     logger.propagate = False
+    try:
+        logger.setLevel(level.upper() or logging.INFO)
+    except ValueError:
+        logger.setLevel(logging.INFO)
 
     # Console handler
     handler = logging.StreamHandler()
@@ -32,12 +36,6 @@ def config_logger(logfile: str, level: str = "INFO"):
         )
     )
     logger.addHandler(handler)
-
-    try:
-        logger.setLevel(level.upper() or logging.INFO)
-    except ValueError:
-        logger.setLevel(logging.INFO)
-        logger.error("Invalid logging level: %s", level)
 
 
 def process_torrent_done(
