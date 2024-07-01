@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import logging
 import os
 import os.path as op
 import random
@@ -56,17 +55,14 @@ class TestFileOperations(unittest.TestCase):
 
     def test_raise1(self):
         src, dst = self.src, self.dst
-        logging.disable(logging.WARNING)
         # dir -> file
         self._touch(f"{src}/dir/file.txt")
         self._touch(f"{dst}/dir")
         with self.assertRaises(OSError):
             self._run_copy(f"{src}/dir", dst)
-        logging.disable(logging.NOTSET)
 
     def test_raise2(self):
         src, dst = self.src, self.dst
-        logging.disable(logging.WARNING)
         # file -> dir
         self._touch(f"{src}/file.txt")
         # empty dst dir
@@ -77,7 +73,6 @@ class TestFileOperations(unittest.TestCase):
         self._touch(f"{dst}/file/file.txt/file.txt")
         with self.assertRaises(OSError):
             self._run_copy(f"{src}/file.txt", dst)
-        logging.disable(logging.NOTSET)
 
     def test_copy_dir1(self):
         src, dst = self.src, self.dst

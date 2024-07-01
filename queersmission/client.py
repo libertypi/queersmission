@@ -41,7 +41,7 @@ class Client:
         self.url = f"{protocol}://{host}:{port}{path}"
         self._seed_dir = seed_dir
 
-        if host.lower() in ("127.0.0.1", "localhost", "::1"):
+        if host.lower() in {"127.0.0.1", "0.0.0.0", "::1", "localhost"}:
             self.is_localhost = True
             self.path_module = op
             self.normpath = op.realpath
@@ -51,7 +51,6 @@ class Client:
         self.session = requests.Session()
         if username and password:
             self.session.auth = (username, password)
-        self.session.headers.update({self._SSID: ""})
 
     def _call(self, method: str, arguments: Optional[dict] = None, *, ids=None) -> dict:
         """Make a call to the Transmission RPC."""
@@ -129,13 +128,13 @@ class Client:
                 res = shutil.disk_usage(path)
                 return res.total, res.free
             except OSError as e:
-                logger.warning(str(e))
+                logger.warning(e)
         res = self._call("free-space", {"path": path})
         return res["total_size"], res["size-bytes"]
 
     @cached_property
     def seed_dir(self) -> str:
-        """The seeding directory of the host."""
+        """The normalized seeding directory."""
         s = self._seed_dir or self.session_settings["download-dir"]
         if not s:
             raise ValueError("Unable to get seed_dir.")

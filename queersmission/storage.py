@@ -45,7 +45,7 @@ class StorageManager:
         )["torrents"]
 
         for t in data:
-            if seed_dir == t["downloadDir"]:
+            if t["downloadDir"] == seed_dir:
                 allowed.add(t["name"])
             else:
                 path = op.realpath(t["downloadDir"])
@@ -85,7 +85,7 @@ class StorageManager:
             with os.scandir(self.watch_dir) as it:
                 entries = tuple(e for e in it if e.name.lower().endswith(".torrent"))
         except OSError as e:
-            logger.error(str(e))
+            logger.error(e)
             return
         for e in entries:
             try:
@@ -94,7 +94,7 @@ class StorageManager:
                     logger.debug("Cleanup watch-dir: %s", e.path)
                     os.unlink(e.path)
             except OSError as e:
-                logger.error(str(e))
+                logger.error(e)
 
     def _purge_seed_dir(self) -> None:
         """Remove files from seed_dir if they do not exist in Transmission."""
@@ -105,7 +105,7 @@ class StorageManager:
             with os.scandir(self.client.seed_dir) as it:
                 entries = tuple(e for e in it if e.name not in allowed)
         except OSError as e:
-            logger.error(str(e))
+            logger.error(e)
             return
         for e in entries:
             try:
@@ -117,7 +117,7 @@ class StorageManager:
                 else:
                     os.unlink(e.path)
             except OSError as e:
-                logger.error(str(e))
+                logger.error(e)
 
     def apply_quotas(self, add_size: Optional[int] = None, in_seed_dir: bool = True):
         """Enforce size limits and free space requirements in seed_dir. If

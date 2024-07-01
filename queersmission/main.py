@@ -78,12 +78,15 @@ def process_torrent_done(
     )["torrents"][0]
     _check_torrent_done(tid, t, client)
 
-    src_dir = op.realpath(t["downloadDir"])
-    name = t["name"]
-    src = op.join(src_dir, name)
-
-    src_in_seed_dir = is_subpath(src_dir, client.seed_dir)
     remove_torrent = private_only and not t["isPrivate"]
+    src = t["downloadDir"]
+    if src == client.seed_dir:
+        src_in_seed_dir = True
+    else:
+        src = op.realpath(src)
+        src_in_seed_dir = is_subpath(src, client.seed_dir)
+    name = t["name"]
+    src = op.join(src, name)
 
     # Determine the destination
     if src_in_seed_dir:
@@ -185,7 +188,7 @@ def main(torrent_added: bool, config_dir: str):
             )
 
     except Exception as e:
-        logger.critical(str(e))
+        logger.critical(e)
 
     else:
         logger.info("Execution completed in %.2f seconds.", time.perf_counter() - start)

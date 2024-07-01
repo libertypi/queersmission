@@ -27,7 +27,7 @@ if sys.platform.startswith("linux"):
 
     def copy_file(src: str, dst: str) -> None:
         """
-        Copy src to dst, trying to use reflink. If dst exists, it will be
+        Copy src to dst using cp with reflink. If dst exists, it will be
         overwritten. If src is a file and dst is a directory or vice versa, an
         error will occur.
 
@@ -41,10 +41,17 @@ if sys.platform.startswith("linux"):
                 capture_output=True,
             )
         except subprocess.CalledProcessError as e:
-            logger.warning(e.stderr.strip().decode() or str(e))
+            # Fallback if cp fails silently or does not support the options
+            stderr = e.stderr.decode().strip()
+            if stderr and not re.search(
+                r"(unrecognized|invalid|unknown|illegal)\s+option", stderr, re.I
+            ):
+                raise OSError(stderr)
+            logger.debug(stderr or e)
             _copy_file_fallback(src, dst)
         except FileNotFoundError as e:
-            logger.warning(str(e))
+            # Fallback if cp command not found
+            logger.debug(e)
             _copy_file_fallback(src, dst)
 
 else:
