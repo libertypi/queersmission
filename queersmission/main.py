@@ -7,7 +7,7 @@ from logging.handlers import RotatingFileHandler
 
 from . import PKG_NAME, config, logger
 from .cat import Cat, Categorizer
-from .client import Client, TRStatus
+from .client import Client
 from .filelock import FileLocker
 from .storage import StorageManager
 from .utils import copy_file, humansize, is_subpath
@@ -75,7 +75,6 @@ def process_torrent_done(
             "name",
             "percentDone",
             "sizeWhenDone",
-            "status",
         ),
         ids=tid,
     )["torrents"][0]
@@ -120,12 +119,11 @@ def process_torrent_done(
 def _check_torrent_done(tid: int, t: dict, client: Client, retry: int = 10):
     """Checks if a torrent has finished downloading. Retries every second.
     Raises TimeoutError after `retry` retries."""
-    status = {TRStatus.STOPPED, TRStatus.SEED_WAIT, TRStatus.SEED}
-    while t["percentDone"] < 1 or t["status"] not in status:
+    while t["percentDone"] < 1:
         if retry <= 0:
             raise TimeoutError("Timeout while waiting for torrent to finish.")
         time.sleep(1)
-        t = client.torrent_get(("percentDone", "status"), tid)["torrents"][0]
+        t = client.torrent_get(("percentDone",), tid)["torrents"][0]
         retry -= 1
 
 
