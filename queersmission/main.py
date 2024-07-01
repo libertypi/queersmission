@@ -120,9 +120,9 @@ def _check_torrent_done(tid: int, t: dict, client: Client, retry: int = 10):
     while t["percentDone"] < 1:
         if retry <= 0:
             raise TimeoutError("Timeout while waiting for torrent to finish.")
+        retry -= 1
         time.sleep(1)
         t = client.torrent_get(("percentDone",), tid)["torrents"][0]
-        retry -= 1
 
 
 def main(torrent_added: bool, config_dir: str):

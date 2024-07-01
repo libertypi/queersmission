@@ -1,4 +1,3 @@
-import os
 import os.path as op
 import re
 import shutil
@@ -52,7 +51,7 @@ else:
     copy_file = _copy_file_fallback
 
 
-def is_subpath(child: str, parent: str, sep: str = os.sep) -> bool:
+def is_subpath(child: str, parent: str, sep: str = op.sep) -> bool:
     """Check if `child` is within `parent`. Both paths must be absolute and
     normalized."""
     if not child.endswith(sep):

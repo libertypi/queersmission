@@ -54,7 +54,7 @@ class StorageManager:
                     continue
                 # Find the first segment after seed_dir.
                 allowed.add(
-                    path[len(seed_dir) :].lstrip(os.sep).partition(os.sep)[0]
+                    path[len(seed_dir) :].lstrip(op.sep).partition(op.sep)[0]
                     or t["name"]
                 )
             torrents[t["id"]] = t["sizeWhenDone"]
