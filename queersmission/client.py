@@ -1,9 +1,8 @@
 import os.path as op
 import shutil
-import time
 from enum import IntEnum
 from functools import cached_property
-from typing import List, Optional, Set, Tuple
+from typing import List, Optional, Tuple
 
 import requests
 
@@ -21,7 +20,7 @@ class TRStatus(IntEnum):
     SEED = 6
 
 
-class TRClient:
+class Client:
     """A client for interacting with the Transmission RPC interface."""
 
     _SSID = "X-Transmission-Session-Id"
@@ -119,23 +118,6 @@ class TRClient:
             {"location": location, "move": move},
             ids=ids,
         )
-
-    def wait_status(self, ids, status: Set[TRStatus], timeout: int):
-        """Waits until all specified torrents reach given status or timeout."""
-        interval = 0.5
-        if isinstance(status, TRStatus):
-            status = (status,)
-        timeout += time.perf_counter()
-        while True:
-            torrents = self.torrent_get(("status",), ids)["torrents"]
-            if all(t["status"] in status for t in torrents):
-                return
-            remain = timeout - time.perf_counter()
-            if remain <= 0:
-                raise TimeoutError("Timeout while waiting for desired status.")
-            if remain < interval:
-                interval = remain
-            time.sleep(interval)
 
     def get_freespace(self, path: Optional[str] = None) -> Tuple[int, int]:
         """Tests how much space is available in a client-specified folder.

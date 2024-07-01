@@ -7,7 +7,7 @@ from logging.handlers import RotatingFileHandler
 
 from . import PKG_NAME, config, logger
 from .cat import Cat, Categorizer
-from .client import TRClient, TRStatus
+from .client import Client, TRStatus
 from .filelock import FileLocker
 from .storage import StorageManager
 from .utils import copy_file, humansize, is_subpath
@@ -35,16 +35,16 @@ def config_logger(logfile: str, level: str = "INFO"):
 
     try:
         logger.setLevel(level.upper() or logging.INFO)
-    except Exception:
+    except ValueError:
         logger.setLevel(logging.INFO)
         logger.error("Invalid logging level: %s", level)
 
 
 def process_torrent_done(
     tid: int,
-    client: TRClient,
+    client: Client,
     storage: StorageManager,
-    dsts: dict,
+    dests: dict,
     private_only: bool,
 ):
     """Process the completion of a torrent download."""
@@ -68,14 +68,18 @@ def process_torrent_done(
         raise ValueError("Cannot manage download completion on a remote host.")
 
     t = client.torrent_get(
-        fields=("downloadDir", "files", "isPrivate", "name", "sizeWhenDone", "status"),
+        fields=(
+            "downloadDir",
+            "files",
+            "isPrivate",
+            "name",
+            "percentDone",
+            "sizeWhenDone",
+            "status",
+        ),
         ids=tid,
     )["torrents"][0]
-
-    # Check for torrent status
-    ok_status = {TRStatus.STOPPED, TRStatus.SEED_WAIT, TRStatus.SEED}
-    if t["status"] not in ok_status:
-        client.wait_status(tid, ok_status, 15)
+    _check_torrent_done(tid, t, client)
 
     src_dir = op.realpath(t["downloadDir"])
     name = t["name"]
@@ -86,9 +90,9 @@ def process_torrent_done(
 
     # Determine the destination
     if src_in_seed_dir:
-        cat = Categorizer().categorize(t["files"])
-        logger.info('Categorize "%s" as: %s', name, cat.name)
-        dst_dir = op.normpath(dsts.get(cat.value) or dsts[Cat.DEFAULT.value])
+        c = Categorizer().categorize(t["files"])
+        logger.info('Categorize "%s" as: %s', name, c.name)
+        dst_dir = op.normpath(dests[c.value] or dests[Cat.DEFAULT.value])
         # Create a directory for a single file torrent
         if not op.isdir(src):
             dst_dir = op.join(dst_dir, op.splitext(name)[0])
@@ -111,6 +115,18 @@ def process_torrent_done(
         client.torrent_remove(tid, delete_local_data=src_in_seed_dir)
     elif not src_in_seed_dir:
         client.torrent_set_location(tid, dst_dir, move=False)
+
+
+def _check_torrent_done(tid: int, t: dict, client: Client, retry: int = 10):
+    """Checks if a torrent has finished downloading. Retries every second.
+    Raises TimeoutError after `retry` retries."""
+    status = {TRStatus.STOPPED, TRStatus.SEED_WAIT, TRStatus.SEED}
+    while t["percentDone"] < 1 or t["status"] not in status:
+        if retry <= 0:
+            raise TimeoutError("Timeout while waiting for torrent to finish.")
+        time.sleep(1)
+        t = client.torrent_get(("percentDone", "status"), tid)["torrents"][0]
+        retry -= 1
 
 
 def main(torrent_added: bool, config_dir: str):
@@ -141,7 +157,7 @@ def main(torrent_added: bool, config_dir: str):
             )
             tid = int(tid)
 
-        client = TRClient(
+        client = Client(
             port=conf["rpc-port"],
             path=conf["rpc-url"],
             username=conf["rpc-username"],
@@ -168,7 +184,7 @@ def main(torrent_added: bool, config_dir: str):
                 tid=tid,
                 client=client,
                 storage=storage,
-                dsts=conf["destinations"],
+                dests=conf["destinations"],
                 private_only=conf["only-seed-private"],
             )
 

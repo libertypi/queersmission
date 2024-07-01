@@ -6,7 +6,7 @@ from functools import cached_property
 from typing import Dict, List, Optional, Set
 
 from . import logger
-from .client import TRClient, TRStatus
+from .client import Client, TRStatus
 from .utils import humansize, is_subpath
 
 try:
@@ -19,7 +19,7 @@ class StorageManager:
 
     def __init__(
         self,
-        client: TRClient,
+        client: Client,
         seed_dir_purge: bool = False,
         size_limit_gb: int = 0,
         space_floor_gb: int = 0,
@@ -189,11 +189,11 @@ class StorageManager:
         # Torrents are only removed if they have been completed for more than 12
         # hours to avoid race conditions.
         threshold = time.time() - 43200
-        rm_status = {TRStatus.STOPPED, TRStatus.SEED_WAIT, TRStatus.SEED}
+        status = {TRStatus.STOPPED, TRStatus.SEED_WAIT, TRStatus.SEED}
         return (
             t
             for t in data
-            if t["status"] in rm_status
+            if t["status"] in status
             and t["percentDone"] == 1
             and 0 < t["doneDate"] < threshold
         )

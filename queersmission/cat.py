@@ -8,13 +8,12 @@ from typing import List, Optional, Tuple
 
 from .utils import re_compile
 
-VIDEO_THRESH = 52428800  # 50 MiB
 _VIDEO, _AUDIO, _DEFAULT = range(3)
-_REFLAGS = re.ASCII | re.IGNORECASE
+_REFLAG = re.ASCII | re.IGNORECASE
 
 
 class Cat(Enum):
-    """Enumeration for categorizing torrent files."""
+    """Enumeration for categorizing torrents."""
 
     DEFAULT = "default"
     MOVIES = "movies"
@@ -24,7 +23,9 @@ class Cat(Enum):
 
 
 class Categorizer:
+
     __slots__ = ("video_exts", "audio_exts", "sw_re", "tv_re", "av_re")
+    VIDEO_THRESH = 52428800  # 50 MiB
 
     def __init__(self, patternfile: Optional[str] = None) -> None:
         """Initialize the Categorizer with data from the pattern file."""
@@ -114,8 +115,9 @@ class Categorizer:
                 video_size[root, ext] += size
 
         # Apply a conditional threshold for videos
-        if any(f["length"] >= VIDEO_THRESH for f in files):
-            videos = (k for k, v in video_size.items() if v >= VIDEO_THRESH)
+        size = self.VIDEO_THRESH
+        if any(f["length"] >= size for f in files):
+            videos = (k for k, v in video_size.items() if v >= size)
         else:
             videos = video_size
 
@@ -158,9 +160,9 @@ class Categorizer:
 def re_test(pattern: str, string: str) -> bool:
     """Replace all '_' with '-', then perform an ASCII-only and case-insensitive
     test."""
-    return re_compile(pattern, _REFLAGS).search(string.replace("_", "-")) is not None
+    return re_compile(pattern, _REFLAG).search(string.replace("_", "-")) is not None
 
 
 def re_sub(pattern: str, repl, string: str) -> str:
     """Perform an ASCII-only and case-insensitive substitution."""
-    return re_compile(pattern, _REFLAGS).sub(repl, string)
+    return re_compile(pattern, _REFLAG).sub(repl, string)
