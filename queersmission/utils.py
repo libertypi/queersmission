@@ -9,8 +9,8 @@ from . import logger
 re_compile = lru_cache(maxsize=None)(re.compile)
 
 
-def _copy_file_fallback(src: str, dst: str) -> None:
-    """Copy src to dst using shutil."""
+def _shutil_copy_file(src: str, dst: str) -> None:
+    """Copy `src` to `dst` using shutil."""
     if op.isdir(src):
         shutil.copytree(
             src, dst, symlinks=True, copy_function=shutil.copy, dirs_exist_ok=True
@@ -27,9 +27,9 @@ if sys.platform.startswith("linux"):
 
     def copy_file(src: str, dst: str) -> None:
         """
-        Copy src to dst using cp with reflink. If dst exists, it will be
-        overwritten. If src is a file and dst is a directory or vice versa, an
-        error will occur.
+        Copy `src` to `dst` using cp. If `dst` exists, it will be overwritten.
+        If `src` is a file and `dst` is a directory or vice versa, an error will
+        occur.
 
         Example:
             `copy_file("/src_dir/name", "/dst_dir/name")` -> "/dst_dir/name"
@@ -44,18 +44,18 @@ if sys.platform.startswith("linux"):
             # Fallback if cp fails silently or does not support the options
             stderr = e.stderr.decode().strip()
             if stderr and not re.search(
-                r"(unrecognized|invalid|unknown|illegal)\s+option", stderr, re.I
+                r"\b(unrecognized|invalid|unknown|illegal)\s+option", stderr, re.I
             ):
                 raise OSError(stderr)
             logger.debug(stderr or e)
-            _copy_file_fallback(src, dst)
+            _shutil_copy_file(src, dst)
         except FileNotFoundError as e:
             # Fallback if cp command not found
             logger.debug(e)
-            _copy_file_fallback(src, dst)
+            _shutil_copy_file(src, dst)
 
 else:
-    copy_file = _copy_file_fallback
+    copy_file = _shutil_copy_file
 
 
 def is_subpath(child: str, parent: str, sep: str = op.sep) -> bool:

@@ -253,7 +253,6 @@ def knapsack(
     weights: List[int],
     values: List[int],
     capacity: int,
-    *,
     max_cells: Optional[int] = None,
 ) -> Set[int]:
     """

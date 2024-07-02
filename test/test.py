@@ -146,7 +146,7 @@ class TestKnapsack(unittest.TestCase):
         return solver.solve()
 
     def test_empty(self):
-        # weights or capacity is 0
+        # when weights or capacity is 0
         data = [
             ([], [], 100),
             ([1], [2], 0),
@@ -157,7 +157,7 @@ class TestKnapsack(unittest.TestCase):
             self.assertSetEqual(knapsack(w, v, c, self.max_cells), answer)
 
     def test_full(self):
-        # capacity >= sum(weights)
+        # when capacity >= sum(weights)
         for i in range(3):
             w, v, _ = self._get_random()
             c = sum(w) + i
