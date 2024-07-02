@@ -41,16 +41,16 @@ class Client:
         self.url = f"{protocol}://{host}:{port}{path}"
         self._seed_dir = seed_dir
 
+        self.session = requests.Session()
+        if username and password:
+            self.session.auth = (username, password)
+
         if host.lower() in {"127.0.0.1", "0.0.0.0", "::1", "localhost"}:
             self.is_localhost = True
             self.path_module = op
             self.normpath = op.realpath
         else:
             self.is_localhost = False
-
-        self.session = requests.Session()
-        if username and password:
-            self.session.auth = (username, password)
 
     def _call(self, method: str, arguments: Optional[dict] = None, *, ids=None) -> dict:
         """Make a call to the Transmission RPC."""
@@ -141,16 +141,16 @@ class Client:
         return self.normpath(s)
 
     @cached_property
-    def session_settings(self):
-        """The complete setting list returned by the "session-get" API."""
+    def session_settings(self) -> dict:
+        """The complete settings returned by the "session-get" API."""
         return self._call("session-get")
 
     @cached_property
     def path_module(self):
-        """The appropriate path module for the remote host."""
+        """The appropriate path module for the host."""
         # Only called when is_localhost is False.
         for k in ("config-dir", "download-dir", "incomplete-dir"):
-            p = self.session_settings.get(k)
+            p = self.session_settings[k]
             if not p:
                 continue
             if p[0] in ("/", "~") or ":" not in p:
@@ -162,7 +162,7 @@ class Client:
 
     @cached_property
     def normpath(self):
-        """The appropriate normpath function for the remote host."""
+        """The appropriate normpath function for the host."""
         # Only called when is_localhost is False.
         return self.path_module.normpath
 

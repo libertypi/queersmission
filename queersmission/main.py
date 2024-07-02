@@ -132,10 +132,9 @@ def main(torrent_added: bool, config_dir: str):
     """Entry point for the script.
 
     Parameters:
-     - torrent_added (bool): Indicates the mode of operation. If True, the
-       function is triggered as 'script-torrent-added' to handle newly added
-       torrents; if False, it operates as 'script-torrent-done' to manage
-       completed torrents.
+     - torrent_added (bool): The mode of operation. If True, the function is
+       triggered as 'script-torrent-added' to handle newly added torrents; if
+       False, it operates as 'script-torrent-done' to manage completed torrents.
      - config_dir (str): The configuration directory.
     """
     config_dir = op.abspath(config_dir)

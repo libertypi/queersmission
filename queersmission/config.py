@@ -4,8 +4,8 @@ import sys
 
 from .cat import Cat
 
-# Config fields with keys, expected types, and default values
-FIELDS = (
+# Config schema: key, expected type, default value
+SCHEMA = (
     ("log-level", str, "INFO"),
     ("only-seed-private", bool, False),
     ("rpc-url", str, "/transmission/rpc"),
@@ -21,14 +21,14 @@ FIELDS = (
 )
 
 
-def makeconfig(fields: tuple, userconf: dict = None) -> dict:
+def makeconfig(schema: tuple, userconf: dict = None) -> dict:
     """
     Construct a config dict from a template and user settings, ensuring the
     correct types in each field.
     """
     conf = {}
     get = (userconf if isinstance(userconf, dict) else {}).get
-    for key, _type, default in fields:
+    for key, _type, default in schema:
         val = get(key)
         if _type is dict:
             conf[key] = makeconfig(default, val)
@@ -43,17 +43,15 @@ def parse(file: str) -> dict:
     try:
         with open(file, "r", encoding="utf-8") as f:
             userconf = json.load(f)
-        if not userconf or not isinstance(userconf, dict):
-            raise ValueError("Corrupted config file.")
-    except (FileNotFoundError, ValueError):  # including JSONDecodeError
-        json_dump(makeconfig(FIELDS), file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        json_dump(makeconfig(SCHEMA), file)
         sys.stderr.write(
             f'A blank configuration file has been created at "{file}". '
             "Edit the settings before running this script again.\n"
         )
         sys.exit(1)
 
-    conf = makeconfig(FIELDS, userconf)
+    conf = makeconfig(SCHEMA, userconf)
     try:
         # validation
         if not conf["destinations"][Cat.DEFAULT.value]:
