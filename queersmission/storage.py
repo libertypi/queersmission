@@ -253,21 +253,24 @@ def knapsack(
     weights: List[int],
     values: List[int],
     capacity: int,
+    *,
     max_cells: Optional[int] = None,
 ) -> Set[int]:
-    """Solve the 0-1 knapsack problem using dynamic programming.
+    """
+    Solve the 0-1 knapsack problem using dynamic programming.
 
     Args:
         weights (List[int]): The weights of the items.
         values (List[int]): The values of the items.
         capacity (int): The maximum capacity of the knapsack.
-        max_cells (int, optional): Maximum number of cells for scaling.
+        max_cells (int, optional): Maximum number of cells in the DP table, used
+        for scaling.
 
     Returns:
         Set[int]: A set of indices of the items to include to maximize value.
     """
     if not isinstance(capacity, int):
-        raise TypeError('Expect "capacity" to be of type "int".')
+        raise TypeError('Expect "capacity" to be of type "int."')
 
     if capacity <= 0:
         return set()
@@ -276,13 +279,13 @@ def knapsack(
         return set(range(n))
 
     # Scale down
+    # We want: (capacity / i + 1) * (n + 1) = max_cells
     if max_cells is not None:
-        if not isinstance(max_cells, int) or max_cells < 1:
-            raise ValueError('Expect "max_cells" to be a positive integer.')
-        i = ceil(capacity * n / max_cells)
+        max_cells = max(2 * (n + 1), max_cells)
+        i = capacity * (n + 1) / (max_cells - n - 1)  # scale factor
         if i > 1:
             weights = tuple(ceil(w / i) for w in weights)
-            capacity //= i  # round up weights, round down capacity
+            capacity = int(capacity // i)  # round up weights, round down capacity
 
     # Fill dynamic programming table
     dp = [[0] * (capacity + 1) for _ in range(n + 1)]

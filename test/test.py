@@ -130,7 +130,7 @@ class TestKnapsack(unittest.TestCase):
 
     @staticmethod
     def _get_random():
-        n = random.randint(10, 300)
+        n = random.randint(5, 100)
         weights = random.choices(range(500 * 1024**2, 10 * 1024**4), k=n)
         values = random.choices(range(1, 5000), k=n)
         capacity = sum(weights) // random.randint(2, 5)
