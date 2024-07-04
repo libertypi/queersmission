@@ -309,4 +309,4 @@ def knapsack(
 def ceil(n: float) -> int:
     """Computes the ceiling of a number."""
     i = int(n)
-    return i + 1 if n != i and n > 0 else i
+    return i + 1 if i < n else i
