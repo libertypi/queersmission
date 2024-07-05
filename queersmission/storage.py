@@ -293,10 +293,12 @@ def knapsack(
     for i in range(1, n + 1):
         wt = weights[i - 1]
         vl = values[i - 1]
+        pre = dp[i - 1]
+        cur = dp[i]
         for w in range(1, min(wt, capacity + 1)):
-            dp[i][w] = dp[i - 1][w]
+            cur[w] = pre[w]
         for w in range(max(1, wt), capacity + 1):
-            dp[i][w] = max(dp[i - 1][w], dp[i - 1][w - wt] + vl)
+            cur[w] = max(pre[w], pre[w - wt] + vl)
 
     # Backtrack to find which items are included
     res = set()
