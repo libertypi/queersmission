@@ -39,10 +39,11 @@ if sys.platform.startswith("linux"):
                 ("cp", "-d", "-f", "-R", "--reflink=auto", "-T", "--", src, dst),
                 check=True,
                 capture_output=True,
+                text=True,
             )
         except subprocess.CalledProcessError as e:
             # Fallback if cp fails silently or does not support the options
-            stderr = e.stderr.decode().strip()
+            stderr = e.stderr.strip()
             if stderr and not re.search(
                 r"\b(unrecognized|invalid|unknown|illegal)\s+option", stderr, re.I
             ):

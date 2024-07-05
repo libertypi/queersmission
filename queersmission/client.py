@@ -175,7 +175,7 @@ def check_ids(ids):
     - a list of torrent id numbers, SHA1 hash strings, or both
     - a string, 'recently-active', for recently-active torrents
     """
-    for i in ids if isinstance(ids, (tuple, list)) else (ids,):
+    for i in ids if isinstance(ids, (list, tuple)) else (ids,):
         if isinstance(i, int):
             if i > 0:
                 continue

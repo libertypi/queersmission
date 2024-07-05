@@ -49,7 +49,7 @@ def _xor(b: bytes, key: bytes = b"Claire Kuo") -> bytes:
     return bytes(map(operator.xor, b, itertools.cycle(key)))
 
 
-def _die(msg, code: int = 1):
+def _error(msg, code: int = 1):
     sys.stderr.write(f"Configuration error: {msg}\n")
     sys.exit(code)
 
@@ -62,15 +62,16 @@ def parse(file: str) -> dict:
             userconf = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         json_dump(makeconfig(SCHEMA), file)
-        _die(
+        sys.stderr.write(
             f'A blank configuration file has been created at "{file}". '
-            "Edit the settings before running this script again."
+            "Edit the settings before running this script again.\n"
         )
+        sys.exit(1)
     conf = makeconfig(SCHEMA, userconf)
 
     # validation
     if not conf["destinations"][Cat.DEFAULT.value]:
-        _die("The default destination path is not set.")
+        _error("The default destination path is not set.")
 
     # password
     p: str = conf["rpc-password"]
@@ -79,8 +80,8 @@ def parse(file: str) -> dict:
     elif p[0] == "{" and p[-1] == "}":
         try:
             p = _xor(base64.b64decode(p[1:-1])).decode()
-        except ValueError as e:
-            _die(e)
+        except ValueError:
+            _error("Cannot decode the password.")
     else:
         conf["rpc-password"] = f"{{{base64.b64encode(_xor(p.encode())).decode()}}}"
 

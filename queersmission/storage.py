@@ -83,7 +83,9 @@ class StorageManager:
             raise ValueError('Value "watch_dir" should not be null.')
         try:
             with os.scandir(self.watch_dir) as it:
-                entries = tuple(e for e in it if e.name.lower().endswith(".torrent"))
+                entries = [
+                    e for e in it if op.splitext(e.name)[1].lower() == ".torrent"
+                ]
         except OSError as e:
             logger.error(e)
             return
@@ -103,7 +105,7 @@ class StorageManager:
         allowed = self.allowed
         try:
             with os.scandir(self.client.seed_dir) as it:
-                entries = tuple(e for e in it if e.name not in allowed)
+                entries = [e for e in it if e.name not in allowed]
         except OSError as e:
             logger.error(e)
             return
@@ -164,7 +166,7 @@ class StorageManager:
                 ", ".join(t["name"] for t in results),
             )
             self.client.torrent_remove(
-                ids=tuple(t["id"] for t in results),
+                ids=[t["id"] for t in results],
                 delete_local_data=True,
             )
         else:
@@ -184,7 +186,7 @@ class StorageManager:
                 "status",
                 "trackerStats",
             ),
-            ids=tuple(self.torrents),
+            ids=list(self.torrents),
         )["torrents"]
         # Torrents are only removed if they have been completed for more than 12
         # hours to avoid race conditions.
@@ -233,7 +235,7 @@ class StorageManager:
         # Second: Pick torrents with leechers. The question is inverted to fit
         # into the classical knapsack problem: How to select torrents to keep in
         # order to maximize the total number of leechers?
-        sizes = tuple(t["sizeWhenDone"] for t in with_leechers)
+        sizes = [t["sizeWhenDone"] for t in with_leechers]
         survived = knapsack(
             weights=sizes,
             values=leecher_counts,
@@ -283,7 +285,7 @@ def knapsack(
         max_cells = max(2 * (n + 1), max_cells)
         i = capacity * (n + 1) / (max_cells - n - 1)  # scale factor
         if i > 1:
-            weights = tuple(ceil(w / i) for w in weights)
+            weights = [ceil(w / i) for w in weights]
             capacity = int(capacity // i)  # round up weights, round down capacity
 
     # Fill dynamic programming table
@@ -291,7 +293,7 @@ def knapsack(
     for i in range(1, n + 1):
         wt = weights[i - 1]
         vl = values[i - 1]
-        for w in range(1, wt):
+        for w in range(1, min(wt, capacity + 1)):
             dp[i][w] = dp[i - 1][w]
         for w in range(wt, capacity + 1):
             dp[i][w] = max(dp[i - 1][w], dp[i - 1][w - wt] + vl)

@@ -166,7 +166,7 @@ class TestKnapsack(unittest.TestCase):
 
     def test_sum(self):
         # sum of result's weights should <= capacity
-        for _ in range(3):
+        for _ in range(10):
             w, v, c = self._get_random()
             result = knapsack(w, v, c, self.max_cells)
             self.assertLessEqual(sum(w[i] for i in result), c)
