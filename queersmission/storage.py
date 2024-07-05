@@ -295,7 +295,7 @@ def knapsack(
         vl = values[i - 1]
         for w in range(1, min(wt, capacity + 1)):
             dp[i][w] = dp[i - 1][w]
-        for w in range(wt, capacity + 1):
+        for w in range(max(1, wt), capacity + 1):
             dp[i][w] = max(dp[i - 1][w], dp[i - 1][w - wt] + vl)
 
     # Backtrack to find which items are included

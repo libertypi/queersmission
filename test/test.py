@@ -149,8 +149,8 @@ class TestKnapsack(unittest.TestCase):
         # when weights or capacity is 0
         data = [
             ([], [], 100),
-            ([1], [2], 0),
-            ([1], [2], -100),
+            ([1], [1], 0),
+            ([1], [1], -100),
         ]
         answer = set()
         for w, v, c in data:
@@ -163,6 +163,15 @@ class TestKnapsack(unittest.TestCase):
             c = sum(w) + i
             answer = set(range(len(w)))
             self.assertSetEqual(knapsack(w, v, c, self.max_cells), answer)
+
+    def test_special_weight(self):
+        # weight == 0 or weight > capacity
+        data = [
+            ([0, 2], [1, 1], 1, {0}),
+            ([1, 2, 5], [1, 1, 1], 3, {0, 1}),
+        ]
+        for w, v, c, answer in data:
+            self.assertSetEqual(knapsack(w, v, c), answer)
 
     def test_sum(self):
         # sum of result's weights should <= capacity
