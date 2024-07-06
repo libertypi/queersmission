@@ -153,7 +153,7 @@ class Client:
             p = self.session_settings[k]
             if not p:
                 continue
-            if p[0] in ("/", "~") or ":" not in p:
+            if p[0] == "/" or ":" not in p:
                 import posixpath as path
             else:
                 import ntpath as path

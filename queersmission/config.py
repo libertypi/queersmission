@@ -1,4 +1,3 @@
-import base64
 import itertools
 import json
 import operator
@@ -44,7 +43,7 @@ def json_dump(data, file: str):
         json.dump(data, f, indent=4, ensure_ascii=False)
 
 
-def _xor(b: bytes, key: bytes = b"Claire Kuo") -> bytes:
+def xor_cipher(b: bytes, key: bytes = b"Claire Kuo") -> bytes:
     """Perform XOR encryption/decryption on the given bytes using a key."""
     return bytes(map(operator.xor, b, itertools.cycle(key)))
 
@@ -79,11 +78,11 @@ def parse(file: str) -> dict:
         pass
     elif p[0] == "{" and p[-1] == "}":
         try:
-            p = _xor(base64.b64decode(p[1:-1])).decode()
-        except ValueError:
-            _error("Cannot decode the password.")
+            p = xor_cipher(bytes.fromhex(p[1:-1])).decode()
+        except (ValueError, UnicodeDecodeError):
+            _error(f"Cannot decode the password.")
     else:
-        conf["rpc-password"] = f"{{{base64.b64encode(_xor(p.encode())).decode()}}}"
+        conf["rpc-password"] = f"{{{xor_cipher(p.encode()).hex()}}}"
 
     if conf != userconf:
         json_dump(conf, file)

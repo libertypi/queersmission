@@ -62,7 +62,7 @@ class StorageManager:
 
     @property
     def torrents(self) -> Dict[int, int]:
-        """(id: sizeWhenDone) pairs of torrents located in seed_dir."""
+        """(id: sizeWhenDone) pairs for torrents located in seed_dir."""
         return self._maindata[0]
 
     @property
@@ -86,8 +86,8 @@ class StorageManager:
                 entries = [
                     e for e in it if op.splitext(e.name)[1].lower() == ".torrent"
                 ]
-        except OSError as e:
-            logger.error(e)
+        except OSError as err:
+            logger.error(err)
             return
         for e in entries:
             try:
@@ -95,8 +95,8 @@ class StorageManager:
                 if e.is_file() and (not s.st_size or s.st_mtime < time.time() - 3600):
                     logger.debug("Cleanup watch-dir: %s", e.path)
                     os.unlink(e.path)
-            except OSError as e:
-                logger.error(e)
+            except OSError as err:
+                logger.error(err)
 
     def _purge_seed_dir(self) -> None:
         """Remove files from seed_dir if they do not exist in Transmission."""
@@ -106,8 +106,8 @@ class StorageManager:
         try:
             with os.scandir(self.client.seed_dir) as it:
                 entries = [e for e in it if e.name not in allowed]
-        except OSError as e:
-            logger.error(e)
+        except OSError as err:
+            logger.error(err)
             return
         for e in entries:
             try:
@@ -118,8 +118,8 @@ class StorageManager:
                     shutil.rmtree(e.path, ignore_errors=True)
                 else:
                     os.unlink(e.path)
-            except OSError as e:
-                logger.error(e)
+            except OSError as err:
+                logger.error(err)
 
     def apply_quotas(self, add_size: Optional[int] = None, in_seed_dir: bool = True):
         """Enforce size limits and free space requirements in seed_dir. If
@@ -273,9 +273,9 @@ def knapsack(
     if not isinstance(capacity, int):
         raise TypeError('Expect "capacity" to be of type "int."')
 
+    n = len(weights)
     if capacity <= 0:
         return set()
-    n = len(weights)
     if capacity >= sum(weights):
         return set(range(n))
 
