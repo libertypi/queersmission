@@ -92,19 +92,7 @@ While Queersmission is designed and tested on both Linux and Windows systems, se
 
 - Place Queersmission in a location accessible to the Local Service account, for example: `C:\Windows\ServiceProfiles\LocalService\Queersmission`.
 
-- Note that Windows Transmission will not call a ".py" script file. You need to create two ".bat" entry scripts:
-
-**torrent-added.bat**
-```batch
-python "C:\Windows\ServiceProfiles\LocalService\Queersmission\torrent-added.py"
-```
-
-**torrent-done.bat**
-```batch
-python "C:\Windows\ServiceProfiles\LocalService\Queersmission\torrent-done.py"
-```
-
-Replace the paths according to your system configuration. Then, point the `script-torrent-added-filename` and `script-torrent-done-filename` settings in Transmission's configuration file to these .bat files.
+- Note that Transmission Windows will not call a ".py" script. You need to create two ".bat" entry scripts that call `torrent-added.py` and `torrent-done.py` respectively, and point the `script-torrent-added-filename` and `script-torrent-done-filename` settings in Transmission's configuration file to these .bat files.
 
 ### Author
 
