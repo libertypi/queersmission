@@ -9,7 +9,7 @@ if os.name == "nt":
     import time
     from errno import EDEADLK
 
-    _FLAG = os.O_RDWR | os.O_TRUNC | os.O_CREAT
+    _FLAG = os.O_RDWR | os.O_CREAT
 
     class FileLocker:
         """A file locker that uses msvcrt for Windows platforms."""
@@ -52,8 +52,6 @@ else:
     try:
         import fcntl
 
-        _FLAG = os.O_RDWR | os.O_TRUNC
-
         class FileLocker:
             """A file locker that uses fcntl for Unix-like systems."""
 
@@ -67,9 +65,9 @@ else:
                 """Acquire an exclusive lock on the file using fcntl."""
                 if self.fd is None:
                     try:
-                        fd = os.open(self.file, _FLAG, _MODE)
+                        fd = os.open(self.file, os.O_RDWR, _MODE)
                     except FileNotFoundError:
-                        fd = os.open(self.file, _FLAG | os.O_CREAT, _MODE)
+                        fd = os.open(self.file, os.O_RDWR | os.O_CREAT, _MODE)
                         os.fchmod(fd, _MODE)
                     try:
                         fcntl.flock(fd, fcntl.LOCK_EX)

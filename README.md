@@ -2,7 +2,7 @@
 
 *Queer's mission... is to help Transmission.*
 
-**Queersmission** is a [custom script](https://github.com/transmission/transmission/blob/main/docs/Scripts.md) for the [Transmission](https://transmissionbt.com/) daemon. It manages a dedicated seeding space and copies completed downloads to user-specified locations. This ensures that file sharing continues, even if the user deletes the content, which is useful for Private Torrent (PT) users who need to maintain a sharing ratio.
+**Queersmission** is a [custom script](https://github.com/transmission/transmission/blob/main/docs/Scripts.md) for the [Transmission](https://transmissionbt.com/) Bittorrent client. It manages a dedicated seeding space and copies completed downloads to user-specified locations. This ensures that file sharing continues, even if the user deletes the content, which is useful for Private Torrent (PT) users who need to maintain a sharing ratio.
 
 ### Features
 
@@ -86,13 +86,7 @@ Template:
 
 ### Notes on Windows
 
-While Queersmission is designed and tested on both Linux and Windows systems, setting up on Windows platforms can be tricky. The Transmission daemon is configured to run under the Local Service account. This is a limited account that does not have access to all files on your disk, including your home directory, the Python executable, and the Queersmission script. To ensure proper script execution, you need to:
-
-- Install Python and the "requests" package system-wide (not in your home directory) with admin privileges, and ensure python is in the system path.
-
-- Place Queersmission in a location accessible to the Local Service account, for example: `C:\Windows\ServiceProfiles\LocalService\Queersmission`.
-
-- Note that Transmission Windows will not call a ".py" script. You need to create two ".bat" entry scripts that call `torrent-added.py` and `torrent-done.py` respectively, and point the `script-torrent-added-filename` and `script-torrent-done-filename` settings in Transmission's configuration file to these .bat files.
+While Queersmission is designed for and tested on both Linux and Windows systems, setting up custom script for Windows Transmission can be tricky. The Transmission daemon is configured to run under the Local Service account. This is a limited account that may not have access to all files on your disk, including your home directory, the Python executable, and the Queersmission script. You have to make sure these files are accessable to the daemon. Also, Windows Transmission will not call a ".py" script. You need to create two ".bat" entry scripts that call `torrent-added.py` and `torrent-done.py` respectively, and point the settings in Transmission's `settings.json` to these .bat files.
 
 ### Author
 
