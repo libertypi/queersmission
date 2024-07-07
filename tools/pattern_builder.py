@@ -99,7 +99,7 @@ def read_pattern_file(filename: str):
         with open(path, "r+", encoding="utf-8") as f:
             old_data = f.read().splitlines()
             new_data = map(str.lower, filter(None, map(str.strip, old_data)))
-            new_data = sorted(frozenset(new_data))
+            new_data = sorted(set(new_data))
             if new_data != old_data:
                 f.seek(0)
                 f.writelines(l + "\n" for l in new_data)
@@ -107,7 +107,7 @@ def read_pattern_file(filename: str):
                 print(f"Updated: {filename}")
     except FileNotFoundError:
         open(path, "w").close()
-        return ()
+        return []
     else:
         return new_data
 
@@ -118,7 +118,7 @@ def build_regex(
     max_items: int,
     ex_set: set = None,
     ex_lst: tuple = (),
-):
+) -> str:
     # ex_set: a set of strings to be excluded (literal match)
     # ex_lst: a list of regex to filter the source (regex match)
 
@@ -136,9 +136,14 @@ def build_regex(
     include = read_pattern_file(f"{name}-include.txt")
     exclude = read_pattern_file(f"{name}-exclude.txt")
 
-    # Remove anything that overlaps the pattern files or 'ex_lst'
-    regex = re.compile("|".join(chain(include, exclude, ex_lst)))
-    data[:] = islice(filterfalse(regex.fullmatch, data), max_items)
+    # Remove anything that overlaps the pattern files or 'ex_lst', then slice
+    # the list to `max_items`
+    regex = "|".join(chain(include, exclude, ex_lst))
+    if regex:
+        data = filterfalse(re.compile(regex).fullmatch, data)
+        data = list(islice(data, max_items))
+    else:
+        data = data[:max_items]
 
     print(
         "Selected {:,} of {:,} {} from source. Frequency: [{}, {}], coverage: {:.1%} ".format(
@@ -164,7 +169,8 @@ def build_regex(
     diff = len(regex) - len(concat)
     if diff > 0:
         print(
-            f"Optimized regex is {diff} characters longer than simple concatenation; using the latter."
+            f"Optimized regex is {diff} characters longer "
+            "than simple concatenation; using the latter."
         )
         regex = concat
     else:

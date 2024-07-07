@@ -2,7 +2,7 @@
 
 *Queer's mission... is to help Transmission.*
 
-**Queersmission** is a [custom script](https://github.com/transmission/transmission/blob/main/docs/Scripts.md) for the [Transmission](https://transmissionbt.com/) client. It manages a dedicated seeding space and copies completed downloads to user-specified locations. This ensures that file sharing continues, even if the user deletes the content, which is useful for Private Torrent (PT) users who need to maintain a sharing ratio.
+**Queersmission** is a [custom script](https://github.com/transmission/transmission/blob/main/docs/Scripts.md) for the [Transmission](https://transmissionbt.com/) daemon. It manages a dedicated seeding space and copies completed downloads to user-specified locations. This ensures that file sharing continues, even if the user deletes the content, which is useful for Private Torrent (PT) users who need to maintain a sharing ratio.
 
 ### Features
 
@@ -23,6 +23,7 @@ After stopping the Transmission daemon, edit its `settings.json`. On a Synology 
 **These settings in Transmission's `settings.json` must be set correctly:**
 
 ```json
+"rpc-enabled": true,
 "download-dir": "/path_to/seed-dir",
 "script-torrent-added-enabled": true,
 "script-torrent-added-filename": "/path_to/queersmission/torrent-added.py",
@@ -32,7 +33,7 @@ After stopping the Transmission daemon, edit its `settings.json`. On a Synology 
 
 ### Configuration
 
-Upon the first run, a blank configuration file `config.json` will be created in the queersmission directory. Edit the config file to get started.
+After setting up transmission-daemon, you should manually run `torrent-done.py` or `torrent-added.py` once to generate the configuration file. Upon the first run, a blank `config.json` will be created in the queersmission directory. Edit the config file to get started.
 
 Template:
 
@@ -82,6 +83,28 @@ Template:
 - **watch-dir**: String. Path to Transmission's `watch-dir`. When set, old or empty ".torrent" files will be cleared from this directory.
 
 - **destinations:** Object. Specifies paths where categorized files should be copied after download completion. Entries include: `default`, `movies`, `tv-shows`, `music`, and `av`. The `default` must be a valid directory, and others can be left empty to use the default value.
+
+### Notes on Windows
+
+While Queersmission is designed and tested on both Linux and Windows systems, setting up on Windows platforms can be tricky. The Transmission daemon is configured to run under the Local Service account. This is a limited account that does not have access to all files on your disk, including your home directory, the Python executable, and the Queersmission script. To ensure proper script execution, you need to:
+
+- Install Python and the "requests" package system-wide (not in your home directory) with admin privileges, and ensure python is in the system path.
+
+- Place Queersmission in a location accessible to the Local Service account, for example: `C:\Windows\ServiceProfiles\LocalService\Queersmission`.
+
+- Note that Windows Transmission will not call a ".py" script file. You need to create two ".bat" entry scripts:
+
+**torrent-added.bat**
+```batch
+python "C:\Windows\ServiceProfiles\LocalService\Queersmission\torrent-added.py"
+```
+
+**torrent-done.bat**
+```batch
+python "C:\Windows\ServiceProfiles\LocalService\Queersmission\torrent-done.py"
+```
+
+Replace the paths according to your system configuration. Then, point the `script-torrent-added-filename` and `script-torrent-done-filename` settings in Transmission's configuration file to these .bat files.
 
 ### Author
 
