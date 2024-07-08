@@ -7,7 +7,6 @@ from typing import List, Optional, Tuple
 import requests
 
 from . import logger
-from .utils import re_compile
 
 
 class TRStatus(IntEnum):
@@ -147,7 +146,7 @@ class Client:
 
     @cached_property
     def path_module(self):
-        """The appropriate path module for the host."""
+        """The appropriate os.path module for the host."""
         # Only called when is_localhost is False.
         for k in ("config-dir", "download-dir", "incomplete-dir"):
             p = self.session_settings[k]
@@ -180,8 +179,12 @@ def check_ids(ids):
             if i > 0:
                 continue
         elif isinstance(i, str):
-            if re_compile(r"[A-Fa-f0-9]{40}").fullmatch(i):
-                continue
-            if ids == "recently-active":
+            if len(i) == 40:  # SHA-1
+                try:
+                    int(i, 16)
+                    continue
+                except ValueError:
+                    pass
+            elif ids == "recently-active":
                 return
-        raise ValueError(f"Invalid torrent ID '{i}' in IDs: {ids}")
+        raise ValueError(f'Invalid torrent ID "{i}" in IDs: {ids}')

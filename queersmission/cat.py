@@ -3,13 +3,12 @@ import os.path as op
 import re
 from collections import defaultdict
 from enum import Enum
+from functools import cached_property
 from posixpath import splitext as posix_splitext
 from typing import List, Optional, Tuple
 
-from .utils import re_compile
-
 _VIDEO, _AUDIO, _DEFAULT = range(3)
-_REFLAG = re.ASCII | re.IGNORECASE
+_RE_AI = re.ASCII | re.IGNORECASE
 
 
 class Cat(Enum):
@@ -24,24 +23,39 @@ class Cat(Enum):
 
 class Categorizer:
 
-    __slots__ = ("video_exts", "audio_exts", "sw_re", "tv_re", "av_re")
-    VIDEO_THRESH = 52428800  # 50 MiB
-
-    def __init__(self, patternfile: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        patternfile: Optional[str] = None,
+        video_threshold: int = 52428800,  # 50 MiB
+    ) -> None:
         """Initialize the Categorizer with data from the pattern file."""
+
         if patternfile is None:
             patternfile = op.join(op.dirname(__file__), "patterns.json")
-
         with open(patternfile, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if not all(data.values()):
+            patterns: dict = json.load(f)
+        if not all(patterns.values()):
             raise ValueError(f"Empty entry in pattern file: {patternfile}")
 
-        self.video_exts = frozenset(data["video_exts"])
-        self.audio_exts = frozenset(data["audio_exts"])
-        self.sw_re = data["software_regex"]
-        self.tv_re = data["tv_regex"]
-        self.av_re = data["av_regex"]
+        self.video_exts = frozenset(patterns["video_exts"])
+        self.audio_exts = frozenset(patterns["audio_exts"])
+        self._sw_re = patterns["software_regex"]
+        self._tv_re = patterns["tv_regex"]
+        self._av_re = patterns["av_regex"]
+
+        self.video_threshold = video_threshold
+
+    @cached_property
+    def sw_re(self):
+        return re.compile(self._sw_re, _RE_AI)
+
+    @cached_property
+    def tv_re(self):
+        return re.compile(self._tv_re, _RE_AI)
+
+    @cached_property
+    def av_re(self):
+        return re.compile(self._av_re, _RE_AI)
 
     def categorize(self, files: List[dict]):
         """
@@ -97,9 +111,9 @@ class Categorizer:
 
             if ext in self.video_exts:
                 if ext == "m2ts":
-                    root = re_sub(r"/bdmv/stream/[^/]+$", "", root)
+                    root = re.sub(r"/bdmv/stream/[^/]+$", "", root, 1, _RE_AI)
                 elif ext == "vob":
-                    root = re_sub(r"/([^/]*vts[0-9_]+|video_ts)$", "", root)
+                    root = re.sub(r"/([^/]*vts[0-9_]+|video_ts)$", "", root, 1, _RE_AI)
                 file_type = _VIDEO
             elif ext in self.audio_exts:
                 file_type = _AUDIO
@@ -115,7 +129,7 @@ class Categorizer:
                 video_size[root, ext] += size
 
         # Apply a conditional threshold for videos
-        size = self.VIDEO_THRESH
+        size = self.video_threshold
         if any(f["length"] >= size for f in files):
             videos = (k for k, v in video_size.items() if v >= size)
         else:
@@ -157,12 +171,6 @@ class Categorizer:
         return False
 
 
-def re_test(pattern: str, string: str) -> bool:
-    """Replace all '_' with '-', then perform an ASCII-only and case-insensitive
-    test."""
-    return re_compile(pattern, _REFLAG).search(string.replace("_", "-")) is not None
-
-
-def re_sub(pattern: str, repl, string: str) -> str:
-    """Perform an ASCII-only and case-insensitive substitution."""
-    return re_compile(pattern, _REFLAG).sub(repl, string)
+def re_test(pattern: re.Pattern, string: str) -> bool:
+    """Replace all '_' with '-', then perform a regex test."""
+    return pattern.search(string.replace("_", "-")) is not None

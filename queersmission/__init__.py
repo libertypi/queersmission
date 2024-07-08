@@ -1,23 +1,13 @@
 """
-Queersmission - Smart Categorization for Transmission
-=====================================================
+Queer's mission... is to help Transmission.
 
-Description:
-------------
 Queersmission is a custom script for the Transmission client. It manages a
-dedicated seeding space and copies completed downloads to user-specified
-locations.
+dedicated seeding space, categorizes torrents, and copies completed downloads to
+user-specified locations.
 
-Features:
----------
-- Storage management based on quota settings.
-- Copy finished downloads to user destinations.
-- Smart torrent categorization.
-
-Author:
--------
-- David Pi
-- GitHub: https://github.com/libertypi/queersmission
+:copyright: (c) 2024 by David Pi.
+:license: Apache 2.0, see LICENSE for more details.
+:github: <https://github.com/libertypi/queersmission>
 """
 
 import logging

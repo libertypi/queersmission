@@ -2,11 +2,8 @@ import os.path as op
 import re
 import shutil
 import sys
-from functools import lru_cache
 
 from . import logger
-
-re_compile = lru_cache(maxsize=None)(re.compile)
 
 
 def _shutil_copy_file(src: str, dst: str) -> None:
