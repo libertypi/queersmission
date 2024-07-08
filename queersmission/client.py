@@ -181,7 +181,7 @@ def check_ids(ids):
         elif isinstance(i, str):
             if len(i) == 40:  # SHA-1
                 try:
-                    int(i, 16)
+                    bytes.fromhex(i)
                     continue
                 except ValueError:
                     pass

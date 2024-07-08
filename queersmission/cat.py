@@ -33,29 +33,23 @@ class Categorizer:
         if patternfile is None:
             patternfile = op.join(op.dirname(__file__), "patterns.json")
         with open(patternfile, "r", encoding="utf-8") as f:
-            patterns: dict = json.load(f)
-        if not all(patterns.values()):
-            raise ValueError(f"Empty entry in pattern file: {patternfile}")
+            self._patterns: dict = json.load(f)
 
-        self.video_exts = frozenset(patterns["video_exts"])
-        self.audio_exts = frozenset(patterns["audio_exts"])
-        self._sw_re = patterns["software_regex"]
-        self._tv_re = patterns["tv_regex"]
-        self._av_re = patterns["av_regex"]
-
+        self.video_exts = frozenset(self._patterns.pop("video_exts"))
+        self.audio_exts = frozenset(self._patterns.pop("audio_exts"))
         self.video_threshold = video_threshold
 
     @cached_property
     def sw_re(self):
-        return re.compile(self._sw_re, _RE_AI)
+        return re.compile(self._patterns["software_regex"], _RE_AI)
 
     @cached_property
     def tv_re(self):
-        return re.compile(self._tv_re, _RE_AI)
+        return re.compile(self._patterns["tv_regex"], _RE_AI)
 
     @cached_property
     def av_re(self):
-        return re.compile(self._av_re, _RE_AI)
+        return re.compile(self._patterns["av_regex"], _RE_AI)
 
     def categorize(self, files: List[dict]):
         """
