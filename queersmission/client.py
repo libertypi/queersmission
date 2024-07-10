@@ -136,7 +136,7 @@ class Client:
         """The normalized seeding directory."""
         s = self._seed_dir or self.session_settings["download-dir"]
         if not s:
-            raise ValueError("Unable to get seed_dir.")
+            raise ValueError("Cannot get seed_dir.")
         return self.normpath(s)
 
     @cached_property
@@ -157,7 +157,7 @@ class Client:
             else:
                 import ntpath as path
             return path
-        raise ValueError("Unable to determine path type for the remote host.")
+        raise ValueError("Cannot determine path type for the remote host.")
 
     @cached_property
     def normpath(self):

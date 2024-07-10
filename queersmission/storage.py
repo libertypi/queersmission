@@ -132,14 +132,16 @@ class StorageManager:
         # | 3 | torrent-done  | True        | No-op                                    |
         # | 4 | torrent-done  | False       | free -= add_size; total_size += add_size |
         # +---+---------------+-------------+------------------------------------------+
-        # NOTE: add_size should only be set in condition 1, 4
+        # NOTE: This function does not fully test these conditions. It is
+        # assumed to be called only under cases 1 and 4, before files are added
+        # to seed_dir.
 
         total, free = self.client.get_freespace()
         total_size = sum(self.torrents.values())
 
-        if add_size is not None:  # condition 1, 4
+        if add_size is not None:  # cases 1, 4
             free -= add_size
-            if not in_seed_dir:  # condition 4
+            if not in_seed_dir:  # case 4
                 total_size += add_size
 
         size_limit = total - self.space_floor  # disk capacity
