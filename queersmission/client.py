@@ -176,7 +176,7 @@ def check_ids(ids):
     """
     for i in ids if isinstance(ids, (list, tuple)) else (ids,):
         if isinstance(i, int):
-            if i > 0:
+            if i >= 0:
                 continue
         elif isinstance(i, str):
             if len(i) == 40:  # SHA-1

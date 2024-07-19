@@ -135,7 +135,6 @@ class StorageManager:
         # NOTE: This function does not fully test these conditions. It is
         # assumed to be called only under cases 1 and 4, before files are added
         # to seed_dir.
-
         total, free = self.client.get_freespace()
         total_size = sum(self.torrents.values())
 

@@ -3,7 +3,6 @@ import os
 import os.path as op
 import tempfile
 import time
-from logging.handlers import RotatingFileHandler
 
 from . import PKG_NAME, config, logger
 from .cat import Cat, Categorizer
@@ -28,7 +27,7 @@ def config_logger(logfile: str, level: str = "INFO"):
     logger.addHandler(handler)
 
     # File handler
-    handler = RotatingFileHandler(logfile, maxBytes=10485760, backupCount=2)
+    handler = logging.FileHandler(logfile)
     handler.setFormatter(
         logging.Formatter(
             "[%(asctime)s] %(levelname)s: %(message)s",
@@ -111,7 +110,7 @@ def process_torrent_done(
 
     # Remove or redirect the torrent
     if remove_torrent:
-        logger.info("Remove public torrent: %s", name)
+        logger.debug("Remove public torrent: %s", name)
         client.torrent_remove(tid, delete_local_data=src_in_seed_dir)
     elif not src_in_seed_dir:
         client.torrent_set_location(tid, dst_dir, move=False)
@@ -148,7 +147,7 @@ def main(torrent_added: bool, config_dir: str):
 
         tid = os.environ.get("TR_TORRENT_ID")
         if tid is not None:
-            logger.info(
+            logger.debug(
                 "Script-torrent-%s triggered with torrent ID: %s",
                 "added" if torrent_added else "done",
                 tid,
@@ -190,7 +189,9 @@ def main(torrent_added: bool, config_dir: str):
         logger.critical(e)
 
     else:
-        logger.info("Execution completed in %.2f seconds.", time.perf_counter() - start)
+        logger.debug(
+            "Execution completed in %.2f seconds.", time.perf_counter() - start
+        )
 
     finally:
         flock.release()
