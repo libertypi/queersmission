@@ -86,6 +86,7 @@ def process_torrent_done(
         src_in_seed_dir = is_subpath(src, client.seed_dir)
     name = t["name"]
     src = op.join(src, name)
+    size = t["sizeWhenDone"]
 
     # Determine the destination
     if src_in_seed_dir:
@@ -99,20 +100,22 @@ def process_torrent_done(
         dst_dir = client.seed_dir
         # Ensure free space in seed_dir
         if not remove_torrent:
-            storage.apply_quotas(t["sizeWhenDone"], in_seed_dir=False)
+            storage.apply_quotas(size, in_seed_dir=False)
 
     # File operations
     if src_in_seed_dir or not remove_torrent:
         dst = op.join(dst_dir, name)
         os.makedirs(dst_dir, exist_ok=True)
-        start = time.perf_counter()
+        duration = time.perf_counter()
         copy_file(src, dst)
+        duration = time.perf_counter() - duration
         logger.info(
-            'Copied: "%s" -> "%s" (%s) in %.2f seconds',
+            'Copied: "%s" -> "%s" (time: %.2fs, speed: %s/s, total: %s)',
             src,
             dst,
-            humansize(t["sizeWhenDone"]),
-            time.perf_counter() - start,
+            duration,
+            humansize(size / duration),
+            humansize(size),
         )
 
     # Remove or redirect the torrent
