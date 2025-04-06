@@ -104,9 +104,16 @@ def process_torrent_done(
     # File operations
     if src_in_seed_dir or not remove_torrent:
         dst = op.join(dst_dir, name)
-        logger.info('Copy: "%s" -> "%s" (%s)', src, dst, humansize(t["sizeWhenDone"]))
         os.makedirs(dst_dir, exist_ok=True)
+        start = time.perf_counter()
         copy_file(src, dst)
+        logger.info(
+            'Copied: "%s" -> "%s" (%s) in %.2f seconds',
+            src,
+            dst,
+            humansize(t["sizeWhenDone"]),
+            time.perf_counter() - start,
+        )
 
     # Remove or redirect the torrent
     if remove_torrent:
@@ -189,9 +196,7 @@ def main(torrent_added: bool, config_dir: str):
         logger.critical(e)
 
     else:
-        logger.debug(
-            "Execution completed in %.2f seconds.", time.perf_counter() - start
-        )
+        logger.debug("Execution completed in %.2f seconds", time.perf_counter() - start)
 
     finally:
         flock.release()
