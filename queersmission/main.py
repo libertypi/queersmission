@@ -110,7 +110,7 @@ def process_torrent_done(
         copy_file(src, dst)
         duration = time.perf_counter() - duration
         logger.info(
-            'Copied: "%s" -> "%s" (time: %.2fs, speed: %s/s, total: %s)',
+            'Copied: "%s" -> "%s" (time: %.2fs, speed: %s/s, size: %s)',
             src,
             dst,
             duration,
