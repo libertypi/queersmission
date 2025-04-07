@@ -114,7 +114,7 @@ def process_torrent_done(
             src,
             dst,
             duration,
-            humansize(size / duration),
+            humansize(size / duration) if duration else "N/A",
             humansize(size),
         )
 
