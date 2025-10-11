@@ -31,8 +31,8 @@ class StorageManager:
 
         self.client = client
         self.seed_dir_purge = seed_dir_purge
-        self.size_limit = gb_to_bytes(size_limit_gb)
-        self.space_floor = gb_to_bytes(space_floor_gb)
+        self.size_limit = gib_to_bytes(size_limit_gb)
+        self.space_floor = gib_to_bytes(space_floor_gb)
         self.watch_dir = watch_dir
 
     @cached_property
@@ -208,7 +208,7 @@ class StorageManager:
         if size_to_free <= 0:
             raise ValueError('Expect "size_to_free" to be a positive integer.')
         # Categorize torrents based on leecher count.
-        results = []
+        removal = []
         with_leechers = []
         leecher_counts = []
         for t in self._get_removables():
@@ -223,31 +223,31 @@ class StorageManager:
                 leecher_counts.append(leecher)
             else:
                 # Add zero-leecher torrents to the results.
-                results.append(t)
+                removal.append(t)
 
         # First: Select zero-leecher torrents from the least active ones until
         # the required size is reached.
-        results.sort(key=lambda t: t["activityDate"])
-        for i, t in enumerate(results):
+        removal.sort(key=lambda t: t["activityDate"])
+        for i, t in enumerate(removal):
             size_to_free -= t["sizeWhenDone"]  # uint64_t
             if size_to_free <= 0:
-                return results[: i + 1]
+                return removal[: i + 1]
 
         # Second: Pick torrents with leechers. The question is inverted to fit
         # into the classical knapsack problem: How to select torrents to keep in
         # order to maximize the total number of leechers?
         sizes = [t["sizeWhenDone"] for t in with_leechers]
-        survived = knapsack(
+        keep = knapsack(
             weights=sizes,
             values=leecher_counts,
             capacity=sum(sizes) - size_to_free,
             max_cells=1024**2,
         )
-        results.extend(t for i, t in enumerate(with_leechers) if i not in survived)
-        return results
+        removal.extend(t for i, t in enumerate(with_leechers) if i not in keep)
+        return removal
 
 
-def gb_to_bytes(size) -> int:
+def gib_to_bytes(size) -> int:
     """Converts GiB to bytes. Returns 0 if the input is negative."""
     return int(size * 1073741824) if size > 0 else 0
 
@@ -259,49 +259,50 @@ def knapsack(
     max_cells: Optional[int] = None,
 ) -> Set[int]:
     """
-    Solve the 0-1 knapsack problem using dynamic programming.
+    Solve the 0-1 knapsack problem via dynamic programming.
 
     Args:
-        weights (List[int]): The weights of the items.
-        values (List[int]): The values of the items.
-        capacity (int): The maximum capacity of the knapsack.
-        max_cells (int, optional): Maximum number of cells in the DP table, used
-        for scaling.
+        weights (List[int]): Item weights (non-negative integers).
+        values (List[int]): Item values (real numbers; may be negative).
+        capacity (int): Maximum knapsack capacity (>= 0).
+        max_cells (int, optional): Target upper bound on DP table cells,
+            used to scale down the capacity/weights for speed.
 
     Returns:
-        Set[int]: A set of indices of the items to include to maximize value.
+        Set[int]: Indices of the items forming a maximum-value solution.
     """
     if not isinstance(capacity, int):
-        raise TypeError('Expect "capacity" to be of type "int."')
-
-    n = len(weights)
+        raise TypeError('Expect "capacity" to be an integer.')
     if capacity <= 0:
         return set()
+    n = len(weights)
     if capacity >= sum(weights):
         return set(range(n))
 
-    # Scale down
-    # We want: (capacity / i + 1) * (n + 1) = max_cells
+    # Optional scaling to bound DP size:
+    # Target: (capacity / scale + 1) * (n + 1) ≈ max_cells
     if max_cells is not None:
         max_cells = max(2 * (n + 1), max_cells)
-        i = capacity * (n + 1) / (max_cells - n - 1)  # scale factor
-        if i > 1:
-            weights = [ceil(w / i) for w in weights]
-            capacity = int(capacity // i)  # round up weights, round down capacity
+        scale = capacity * (n + 1) / (max_cells - n - 1)  # denom >= (n + 1) >= 1
+        if scale > 1:
+            weights = [ceil(w / scale) for w in weights]  # round weights up
+            capacity = int(capacity // scale)  # round capacity down
 
-    # Fill dynamic programming table
-    dp = [[0] * (capacity + 1) for _ in range(n + 1)]
+    # DP table: dp[i][w] = best value using first i items with capacity w
+    dp = [[0] * (capacity + 1)]  # row 0
+
     for i in range(1, n + 1):
         wt = weights[i - 1]
         vl = values[i - 1]
-        pre = dp[i - 1]
-        cur = dp[i]
-        for w in range(1, min(wt, capacity + 1)):
-            cur[w] = pre[w]
-        for w in range(max(1, wt), capacity + 1):
-            cur[w] = max(pre[w], pre[w - wt] + vl)
+        pre = dp[-1]
+        cur = pre[:]  # copy the previous row
+        for w in range(wt, capacity + 1):
+            cand = pre[w - wt] + vl
+            if cand > cur[w]:
+                cur[w] = cand
+        dp.append(cur)
 
-    # Backtrack to find which items are included
+    # Backtrack to recover chosen items
     res = set()
     w = capacity
     for i in range(n, 0, -1):
