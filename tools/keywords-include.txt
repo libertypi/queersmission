@@ -15,18 +15,19 @@
 10mu(sume)?
 1pon(do)?
 [0-9]*[a-z]{2,8}-?[0-9]{2,9}[hm]hb[0-9]{,2}
-[0-9]*s[ -]?cute
+[0-9]*s-?cute
 [ch]0930
 all(anal|finegirls|over30|internal)
 als(scan|angels)
 anal(ized|beauty|teenangels|brats)?
 atk(premium|exotics|galleria|gfs)
 av9898
-avs[ -]?museum
+avs-museum
 bang(bros[a-z]*|bus|pov)
 black(ed(raw)?|sonblondes)
 blow(bang|[ -]?jobs?|pass)
 brazzers[a-z]*
+c-[1-9][0-9]{2,3}
 carib(beancom)?(pr)?
 chaturbate
 cream[ -]?pie[sd]?
@@ -42,7 +43,7 @@ fc2(ppv)?
 fellatio[ -]?japan
 footjob
 foreveralonedude
-g[ -]?queen
+g-?queen
 gachi([a-z]|nco)?(ppv)?[0-9]*
 gangbang(creampie)?
 girlcum
