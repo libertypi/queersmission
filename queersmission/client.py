@@ -28,7 +28,6 @@ class Client:
     def __init__(
         self,
         *,
-        protocol: str = "http",
         port: int = 9091,
         path: str = "/transmission/rpc",
         username: Optional[str] = None,
@@ -36,7 +35,7 @@ class Client:
         seed_dir: Optional[str] = None,
     ) -> None:
 
-        self.url = f"{protocol}://127.0.0.1:{port}{path}"
+        self.url = f"http://127.0.0.1:{port}{path}"
         self._seed_dir = seed_dir
 
         self.session = requests.Session()

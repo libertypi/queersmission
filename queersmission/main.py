@@ -107,12 +107,12 @@ def process_torrent_done(
         copy_file(src, dst)
         elapsed = time.perf_counter() - elapsed
         logger.info(
-            'Copied: "%s" -> "%s" (elapsed: %.2fs, speed: %s/s, size: %s)',
+            'Copied: "%s" -> "%s" (size: %s, elapsed: %.2fs, speed: %s/s)',
             src,
             dst,
+            humansize(size),
             elapsed,
             humansize(size / elapsed) if elapsed else "N/A",
-            humansize(size),
         )
 
     # Remove or redirect the torrent
@@ -130,12 +130,13 @@ def _check_torrent_done(tid: int, t: dict, client: Client, retry: int = 10):
         if retry <= 0:
             raise TimeoutError("Timeout while waiting for torrent to finish.")
         retry -= 1
-        time.sleep(1)
+        time.sleep(5)
         t = client.torrent_get(("percentDone",), tid)["torrents"][0]
 
 
 def main(torrent_added: bool, config_dir: str):
-    """Entry point for the script.
+    """
+    Main entry point.
 
     Parameters:
      - torrent_added (bool): The mode of operation. If True, the function is

@@ -6,35 +6,67 @@ import sys
 
 from .cat import Cat
 
-# Config schema: key, expected type, default value
+# --- Normalizers & validators -------------------------------------------------
+
+
+def _port(val):
+    if 0 < val < 65536:
+        return val
+    raise ValueError(f"Port number out of range: {val}.")
+
+
+def _non_negative(val):
+    return val if val > 0 else 0
+
+
+def _abs_path(val):
+    """Normalize and validate an absolute path. Return None if val is empty."""
+    if not val:
+        return None
+    if not op.isabs(val):
+        raise ValueError(f'Path is not absolute: "{val}".')
+    return op.normpath(val)
+
+
+# --- Schema ------------------------------------------------------------------
+
 _opt_str = (str, type(None))
+
+# key, type, default, normalization function
+
 SCHEMA = [
-    ("log-level", str, "INFO"),
-    ("only-seed-private", bool, False),
-    ("rpc-path", str, "/transmission/rpc"),
-    ("rpc-port", int, 9091),
-    ("rpc-username", _opt_str, None),
-    ("rpc-password", _opt_str, None),
-    ("seed-dir-purge", bool, False),
-    ("seed-dir-quota-gib", (int, float), 0),
-    ("seed-dir-reserve-space-gib", (int, float), 0),
-    ("seed-dir", _opt_str, None),
-    ("watch-dir", _opt_str, None),
+    ("log-level", str, "INFO", None),
+    ("only-seed-private", bool, False, None),
+    ("rpc-path", str, "/transmission/rpc", None),
+    ("rpc-port", int, 9091, _port),
+    ("rpc-username", _opt_str, None, None),
+    ("rpc-password", _opt_str, None, None),
+    ("seed-dir-purge", bool, False, None),
+    ("seed-dir-quota-gib", (int, float), 0, _non_negative),
+    ("seed-dir-reserve-space-gib", (int, float), 0, _non_negative),
+    ("seed-dir", _opt_str, None, _abs_path),
+    ("watch-dir", _opt_str, None, _abs_path),
 ]
-SCHEMA.extend((c.value, _opt_str, None) for c in Cat)
+SCHEMA.extend((c.value, _opt_str, None, _abs_path) for c in Cat)
+
 del _opt_str
 
+# --- Core --------------------------------------------------------------------
 
-def makeconfig(schema: list, userconf: dict = None) -> dict:
+
+def makeconfig(userconf: dict = None) -> dict:
     """
-    Construct a config dict from a schema and user settings, ensuring the
-    correct types in each field.
+    Build a config dict from schema and user settings; apply normalizers.
+    Missing/wrong-typed values fall back to defaults.
     """
     conf = {}
     get = (userconf if isinstance(userconf, dict) else {}).get
-    for key, _type, default in schema:
+    for key, _type, default, func in SCHEMA:
         val = get(key)
-        conf[key] = val if isinstance(val, _type) else default
+        if isinstance(val, _type):
+            conf[key] = val if func is None else func(val)
+        else:
+            conf[key] = default
     return conf
 
 
@@ -46,22 +78,6 @@ def json_dump(data, file: str):
 def xor_cipher(b: bytes, key: bytes = b"Claire Kuo") -> bytes:
     """Perform XOR obfuscation on the given bytes using a key."""
     return bytes(map(operator.xor, b, itertools.cycle(key)))
-
-
-def normalize_path(conf: dict, k: str, not_empty: bool = False):
-    """
-    Validate and normalize a path, and write back to the config dict. Empty
-    strings are converted to None unless not_empty is True.
-    """
-    path = conf[k]
-    if path:
-        if not op.isabs(path):
-            _error(f'Path for "{k}" is not absolute: "{path}".')
-        conf[k] = op.normpath(path)
-    elif not_empty:
-        _error(f"Path for '{k}' cannot be empty.")
-    else:
-        conf[k] = None
 
 
 def _error(msg, code: int = 1):
@@ -77,22 +93,23 @@ def parse(file: str) -> dict:
         with open(file, "r", encoding="utf-8") as f:
             userconf = json.load(f)
     except FileNotFoundError:
-        json_dump(makeconfig(SCHEMA), file)
+        json_dump(makeconfig(), file)
         sys.stderr.write(
             f'A blank configuration file has been created at "{file}". '
             "Edit the settings before running this script again.\n"
         )
         sys.exit(1)
     except Exception as e:
-        _error(f"Cannot read the configuration file: {e}")
+        _error(e)
 
-    conf = makeconfig(SCHEMA, userconf)
+    try:
+        conf = makeconfig(userconf)
+    except ValueError as e:
+        _error(e)
 
-    # validate & normalize paths
-    normalize_path(conf, "seed-dir")
-    normalize_path(conf, "watch-dir")
-    for c in Cat:
-        normalize_path(conf, c.value, not_empty=(c == Cat.DEFAULT))
+    # check paths
+    if not conf[Cat.DEFAULT.value]:
+        _error(f'"{Cat.DEFAULT.value}" must be set to a valid path.')
 
     # password
     p: str = conf["rpc-password"]

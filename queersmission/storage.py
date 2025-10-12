@@ -25,6 +25,8 @@ class StorageManager:
         reserve_space_gib: int = 0,
         watch_dir: Optional[str] = None,
     ) -> None:
+        if quota_gib < 0 or reserve_space_gib < 0:
+            raise ValueError("Quota and reserve space must be non-negative.")
 
         self.client = client
         self.seed_dir_purge = seed_dir_purge
@@ -64,7 +66,7 @@ class StorageManager:
 
     @property
     def allowed(self) -> Set[str]:
-        """First path segments after seed_dir of current torrents."""
+        """First path segments in seed_dir that are associated with torrents."""
         return self._maindata[1]
 
     def cleanup(self) -> None:
@@ -242,8 +244,8 @@ class StorageManager:
 
 
 def gib_to_bytes(size) -> int:
-    """Converts GiB to bytes. Returns 0 if the input is negative."""
-    return int(size * 1073741824) if size > 0 else 0
+    """Converts GiB to bytes."""
+    return int(size * 1073741824)
 
 
 def knapsack(
