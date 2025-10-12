@@ -14,11 +14,11 @@ _RE_AI = re.ASCII | re.IGNORECASE
 class Cat(Enum):
     """Enumeration for categorizing torrents."""
 
-    DEFAULT = "default"
-    MOVIES = "movies"
-    TV_SHOWS = "tv-shows"
-    MUSIC = "music"
-    AV = "av"
+    DEFAULT = "dest-dir-default"
+    MOVIES = "dest-dir-movies"
+    TV_SHOWS = "dest-dir-tv-shows"
+    MUSIC = "dest-dir-music"
+    AV = "dest-dir-av"
 
 
 class Categorizer:

@@ -21,18 +21,15 @@ class StorageManager:
         self,
         client: Client,
         seed_dir_purge: bool = False,
-        size_limit_gb: int = 0,
-        space_floor_gb: int = 0,
+        quota_gib: int = 0,
+        reserve_space_gib: int = 0,
         watch_dir: Optional[str] = None,
     ) -> None:
 
-        if not client.is_localhost:
-            raise ValueError("Cannot manage storage on a remote host.")
-
         self.client = client
         self.seed_dir_purge = seed_dir_purge
-        self.size_limit = gib_to_bytes(size_limit_gb)
-        self.space_floor = gib_to_bytes(space_floor_gb)
+        self.quota = gib_to_bytes(quota_gib)
+        self.reserve_space = gib_to_bytes(reserve_space_gib)
         self.watch_dir = watch_dir
 
     @cached_property
@@ -79,8 +76,7 @@ class StorageManager:
 
     def _clean_watch_dir(self) -> None:
         """Remove old or zero-length '.torrent' files from the watch-dir."""
-        if not self.watch_dir:
-            raise ValueError('Value "watch_dir" should not be null.')
+        assert self.watch_dir
         try:
             with os.scandir(self.watch_dir) as it:
                 entries = [
@@ -100,8 +96,7 @@ class StorageManager:
 
     def _purge_seed_dir(self) -> None:
         """Remove files from seed_dir if they do not exist in Transmission."""
-        if not self.seed_dir_purge:
-            raise ValueError('Flag "seed_dir_purge" should be True.')
+        assert self.seed_dir_purge
         allowed = self.allowed
         try:
             with os.scandir(self.client.seed_dir) as it:
@@ -143,13 +138,13 @@ class StorageManager:
             if not in_seed_dir:  # case 4
                 total_size += add_size
 
-        size_limit = total - self.space_floor  # disk capacity
-        if 0 < self.size_limit < size_limit:
-            size_limit = self.size_limit  # user limit
+        cap = total - self.reserve_space  # disk capacity
+        if 0 < self.quota < cap:
+            cap = self.quota  # user limit
 
         size_to_free = max(
-            total_size - size_limit,  # size limit
-            self.space_floor - free,  # free space
+            total_size - cap,  # size limit
+            self.reserve_space - free,  # free space
         )
 
         if size_to_free <= 0:
@@ -173,7 +168,7 @@ class StorageManager:
         else:
             logger.warning("No suitable torrents found for removal.")
 
-    def _get_removables(self):
+    def _get_removal_cands(self):
         """Retrieves a list of torrents that are candidates for removal."""
         data = self.client.torrent_get(
             fields=(
@@ -211,31 +206,30 @@ class StorageManager:
         removal = []
         with_leechers = []
         leecher_counts = []
-        for t in self._get_removables():
-            leecher = 0
-            for tracker in t["trackerStats"]:
-                i = tracker["leecherCount"]  # int
-                if i > 0:  # skip "unknown" (-1)
-                    leecher += i
-            leecher = max(leecher, sum(p["progress"] < 1 for p in t["peers"]))
+        for t in self._get_removal_cands():
+            # leachers: the max leecher count among trackers (-1 if unknown),
+            # or the number of connected peers that are not yet complete.
+            leecher = max(
+                max(ts["leecherCount"] for ts in t["trackerStats"]),
+                sum(p["progress"] < 1 for p in t["peers"]),
+            )
             if leecher > 0:
                 with_leechers.append(t)
                 leecher_counts.append(leecher)
             else:
-                # Add zero-leecher torrents to the results.
+                # Add zero-leecher torrents to removal list.
                 removal.append(t)
 
-        # First: Select zero-leecher torrents from the least active ones until
-        # the required size is reached.
+        # First: Pick all zero-leecher torrents, least active first, until we
+        # satisfy the size requirement.
         removal.sort(key=lambda t: t["activityDate"])
         for i, t in enumerate(removal):
             size_to_free -= t["sizeWhenDone"]  # uint64_t
             if size_to_free <= 0:
                 return removal[: i + 1]
 
-        # Second: Pick torrents with leechers. The question is inverted to fit
-        # into the classical knapsack problem: How to select torrents to keep in
-        # order to maximize the total number of leechers?
+        # Second: Use knapsack to pick among the remaining torrents to maximize
+        # the number of leechers.
         sizes = [t["sizeWhenDone"] for t in with_leechers]
         keep = knapsack(
             weights=sizes,
@@ -262,9 +256,9 @@ def knapsack(
     Solve the 0-1 knapsack problem via dynamic programming.
 
     Args:
-        weights (List[int]): Item weights (non-negative integers).
-        values (List[int]): Item values (real numbers; may be negative).
-        capacity (int): Maximum knapsack capacity (>= 0).
+        weights (List[int]): Item weights.
+        values (List[int]): Item values.
+        capacity (int): Maximum knapsack capacity.
         max_cells (int, optional): Target upper bound on DP table cells,
             used to scale down the capacity/weights for speed.
 
@@ -272,7 +266,7 @@ def knapsack(
         Set[int]: Indices of the items forming a maximum-value solution.
     """
     if not isinstance(capacity, int):
-        raise TypeError('Expect "capacity" to be an integer.')
+        raise TypeError(f'Expect "capacity" to be an integer, not {type(capacity)}.')
     if capacity <= 0:
         return set()
     n = len(weights)

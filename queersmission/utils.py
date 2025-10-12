@@ -10,7 +10,11 @@ def _shutil_copy_file(src: str, dst: str) -> None:
     """Copy `src` to `dst` using shutil."""
     if op.isdir(src):
         shutil.copytree(
-            src, dst, symlinks=True, copy_function=shutil.copy, dirs_exist_ok=True
+            src,
+            dst,
+            symlinks=True,
+            copy_function=shutil.copy,
+            dirs_exist_ok=True,
         )
     else:
         # Avoid shutil.copy() because if dst is a dir, we want to throw an error
@@ -39,7 +43,8 @@ if sys.platform.startswith("linux"):
                 text=True,
             )
         except subprocess.CalledProcessError as e:
-            # Fallback if cp fails silently or does not support the options
+            # fallback to shutil if cp reports nothing or invalid option,
+            # otherwise re-raise
             stderr = e.stderr.strip()
             if stderr and not re.search(
                 r"\b(unrecognized|invalid|unknown|illegal)\s+option", stderr, re.I
@@ -57,8 +62,10 @@ else:
 
 
 def is_subpath(child: str, parent: str, sep: str = op.sep) -> bool:
-    """Check if `child` is within `parent`. Both paths must be absolute and
-    normalized."""
+    """
+    Check if `child` is within `parent`. Assumes both are absolute canonical
+    paths.
+    """
     if not child.endswith(sep):
         child += sep
     if not parent.endswith(sep):

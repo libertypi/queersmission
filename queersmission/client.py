@@ -20,7 +20,7 @@ class TRStatus(IntEnum):
 
 
 class Client:
-    """A client for interacting with the Transmission RPC interface."""
+    """A client for interacting with the local Transmission RPC interface."""
 
     _SSID = "X-Transmission-Session-Id"
     _RETRIES = 3
@@ -29,7 +29,6 @@ class Client:
         self,
         *,
         protocol: str = "http",
-        host: str = "127.0.0.1",
         port: int = 9091,
         path: str = "/transmission/rpc",
         username: Optional[str] = None,
@@ -37,19 +36,12 @@ class Client:
         seed_dir: Optional[str] = None,
     ) -> None:
 
-        self.url = f"{protocol}://{host}:{port}{path}"
+        self.url = f"{protocol}://127.0.0.1:{port}{path}"
         self._seed_dir = seed_dir
 
         self.session = requests.Session()
         if username and password:
             self.session.auth = (username, password)
-
-        if host.lower() in {"127.0.0.1", "0.0.0.0", "::1", "localhost"}:
-            self.is_localhost = True
-            self.path_module = op
-            self.normpath = op.realpath
-        else:
-            self.is_localhost = False
 
     def _call(self, method: str, arguments: Optional[dict] = None, *, ids=None) -> dict:
         """Make a call to the Transmission RPC."""
@@ -118,26 +110,19 @@ class Client:
         )
 
     def get_freespace(self, path: Optional[str] = None) -> Tuple[int, int]:
-        """Tests how much space is available in a client-specified folder.
-        If `path` is None, test seed_dir."""
+        """
+        Tests how much space is available in a client-specified folder. If
+        `path` is None, test seed_dir.
+        """
         if path is None:
             path = self.seed_dir
-        if self.is_localhost:
-            try:
-                res = shutil.disk_usage(path)
-                return res.total, res.free
-            except OSError as e:
-                logger.warning(e)
+        try:
+            res = shutil.disk_usage(path)
+            return res.total, res.free
+        except OSError as e:
+            logger.warning(e)
         res = self._call("free-space", {"path": path})
         return res["total_size"], res["size-bytes"]
-
-    @cached_property
-    def seed_dir(self) -> str:
-        """The normalized seeding directory."""
-        s = self._seed_dir or self.session_settings["download-dir"]
-        if not s:
-            raise ValueError("Cannot get seed_dir.")
-        return self.normpath(s)
 
     @cached_property
     def session_settings(self) -> dict:
@@ -145,25 +130,12 @@ class Client:
         return self._call("session-get")
 
     @cached_property
-    def path_module(self):
-        """The appropriate os.path module for the host."""
-        # Only called when is_localhost is False.
-        for k in ("config-dir", "download-dir", "incomplete-dir"):
-            p = self.session_settings[k]
-            if not p:
-                continue
-            if p[0] == "/" or ":" not in p:
-                import posixpath as path
-            else:
-                import ntpath as path
-            return path
-        raise ValueError("Cannot determine path type for the remote host.")
-
-    @cached_property
-    def normpath(self):
-        """The appropriate normpath function for the host."""
-        # Only called when is_localhost is False.
-        return self.path_module.normpath
+    def seed_dir(self) -> str:
+        """The canonical path of the seed directory."""
+        p = self._seed_dir or self.session_settings["download-dir"]
+        if not p:
+            raise ValueError("Cannot get seed_dir.")
+        return op.realpath(p)
 
 
 def check_ids(ids):
@@ -179,7 +151,7 @@ def check_ids(ids):
             if i >= 0:
                 continue
         elif isinstance(i, str):
-            if len(i) == 40:  # SHA-1
+            if len(i) in (40, 64):  # SHA-1 or SHA-256
                 try:
                     bytes.fromhex(i)
                     continue

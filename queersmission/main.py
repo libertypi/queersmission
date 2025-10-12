@@ -61,9 +61,6 @@ def process_torrent_done(
     # * src_in_seed_dir: True if the torrent's downloadDir is within seed_dir
     # * remove_torrent: True if user only seed private and torrent is public
 
-    if not client.is_localhost:
-        raise ValueError("Cannot manage download completion on a remote host.")
-
     t = client.torrent_get(
         fields=(
             "downloadDir",
@@ -92,29 +89,29 @@ def process_torrent_done(
     if src_in_seed_dir:
         c = Categorizer().categorize(t["files"])
         logger.info('Categorize "%s" as: %s', name, c.name)
-        dst_dir = op.normpath(dests[c.value] or dests[Cat.DEFAULT.value])
+        dest_dir = dests[c] or dests[Cat.DEFAULT]
         # Create a directory for a single file torrent
         if not op.isdir(src):
-            dst_dir = op.join(dst_dir, op.splitext(name)[0])
+            dest_dir = op.join(dest_dir, op.splitext(name)[0])
     else:
-        dst_dir = client.seed_dir
+        dest_dir = client.seed_dir
         # Ensure free space in seed_dir
         if not remove_torrent:
             storage.apply_quotas(size, in_seed_dir=False)
 
     # File operations
     if src_in_seed_dir or not remove_torrent:
-        dst = op.join(dst_dir, name)
-        os.makedirs(dst_dir, exist_ok=True)
-        duration = time.perf_counter()
+        dst = op.join(dest_dir, name)
+        os.makedirs(dest_dir, exist_ok=True)
+        elapsed = time.perf_counter()
         copy_file(src, dst)
-        duration = time.perf_counter() - duration
+        elapsed = time.perf_counter() - elapsed
         logger.info(
-            'Copied: "%s" -> "%s" (time: %.2fs, speed: %s/s, size: %s)',
+            'Copied: "%s" -> "%s" (elapsed: %.2fs, speed: %s/s, size: %s)',
             src,
             dst,
-            duration,
-            humansize(size / duration) if duration else "N/A",
+            elapsed,
+            humansize(size / elapsed) if elapsed else "N/A",
             humansize(size),
         )
 
@@ -123,7 +120,7 @@ def process_torrent_done(
         logger.debug("Remove public torrent: %s", name)
         client.torrent_remove(tid, delete_local_data=src_in_seed_dir)
     elif not src_in_seed_dir:
-        client.torrent_set_location(tid, dst_dir, move=False)
+        client.torrent_set_location(tid, dest_dir, move=False)
 
 
 def _check_torrent_done(tid: int, t: dict, client: Client, retry: int = 10):
@@ -166,7 +163,7 @@ def main(torrent_added: bool, config_dir: str):
 
         client = Client(
             port=conf["rpc-port"],
-            path=conf["rpc-url"],
+            path=conf["rpc-path"],
             username=conf["rpc-username"],
             password=conf["rpc-password"],
             seed_dir=conf["seed-dir"],
@@ -174,8 +171,8 @@ def main(torrent_added: bool, config_dir: str):
         storage = StorageManager(
             client=client,
             seed_dir_purge=conf["seed-dir-purge"],
-            size_limit_gb=conf["seed-dir-size-limit-gb"],
-            space_floor_gb=conf["seed-dir-space-floor-gb"],
+            quota_gib=conf["seed-dir-quota-gib"],
+            reserve_space_gib=conf["seed-dir-reserve-space-gib"],
             watch_dir=conf["watch-dir"],
         )
 
@@ -191,7 +188,7 @@ def main(torrent_added: bool, config_dir: str):
                 tid=tid,
                 client=client,
                 storage=storage,
-                dests=conf["destinations"],
+                dests={c: conf[c.value] for c in Cat},
                 private_only=conf["only-seed-private"],
             )
 
