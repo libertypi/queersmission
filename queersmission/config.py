@@ -32,7 +32,7 @@ def _abs_path(val):
 
 _opt_str = (str, type(None))
 
-# key, type, default, normalization function
+# key, type, default, normalizer
 
 SCHEMA = [
     ("log-level", str, "INFO", None),

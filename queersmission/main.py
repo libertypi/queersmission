@@ -124,7 +124,7 @@ def process_torrent_done(
 
 
 def _check_torrent_done(tid: int, t: dict, client: Client, retry: int = 10):
-    """Checks if a torrent has finished downloading. Retries every second.
+    """Checks if a torrent has finished downloading. Retries every 5 seconds.
     Raises TimeoutError after `retry` retries."""
     while t["percentDone"] < 1:
         if retry <= 0:

@@ -16,6 +16,7 @@ except AttributeError:
 
 
 class StorageManager:
+    """Manages storage space in Transmission's seed directory."""
 
     def __init__(
         self,
@@ -212,7 +213,7 @@ class StorageManager:
             # leachers: the max leecher count among trackers (-1 if unknown),
             # or the number of connected peers that are not yet complete.
             leecher = max(
-                max(ts["leecherCount"] for ts in t["trackerStats"]),
+                max((ts["leecherCount"] for ts in t["trackerStats"]), default=0),
                 sum(p["progress"] < 1 for p in t["peers"]),
             )
             if leecher > 0:
