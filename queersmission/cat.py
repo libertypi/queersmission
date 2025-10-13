@@ -59,7 +59,10 @@ class Categorizer:
         # Does the torrent name pass the AV test? Torrent name is the file name
         # if there is only one file, or the root directory name otherwise. File
         # paths are always POSIX paths.
-        name = files[0]["name"].lstrip("/").partition("/")
+        try:
+            name = files[0]["name"].lstrip("/").partition("/")
+        except IndexError:
+            raise ValueError("Empty file list.")
         name = name[0] if name[1] else posix_splitext(name[0])[0]
         if re_test(self.av_re, name):
             return Cat.AV

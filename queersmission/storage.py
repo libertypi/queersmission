@@ -2,7 +2,7 @@ import os
 import os.path as op
 import shutil
 import time
-from typing import Dict, List, Optional, Set
+from typing import List, Optional, Set
 
 from . import logger
 from .client import Client, Torrent, TRStatus
@@ -159,7 +159,7 @@ class StorageManager:
         with_leechers = []
         leecher_counts = []
         for t in self._get_removal_cands():
-            # leachers: the max leecher count among trackers (-1 if unknown),
+            # leechers: the max leecher count among trackers (-1 if unknown),
             # or the number of connected peers that are not yet complete.
             leecher = max(
                 max((ts["leecherCount"] for ts in t.trackerStats), default=0),

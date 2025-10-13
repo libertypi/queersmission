@@ -45,9 +45,9 @@ def set_public_up_limit(tid: int, client: Client, limit_kbps: int):
     if t.isPrivate:
         return
     logger.debug(
-        'Setting upload limit for public torrent "%s" to %d kB/s',
-        t.name,
+        'Setting upload limit to %d kB/s for public torrent: "%s"',
         limit_kbps,
+        t.name,
     )
     client.torrent_set(tid, uploadLimit=limit_kbps, uploadLimited=True)
 

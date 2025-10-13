@@ -28,15 +28,15 @@ class Torrent:
     activityDate: Optional[int] = None
     doneDate: Optional[int] = None
     downloadDir: Optional[str] = None
-    files: Optional[list] = None
+    files: Optional[List[dict]] = None
     id: Optional[int] = None
     isPrivate: Optional[bool] = None
     name: Optional[str] = None
-    peers: Optional[list] = None
+    peers: Optional[List[dict]] = None
     percentDone: Optional[float] = None
     sizeWhenDone: Optional[int] = None
     status: Optional[TRStatus] = None
-    trackerStats: Optional[list] = None
+    trackerStats: Optional[List[dict]] = None
 
 
 class Client:
@@ -173,7 +173,7 @@ class Client:
             ("downloadDir", "id", "isPrivate", "name", "sizeWhenDone")
         )
         torrents = {t.id: t for t in data}
-        seed_dir_torrents = torrents.copy()
+        seed_dir_torrents = {}
         seed_dir = self.seed_dir
 
         for t in data:
@@ -181,18 +181,19 @@ class Client:
                 t.downloadDir = op.realpath(t.downloadDir)  # Update to real path
                 if not is_subpath(t.downloadDir, seed_dir):
                     # Torrent is outside of seed_dir.
-                    del seed_dir_torrents[t.id]
+                    continue
+            seed_dir_torrents[t.id] = t
 
         return torrents, seed_dir_torrents
 
     @property
     def torrents(self) -> Dict[int, Torrent]:
-        """A dictionary of torrents known to Transmission, indexed by ID."""
+        """All torrents known to Transmission: {id: Torrent}."""
         return self._snapshot[0]
 
     @property
     def seed_dir_torrents(self) -> Dict[int, Torrent]:
-        """Torrents whose downloadDir is within seed_dir."""
+        """Torrents whose downloadDir is within seed_dir: {id: Torrent}."""
         return self._snapshot[1]
 
 
@@ -206,7 +207,7 @@ def check_ids(ids):
     """
     for i in ids if isinstance(ids, (list, tuple)) else (ids,):
         if isinstance(i, int):
-            if i >= 0:  # can it be 0?
+            if i >= 0:  # Can it be 0?
                 continue
         elif isinstance(i, str):
             if len(i) in (40, 64):  # SHA-1 or SHA-256
