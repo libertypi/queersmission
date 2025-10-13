@@ -149,12 +149,15 @@ class StorageManager:
             logger.warning("No suitable torrents found for removal.")
 
     def _find_optimal_removals(self, size_to_free: int) -> List[Torrent]:
-        """Find an optimal set of torrents to remove to free up `size_to_free`
-        bytes of space.
+        """
+        Find an optimal set of torrents to remove to free at least
+        `size_to_free` bytes. Tries to maximize the number of leechers among the
+        remaining torrents. Returns a list of torrents to remove.
         """
         if size_to_free <= 0:
-            raise ValueError('Expect "size_to_free" to be a positive integer.')
-        # Categorize torrents based on leecher count.
+            raise ValueError('"size_to_free" must be positive.')
+
+        # Classify torrents into two groups: those with leechers and those without.
         removal = []
         with_leechers = []
         leecher_counts = []
@@ -169,10 +172,9 @@ class StorageManager:
                 with_leechers.append(t)
                 leecher_counts.append(leecher)
             else:
-                # Add zero-leecher torrents to removal list.
                 removal.append(t)
 
-        # First: Pick all zero-leecher torrents, least active first, until we
+        # First: Pick all zero-leecher torrents, oldest activity first, until we
         # satisfy the size requirement.
         removal.sort(key=lambda t: t.activityDate)
         for i, t in enumerate(removal):
@@ -192,33 +194,77 @@ class StorageManager:
         removal.extend(t for i, t in enumerate(with_leechers) if i not in keep)
         return removal
 
-    def _get_removal_cands(self):
-        """Get torrents that are candidates for removal."""
-        torrents = self.client.torrent_get(
-            fields=(
-                "activityDate",
-                "doneDate",
-                "id",
-                "name",
-                "peers",
-                "percentDone",
-                "sizeWhenDone",
-                "status",
-                "trackerStats",
-            ),
-            ids=list(self.client.seed_dir_torrents),
+    def _get_removal_cands(self) -> List[Torrent]:
+        """
+        Get a list of torrents in seed_dir that are eligible for removal.
+        Reannounces if needed to get up-to-date leecher counts.
+        """
+        fields = (
+            "activityDate",
+            "doneDate",
+            "id",
+            "name",
+            "peers",
+            "percentDone",
+            "sizeWhenDone",
+            "status",
+            "trackerStats",
         )
-        # Torrents are only removed if they have been completed for more than 12
-        # hours in case another instance is waiting to process them.
-        threshold = time.time() - 43200
+        las = "lastAnnounceSucceeded"
+        lat = "lastAnnounceTime"
+        lss = "lastScrapeSucceeded"
+        lst = "lastScrapeTime"
+
+        # Fetch and filter
+        torrents = self.client.torrent_get(fields, tuple(self.client.seed_dir_torrents))
+        torrents = self._filter_removal_cands(torrents)
+
+        # Reannounce if:
+        # - All trackers report 0 leechers, AND
+        # - No tracker has a successful announce/scrape in the last 5 minutes.
+        pending = {}
+        cutoff = time.time() - 300  # 5 minutes ago
+        for t in torrents:
+            if not t.trackerStats or any(
+                ts["leecherCount"] > 0
+                or (ts[las] and ts[lat] >= cutoff)
+                or (ts[lss] and ts[lst] >= cutoff)
+                for ts in t.trackerStats
+            ):
+                continue
+            # Mark this torrent for reannounce: {tracker_id: last_event_time, ...}
+            pending[t.id] = {ts["id"]: max(ts[lat], ts[lst]) for ts in t.trackerStats}
+
+        if not pending:
+            return torrents
+
+        self.client.torrent_reannounce(tuple(pending))
+
+        # Wait up to 15 seconds for reannounces to complete.
+        cutoff = time.monotonic() + 15
+        while pending and time.monotonic() < cutoff:
+            time.sleep(3)
+            for t in self.client.torrent_get(("id", "trackerStats"), tuple(pending)):
+                base = pending[t.id]
+                for ts in t.trackerStats:
+                    prev = base.get(ts["id"], 0)
+                    if (ts[las] and ts[lat] > prev) or (ts[lss] and ts[lst] > prev):
+                        # This torrent has a successful announce/scrape now.
+                        del pending[t.id]
+                        break
+
+        # Fetch full details again.
+        return self.client.torrent_get(fields, [t.id for t in torrents])
+
+    def _filter_removal_cands(self, torrents: List[Torrent]):
+        """Filter out torrents that should not be considered for removal."""
+        cutoff = time.time() - 43200  # 12 hours ago
         statuses = {TRStatus.STOPPED, TRStatus.SEED_WAIT, TRStatus.SEED}
-        return (
+        return [
             t
             for t in torrents
-            if t.percentDone == 1
-            and t.status in statuses
-            and 0 < t.doneDate < threshold
-        )
+            if t.percentDone == 1 and t.status in statuses and 0 < t.doneDate < cutoff
+        ]
 
 
 def gib_to_bytes(size) -> int:
