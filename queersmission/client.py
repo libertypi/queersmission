@@ -24,6 +24,7 @@ class Client:
 
     _SSID = "X-Transmission-Session-Id"
     _RETRIES = 3
+    _BAD_CODES = {401, 403, 409}
 
     def __init__(
         self,
@@ -62,7 +63,7 @@ class Client:
             logger.debug("Requesting: %s, Attempt: %s", query, retry)
             try:
                 res = self.session.post(self.url, json=query)
-                if res.status_code not in {401, 403, 409}:
+                if res.status_code not in self._BAD_CODES:
                     data = res.json()
                     logger.debug("Response: %s", data)
                     if data["result"] == "success":

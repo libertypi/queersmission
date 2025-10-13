@@ -62,16 +62,14 @@ def process_torrent_done(
     # * remove_torrent: True if user only seed private and torrent is public
 
     t = client.torrent_get(
-        fields=(
-            "downloadDir",
-            "files",
-            "isPrivate",
-            "name",
-            "percentDone",
-            "sizeWhenDone",
-        ),
+        ("downloadDir", "files", "isPrivate", "name", "percentDone", "sizeWhenDone"),
         ids=tid,
-    )["torrents"][0]
+    )["torrents"]
+    try:
+        t = t[0]
+    except IndexError:
+        raise ValueError(f"Torrent ID {tid} not found.")
+
     _check_torrent_done(tid, t, client)
 
     remove_torrent = private_only and not t["isPrivate"]
@@ -153,15 +151,6 @@ def main(torrent_added: bool, config_dir: str):
         flock.acquire()
         start = time.perf_counter()
 
-        tid = os.environ.get("TR_TORRENT_ID")
-        if tid is not None:
-            logger.debug(
-                "Script-torrent-%s triggered with torrent ID: %s",
-                "added" if torrent_added else "done",
-                tid,
-            )
-            tid = int(tid)
-
         client = Client(
             port=conf["rpc-port"],
             path=conf["rpc-path"],
@@ -177,21 +166,38 @@ def main(torrent_added: bool, config_dir: str):
             watch_dir=conf["watch-dir"],
         )
 
-        if torrent_added:
-            storage.cleanup()
-            if tid is None:
-                storage.apply_quotas()
-            elif tid in storage.torrents:
-                storage.apply_quotas(storage.torrents[tid], in_seed_dir=True)
-
-        elif tid is not None:
-            process_torrent_done(
-                tid=tid,
-                client=client,
-                storage=storage,
-                dests={c: conf[c.value] for c in Cat},
-                private_only=conf["only-seed-private"],
+        tid = os.environ.get("TR_TORRENT_ID")
+        if tid is None:
+            # Script is invoked by user
+            logger.debug(
+                "Script-torrent-%s invoked without a torrent ID, "
+                "performing maintenance tasks.",
+                "added" if torrent_added else "done",
             )
+            storage.cleanup()
+            storage.apply_quotas()
+
+        else:
+            # Script is invoked by Transmission
+            logger.debug(
+                "Script-torrent-%s triggered with torrent ID: %s",
+                "added" if torrent_added else "done",
+                tid,
+            )
+            tid = int(tid)
+
+            if torrent_added:
+                storage.cleanup()
+                if tid in storage.torrents:  # New torrent in seed_dir
+                    storage.apply_quotas(storage.torrents[tid], in_seed_dir=True)
+            else:
+                process_torrent_done(
+                    tid=tid,
+                    client=client,
+                    storage=storage,
+                    dests={c: conf[c.value] for c in Cat},
+                    private_only=conf["only-seed-private"],
+                )
 
     except Exception as e:
         logger.critical(e)
