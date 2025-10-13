@@ -1,24 +1,37 @@
 # Queersmission
 
-*Queer's mission... is to help Transmission.*
+*Queer's mission… is to help Transmission.*
 
-**Queersmission** is a [custom script](https://github.com/transmission/transmission/blob/main/docs/Scripts.md) for the [Transmission](https://transmissionbt.com/) BitTorrent client. It manages a dedicated seeding space and copies completed downloads to user-specified locations. This ensures that file sharing continues, even if the user deletes the content, which is useful for Private Torrent (PT) users who need to maintain a sharing ratio.
+**Queersmission** is a [custom script](https://github.com/transmission/transmission/blob/main/docs/Scripts.md) for the [Transmission](https://transmissionbt.com/) BitTorrent client. It maintains a dedicated **seeding space** and copies completed downloads to user-chosen destinations. This keeps sharing alive even if you delete your personal copy — ideal for Private Torrent (PT) users who must maintain ratio.
 
-### Features
+> **Runtime:** Python 3.8+  
+> **Target:** transmission-daemon with RPC enabled
 
-- **Smart Storage Management**: Manages space in the `seed-dir` based on quota settings by removing the least wanted torrents.
-- **Smart Torrent Categorization**: Categorizes downloads into `movies`, `tv-shows`, `music`, `av`, and `default`. Each category can be directed to specific locations. It utilizes the sophisticated regular expressions powered by [regen](https://github.com/libertypi/regen), and millions of real world data.
-- **Shallow Copy**: Utilizes copy-on-write (CoW) on file systems like Btrfs to perform lightweight copies. Data blocks are only duplicated when modified. Copies do not take double space and are instant.
+## Features
 
-### Usage
+- **Smart storage management** — Enforces `seed-dir` quotas/reserves and removes the least valuable finished torrents first.
+- **Smart categorization** — Classifies to `movies`, `tv-shows`, `music`, `av`, or `default`. Uses sophisticated regular expressions powered by [regen](https://github.com/libertypi/regen) and large real-world data.
+- **Shallow copy (CoW)** — On CoW filesystems (e.g., Btrfs), copies are instant and space-efficient.
 
-Queersmission is designed to be run as a `script-torrent-added` to perform storage management, and a `script-torrent-done` to perform post-download copying.
+## How it runs
 
-The dedicated seeding space should be set as both `download-dir` in Transmission's `settings.json`, and `seed-dir` in Queersmission's `config.json`.
+Configure Queersmission as **both**:
+- `script-torrent-added` — handles storage management on add.
+- `script-torrent-done` — performs post-download copying.
 
-After stopping the Transmission daemon, edit its `settings.json`. On a Synology NAS, this file may be located at `/volume1/@appdata/transmission/settings.json`. Default locations on other platforms can be found [here](https://github.com/transmission/transmission/blob/main/docs/Configuration-Files.md). 
+Use the **same directory** for:
+- Transmission `download-dir`
+- Queersmission `seed-dir`
 
-**These settings in Transmission's `settings.json` must be set correctly:**
+This keeps seeding data canonical and manageable.
+
+## Transmission settings
+
+Stop `transmission-daemon`, then edit `settings.json`.  
+On Synology NAS it is often at: `/volume1/@appdata/transmission/settings.json`.  
+Default locations for other systems: [Configuration Files](https://github.com/transmission/transmission/blob/main/docs/Configuration-Files.md).
+
+Set **all** of the following:
 
 ```json
 "rpc-enabled": true,
@@ -26,53 +39,71 @@ After stopping the Transmission daemon, edit its `settings.json`. On a Synology 
 "script-torrent-added-enabled": true,
 "script-torrent-added-filename": "/path_to/queersmission/torrent-added.py",
 "script-torrent-done-enabled": true,
-"script-torrent-done-filename": "/path_to/queersmission/torrent-done.py",
-```
+"script-torrent-done-filename": "/path_to/queersmission/torrent-done.py"
+````
 
-### Configuration
+## First run & config
 
-After setting up transmission-daemon, you should manually run `torrent-done.py` once to generate the configuration file. Upon the first run, a blank `config.json` will be created in the queersmission directory. Edit the config file to get started.
+After enabling RPC and scripts, run `torrent-done.py` **once** manually to generate `config.json` (created blank in the Queersmission directory). Edit it.
 
-Template:
+### `config.json` template
 
 ```json
 {
-    "log-level": "INFO",
-    "only-seed-private": false,
-    "rpc-path": "/transmission/rpc",
-    "rpc-port": 9091,
-    "rpc-username": "",
-    "rpc-password": "",
-    "seed-dir-purge": false,
-    "seed-dir-quota-gib": 0,
-    "seed-dir-reserve-space-gib": 0,
-    "seed-dir": "",
-    "watch-dir": "",
-    "dest-dir-default": "",
-    "dest-dir-movies": "",
-    "dest-dir-tv-shows": "",
-    "dest-dir-music": "",
-    "dest-dir-av": ""
+  "log-level": "INFO",
+  "public-upload-limit-kbps": 0,
+  "remove-public-on-complete": false,
+  "rpc-path": "/transmission/rpc",
+  "rpc-port": 9091,
+  "rpc-username": "",
+  "rpc-password": "",
+  "seed-dir-purge": false,
+  "seed-dir-quota-gib": 0,
+  "seed-dir-reserve-space-gib": 0,
+  "seed-dir": "",
+  "watch-dir": "",
+  "dest-dir-default": "",
+  "dest-dir-movies": "",
+  "dest-dir-tv-shows": "",
+  "dest-dir-music": "",
+  "dest-dir-av": ""
 }
 ```
 
-- **log-level**: String (default = INFO). Possible values are "DEBUG", "INFO", "WARNING", "ERROR", and "CRITICAL".
-- **only-seed-private**: Boolean (default = false). Only seed private torrents. Public torrents will be removed from Transmission immediately after the download completes.
-- **rpc-path**: String (default = /transmission/rpc)
-- **rpc-port**: Number (default = 9091)
-- **rpc-username**: String.
-- **rpc-password**: String. Queersmission will obfuscate and rewrite this field after its first read.
-- **seed-dir-purge**: Boolean (default = false). When enabled, removes all files from the `seed-dir` that are not in Transmission's downloads list. **Avoid storing personal or unrelated files in the `seed-dir`, as they will be automatically deleted when this option is active!**
-- **seed-dir-quota-gib**: Integer (default = 0). Sets the maximum allowed size (in gigabytes) of the seed-dir. If the total size of the files exceeds this limit, the script will remove inactive completed torrents to free up space. Set to 0 to disable.
-- **seed-dir-reserve-space-gib**: Integer (default = 0). Specifies a minimum free space (in gigabytes) for the seed-dir. Set to 0 to disable.
-- **seed-dir**: String. The default download location, used as the dedicated seeding location. This setting should be identical to Transmission's `download-dir`. If not set, the script may make an additional API call to read the setting.
-- **watch-dir**: String. Path to Transmission's `watch-dir`. When set, old or empty ".torrent" files will be cleared from this directory.
-- **dest-dir-*:** Strings. Specifies paths where categorized files should be copied after download completion. Entries include: `default`, `movies`, `tv-shows`, `music`, and `av`. `dest-dir-default` must be a valid directory, and others can be left empty to use the default value.
+### Keys
 
-### Notes on Windows
+* **log-level** (string, default `INFO`): `DEBUG` | `INFO` | `WARNING` | `ERROR` | `CRITICAL`.
+* **public-upload-limit-kbps** (int, default `0`): Max upload for **public** torrents in KB/s. `0` disables limiting.
+* **remove-public-on-complete** (bool, default `false`): If `true`, remove public torrents when they finish; only private torrents continue seeding.
+* **rpc-path** (string, default `/transmission/rpc`)
+* **rpc-port** (number, default `9091`)
+* **rpc-username**, **rpc-password** (strings): Password is obfuscated after first read.
+* **seed-dir-purge** (bool, default `false`): If `true`, delete **any file** in `seed-dir` not known to Transmission.
+  **Warning:** Do not store personal files in `seed-dir` when this is on.
+* **seed-dir-quota-gib** (int, default `0`): Upper size limit for `seed-dir` in GiB. `0` disables.
+* **seed-dir-reserve-space-gib** (int, default `0`): Minimum free space to keep in GiB. `0` disables.
+* **seed-dir** (string): Canonical seeding location. Should equal Transmission’s `download-dir`. If empty, Queersmission can read it from Transmission.
+* **watch-dir** (string): Transmission’s `watch-dir`. If set, old/empty `.torrent` files are cleaned up.
+* **dest-dir-* ** (strings): Post-copy destinations.
 
-While Queersmission is designed for and tested on both Linux and Windows systems, setting up custom script for Windows Transmission can be tricky. The Transmission daemon is configured to run under the Local Service account. This is a limited account that may not have access to all files on your disk, including your home directory, the Python executable, and the Queersmission script. You have to make sure these files are accessible to the daemon. Also, Windows Transmission will not call a ".py" script. You need to create two ".bat" entry scripts that call `torrent-added.py` and `torrent-done.py` respectively, and point the settings in Transmission's `settings.json` to these .bat files.
+  * **Required:** `dest-dir-default`
+  * Optional (fallback to default if empty): `dest-dir-movies`, `dest-dir-tv-shows`, `dest-dir-music`, `dest-dir-av`
 
-### Author
+## Notes on Windows
 
-- David Pi
+Windows’ Transmission service runs as **Local Service**, which may not read your home directory, Python, or Queersmission files. Ensure the service account can access:
+
+* The Python interpreter
+* The Queersmission directory
+* The destination and seed directories
+
+Windows Transmission won’t invoke `.py` directly. Create two `.bat` wrappers that call:
+
+* `torrent-added.py`
+* `torrent-done.py`
+
+Then point the corresponding `settings.json` script paths to those `.bat` files.
+
+## Author
+
+* **David Pi**

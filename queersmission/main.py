@@ -6,7 +6,7 @@ import time
 
 from . import PKG_NAME, config, logger
 from .cat import Cat, Categorizer
-from .client import Client
+from .client import Client, Torrent
 from .filelock import FileLocker
 from .storage import StorageManager
 from .utils import copy_file, humansize, is_subpath
@@ -37,12 +37,27 @@ def config_logger(logfile: str, level: str = "INFO"):
     logger.addHandler(handler)
 
 
+def set_public_up_limit(tid: int, client: Client, limit_kbps: int):
+    """Set upload limit for a public torrent."""
+    if limit_kbps <= 0:
+        return
+    t = client.torrents[tid]
+    if t.isPrivate:
+        return
+    logger.debug(
+        'Setting upload limit for public torrent "%s" to %d kB/s',
+        t.name,
+        limit_kbps,
+    )
+    client.torrent_set(tid, uploadLimit=limit_kbps, uploadLimited=True)
+
+
 def process_torrent_done(
     tid: int,
     client: Client,
     storage: StorageManager,
     dests: dict,
-    private_only: bool,
+    remove_public: bool,
 ):
     """Process the completion of a torrent download."""
     # +-----------------+----------------+---------------------------+
@@ -64,28 +79,28 @@ def process_torrent_done(
     t = client.torrent_get(
         ("downloadDir", "files", "isPrivate", "name", "percentDone", "sizeWhenDone"),
         ids=tid,
-    )["torrents"]
+    )
     try:
         t = t[0]
     except IndexError:
-        raise ValueError(f"Torrent ID {tid} not found.")
-
+        raise ValueError(f"Torrent ID {tid} does not exist.")
     _check_torrent_done(tid, t, client)
 
-    remove_torrent = private_only and not t["isPrivate"]
-    src = t["downloadDir"]
+    remove_torrent = remove_public and not t.isPrivate
+    name = t.name
+    size = t.sizeWhenDone
+
+    src = t.downloadDir
     if src == client.seed_dir:
         src_in_seed_dir = True
     else:
         src = op.realpath(src)
         src_in_seed_dir = is_subpath(src, client.seed_dir)
-    name = t["name"]
     src = op.join(src, name)
-    size = t["sizeWhenDone"]
 
     # Determine the destination
     if src_in_seed_dir:
-        c = Categorizer().categorize(t["files"])
+        c = Categorizer().categorize(t.files)
         logger.info('Categorize "%s" as: %s', name, c.name)
         dest_dir = dests[c] or dests[Cat.DEFAULT]
         # Create a directory for a single file torrent
@@ -121,15 +136,15 @@ def process_torrent_done(
         client.torrent_set_location(tid, dest_dir, move=False)
 
 
-def _check_torrent_done(tid: int, t: dict, client: Client, retry: int = 10):
+def _check_torrent_done(tid: int, t: Torrent, client: Client, retry: int = 10):
     """Checks if a torrent has finished downloading. Retries every 5 seconds.
     Raises TimeoutError after `retry` retries."""
-    while t["percentDone"] < 1:
+    while t.percentDone < 1:
         if retry <= 0:
             raise TimeoutError("Timeout while waiting for torrent to finish.")
         retry -= 1
         time.sleep(5)
-        t = client.torrent_get(("percentDone",), tid)["torrents"][0]
+        t = client.torrent_get(("percentDone",), tid)[0]
 
 
 def main(torrent_added: bool, config_dir: str):
@@ -187,20 +202,30 @@ def main(torrent_added: bool, config_dir: str):
             tid = int(tid)
 
             if torrent_added:
+                # Set upload limit for public torrents
+                set_public_up_limit(tid, client, conf["public-upload-limit-kbps"])
+
+                # Clear junk in seed_dir and watch_dir
                 storage.cleanup()
-                if tid in storage.torrents:  # New torrent in seed_dir
-                    storage.apply_quotas(storage.torrents[tid], in_seed_dir=True)
+
+                # If new torrent is in seed_dir, ensure free space
+                t = client.seed_dir_torrents.get(tid)
+                if t is not None:
+                    storage.apply_quotas(t.sizeWhenDone, in_seed_dir=True)
+
             else:
+                # Process completed torrent
                 process_torrent_done(
                     tid=tid,
                     client=client,
                     storage=storage,
                     dests={c: conf[c.value] for c in Cat},
-                    private_only=conf["only-seed-private"],
+                    remove_public=conf["remove-public-on-complete"],
                 )
 
     except Exception as e:
         logger.critical(e)
+        logger.debug("Exception details: ", exc_info=True)
 
     else:
         logger.debug("Execution completed in %.2f seconds", time.perf_counter() - start)

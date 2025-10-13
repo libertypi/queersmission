@@ -36,7 +36,8 @@ _opt_str = (str, type(None))
 
 SCHEMA = [
     ("log-level", str, "INFO", None),
-    ("only-seed-private", bool, False, None),
+    ("public-upload-limit-kbps", int, 0, _non_negative),
+    ("remove-public-on-complete", bool, False, None),
     ("rpc-path", str, "/transmission/rpc", None),
     ("rpc-port", int, 9091, _port),
     ("rpc-username", _opt_str, None, None),

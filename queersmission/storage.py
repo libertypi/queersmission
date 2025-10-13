@@ -2,12 +2,11 @@ import os
 import os.path as op
 import shutil
 import time
-from functools import cached_property
 from typing import Dict, List, Optional, Set
 
 from . import logger
-from .client import Client, TRStatus
-from .utils import humansize, is_subpath
+from .client import Client, Torrent, TRStatus
+from .utils import humansize
 
 try:
     removesuffix = str.removesuffix  # Python 3.9+
@@ -35,47 +34,12 @@ class StorageManager:
         self.reserve_space = gib_to_bytes(reserve_space_gib)
         self.watch_dir = watch_dir
 
-    @cached_property
-    def _maindata(self):
-        torrents = {}
-        allowed = set()
-        seed_dir = self.client.seed_dir
-        data = self.client.torrent_get(
-            fields=("downloadDir", "id", "name", "sizeWhenDone")
-        )["torrents"]
-
-        for t in data:
-            if t["downloadDir"] == seed_dir:
-                allowed.add(t["name"])
-            else:
-                path = op.realpath(t["downloadDir"])
-                if not is_subpath(path, seed_dir):
-                    # Torrent is outside of seed_dir.
-                    continue
-                # Find the first segment after seed_dir.
-                allowed.add(
-                    path[len(seed_dir) :].lstrip(op.sep).partition(op.sep)[0]
-                    or t["name"]
-                )
-            torrents[t["id"]] = t["sizeWhenDone"]
-        return torrents, allowed
-
-    @property
-    def torrents(self) -> Dict[int, int]:
-        """(id: sizeWhenDone) pairs for torrents located in seed_dir."""
-        return self._maindata[0]
-
-    @property
-    def allowed(self) -> Set[str]:
-        """First path segments in seed_dir that are associated with torrents."""
-        return self._maindata[1]
-
     def cleanup(self) -> None:
         """Perform the enabled cleanup tasks."""
         if self.watch_dir:
             self._clean_watch_dir()
         if self.seed_dir_purge:
-            self._purge_seed_dir()
+            self._clean_seed_dir()
 
     def _clean_watch_dir(self) -> None:
         """Remove old or zero-length '.torrent' files from the watch-dir."""
@@ -97,10 +61,22 @@ class StorageManager:
             except OSError as err:
                 logger.error(err)
 
-    def _purge_seed_dir(self) -> None:
+    def _clean_seed_dir(self) -> None:
         """Remove files from seed_dir if they do not exist in Transmission."""
         assert self.seed_dir_purge
-        allowed = self.allowed
+
+        # Build a set of allowed first-level subdirs in seed_dir.
+        seed_dir = self.client.seed_dir
+        allowed = set()
+        for t in self.client.seed_dir_torrents.values():
+            if t.downloadDir != seed_dir:
+                # Subdirectory: Find the first segment after seed_dir.
+                name = op.relpath(t.downloadDir, seed_dir).partition(op.sep)[0]
+                if name not in ("", ".", ".."):
+                    allowed.add(name)
+                    continue
+            allowed.add(t.name)
+
         try:
             with os.scandir(self.client.seed_dir) as it:
                 entries = [e for e in it if e.name not in allowed]
@@ -134,7 +110,7 @@ class StorageManager:
         # assumed to be called only under cases 1 and 4, before files are added
         # to seed_dir.
         total, free = self.client.get_freespace()
-        total_size = sum(self.torrents.values())
+        total_size = sum(t.sizeWhenDone for t in self.client.seed_dir_torrents.values())
 
         if add_size is not None:  # cases 1, 4
             free -= add_size
@@ -155,51 +131,24 @@ class StorageManager:
             return
 
         logger.info("Storage limits exceeded by %s.", humansize(size_to_free))
-        results = self._find_optimal_removals(size_to_free)
-        if results:
+
+        removal = self._find_optimal_removals(size_to_free)
+        if removal:
             logger.info(
                 "Remove %d torrent%s (%s): %s",
-                len(results),
-                "" if len(results) == 1 else "s",
-                humansize(sum(t["sizeWhenDone"] for t in results)),
-                ", ".join(t["name"] for t in results),
+                len(removal),
+                "" if len(removal) == 1 else "s",
+                humansize(sum(t.sizeWhenDone for t in removal)),
+                ", ".join(t.name for t in removal),
             )
             self.client.torrent_remove(
-                ids=[t["id"] for t in results],
+                ids=[t.id for t in removal],
                 delete_local_data=True,
             )
         else:
             logger.warning("No suitable torrents found for removal.")
 
-    def _get_removal_cands(self):
-        """Retrieves a list of torrents that are candidates for removal."""
-        data = self.client.torrent_get(
-            fields=(
-                "activityDate",
-                "doneDate",
-                "id",
-                "name",
-                "peers",
-                "percentDone",
-                "sizeWhenDone",
-                "status",
-                "trackerStats",
-            ),
-            ids=list(self.torrents),
-        )["torrents"]
-        # Torrents are only removed if they have been completed for more than 12
-        # hours to avoid race conditions.
-        threshold = time.time() - 43200
-        status = {TRStatus.STOPPED, TRStatus.SEED_WAIT, TRStatus.SEED}
-        return (
-            t
-            for t in data
-            if t["status"] in status
-            and t["percentDone"] == 1
-            and 0 < t["doneDate"] < threshold
-        )
-
-    def _find_optimal_removals(self, size_to_free: int) -> List[dict]:
+    def _find_optimal_removals(self, size_to_free: int) -> List[Torrent]:
         """Find an optimal set of torrents to remove to free up `size_to_free`
         bytes of space.
         """
@@ -213,8 +162,8 @@ class StorageManager:
             # leachers: the max leecher count among trackers (-1 if unknown),
             # or the number of connected peers that are not yet complete.
             leecher = max(
-                max((ts["leecherCount"] for ts in t["trackerStats"]), default=0),
-                sum(p["progress"] < 1 for p in t["peers"]),
+                max((ts["leecherCount"] for ts in t.trackerStats), default=0),
+                sum(p["progress"] < 1 for p in t.peers),
             )
             if leecher > 0:
                 with_leechers.append(t)
@@ -225,15 +174,15 @@ class StorageManager:
 
         # First: Pick all zero-leecher torrents, least active first, until we
         # satisfy the size requirement.
-        removal.sort(key=lambda t: t["activityDate"])
+        removal.sort(key=lambda t: t.activityDate)
         for i, t in enumerate(removal):
-            size_to_free -= t["sizeWhenDone"]  # uint64_t
+            size_to_free -= t.sizeWhenDone
             if size_to_free <= 0:
                 return removal[: i + 1]
 
         # Second: Use knapsack to pick among the remaining torrents to maximize
         # the number of leechers.
-        sizes = [t["sizeWhenDone"] for t in with_leechers]
+        sizes = [t.sizeWhenDone for t in with_leechers]
         keep = knapsack(
             weights=sizes,
             values=leecher_counts,
@@ -242,6 +191,34 @@ class StorageManager:
         )
         removal.extend(t for i, t in enumerate(with_leechers) if i not in keep)
         return removal
+
+    def _get_removal_cands(self):
+        """Get torrents that are candidates for removal."""
+        torrents = self.client.torrent_get(
+            fields=(
+                "activityDate",
+                "doneDate",
+                "id",
+                "name",
+                "peers",
+                "percentDone",
+                "sizeWhenDone",
+                "status",
+                "trackerStats",
+            ),
+            ids=list(self.client.seed_dir_torrents),
+        )
+        # Torrents are only removed if they have been completed for more than 12
+        # hours in case another instance is waiting to process them.
+        threshold = time.time() - 43200
+        statuses = {TRStatus.STOPPED, TRStatus.SEED_WAIT, TRStatus.SEED}
+        return (
+            t
+            for t in torrents
+            if t.percentDone == 1
+            and t.status in statuses
+            and 0 < t.doneDate < threshold
+        )
 
 
 def gib_to_bytes(size) -> int:

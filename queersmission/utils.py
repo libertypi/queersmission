@@ -63,8 +63,8 @@ else:
 
 def is_subpath(child: str, parent: str, sep: str = op.sep) -> bool:
     """
-    Check if `child` is within `parent`. Assumes both are absolute canonical
-    paths.
+    Check if `child` is within `parent`. It's the caller's responsibility to
+    ensure both paths are canonical.
     """
     if not child.endswith(sep):
         child += sep
@@ -77,6 +77,7 @@ def humansize(size: int) -> str:
     """Convert a byte count to a human-readable IEC size up to YiB."""
     if size == 0:
         return "0.00 B"
+    size = int(size)
     units = ("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB")
     idx = (abs(size).bit_length() - 1) // 10
     if idx >= len(units):
