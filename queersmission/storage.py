@@ -257,15 +257,13 @@ class StorageManager:
         pending = set()
         cutoff = time.time() - 300  # 5 minutes ago
         for t in torrents:
-            if not t.trackerStats or any(
-                ts["leecherCount"] > 0
-                or (ts[las] and ts[lat] > cutoff)
-                or (ts[lss] and ts[lst] > cutoff)
+            if t.trackerStats and all(
+                ts["leecherCount"] <= 0
+                and not (ts[las] and ts[lat] > cutoff)
+                and not (ts[lss] and ts[lst] > cutoff)
                 for ts in t.trackerStats
             ):
-                continue
-            # Mark this torrent for reannounce.
-            pending.add(t.id)
+                pending.add(t.id)
 
         if not pending:
             return torrents
