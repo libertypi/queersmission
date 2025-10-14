@@ -3,26 +3,27 @@ import json
 import operator
 import os.path as op
 import sys
+from typing import Union
 
 from .cat import Cat
 
 # --- Normalizers & validators -------------------------------------------------
 
 
-def _port(val):
+def _non_negative(val: Union[int, float]):
+    return val if val > 0 else 0
+
+
+def _port(val: int):
     if 0 < val < 65536:
         return val
     raise ValueError(f"Port number out of range: {val}.")
 
 
-def _non_negative(val):
-    return val if val > 0 else 0
-
-
-def _abs_path(val):
-    """Normalize and validate an absolute path. Return None if val is empty."""
+def _abs_path(val: str):
+    """Normalize and validate an absolute path. Empty string is allowed."""
     if not val:
-        return None
+        return ""
     if not op.isabs(val):
         raise ValueError(f'Path is not absolute: "{val}".')
     return op.normpath(val)
@@ -30,27 +31,24 @@ def _abs_path(val):
 
 # --- Schema ------------------------------------------------------------------
 
-_opt_str = (str, type(None))
-
 # key, type, default, normalizer
 
 SCHEMA = [
     ("log-level", str, "INFO", None),
-    ("public-upload-limit-kbps", int, 0, _non_negative),
+    ("public-upload-limited", bool, False, None),
+    ("public-upload-limit-kbps", int, 20, _non_negative),
     ("remove-public-on-complete", bool, False, None),
     ("rpc-path", str, "/transmission/rpc", None),
     ("rpc-port", int, 9091, _port),
-    ("rpc-username", _opt_str, None, None),
-    ("rpc-password", _opt_str, None, None),
+    ("rpc-username", str, "", None),
+    ("rpc-password", str, "", None),
     ("seed-dir-purge", bool, False, None),
     ("seed-dir-quota-gib", (int, float), 0, _non_negative),
     ("seed-dir-reserve-space-gib", (int, float), 0, _non_negative),
-    ("seed-dir", _opt_str, None, _abs_path),
-    ("watch-dir", _opt_str, None, _abs_path),
+    ("seed-dir", str, "", _abs_path),
+    ("watch-dir", str, "", _abs_path),
 ]
-SCHEMA.extend((c.value, _opt_str, None, _abs_path) for c in Cat)
-
-del _opt_str
+SCHEMA.extend((c.value, str, "", _abs_path) for c in Cat)
 
 # --- Core --------------------------------------------------------------------
 
@@ -62,10 +60,10 @@ def makeconfig(userconf: dict = None) -> dict:
     """
     conf = {}
     get = (userconf if isinstance(userconf, dict) else {}).get
-    for key, _type, default, func in SCHEMA:
+    for key, _type, default, norm in SCHEMA:
         val = get(key)
         if isinstance(val, _type):
-            conf[key] = val if func is None else func(val)
+            conf[key] = val if norm is None else norm(val)
         else:
             conf[key] = default
     return conf
@@ -81,9 +79,9 @@ def xor_cipher(b: bytes, key: bytes = b"Claire Kuo") -> bytes:
     return bytes(map(operator.xor, b, itertools.cycle(key)))
 
 
-def _error(msg, code: int = 1):
+def _error(msg):
     sys.stderr.write(f"Configuration error: {msg}\n")
-    sys.exit(code)
+    sys.exit(1)
 
 
 def parse(file: str) -> dict:

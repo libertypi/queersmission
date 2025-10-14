@@ -4,7 +4,7 @@ import re
 from collections import defaultdict
 from enum import Enum
 from functools import cached_property
-from posixpath import splitext as posix_splitext
+from posixpath import sep, splitext
 from typing import List, Optional, Tuple
 
 _VIDEO, _AUDIO, _DEFAULT = range(3)
@@ -56,14 +56,14 @@ class Categorizer:
         Categorize the torrent based on the `files` list returned by the
         Transmission "torrent-get" API.
         """
-        # Does the torrent name pass the AV test? Torrent name is the file name
-        # if there is only one file, or the root directory name otherwise. File
-        # paths are always POSIX paths.
-        try:
-            name = files[0]["name"].lstrip("/").partition("/")
-        except IndexError:
+        if not files:
             raise ValueError("Empty file list.")
-        name = name[0] if name[1] else posix_splitext(name[0])[0]
+
+        # Does the torrent name pass the AV test? Torrent name is the file name
+        # of a single file torrent, or the top-level directory name otherwise.
+        # File paths in torrents are always POSIX paths.
+        name = files[0]["name"].lstrip(sep).partition(sep)
+        name = name[0] if name[1] else splitext(name[0])[0]  # store the stem
         if re_test(self.av_re, name):
             return Cat.AV
 
@@ -73,7 +73,7 @@ class Categorizer:
         # Does any of the videos pass the AV test?
         segments = {name}
         for path in videos:
-            for s in path[0].split("/"):
+            for s in path[0].split(sep):
                 if s not in segments:
                     if re_test(self.av_re, s):
                         return Cat.AV
@@ -103,8 +103,8 @@ class Categorizer:
         video_size = defaultdict(int)
 
         for file in files:
-            root, ext = posix_splitext(file["name"])
-            ext = ext[1:].lower()  # Strip leading dot
+            root, ext = splitext(file["name"])
+            ext = ext[1:].lower()  # strip leading dot
 
             if ext in self.video_exts:
                 if ext == "m2ts":
@@ -151,7 +151,7 @@ class Categorizer:
 
         # Organize files by their directories
         for root, ext in file_list:
-            dirname, _, stem = root.rpartition("/")
+            dirname, _, stem = root.rpartition(sep)
             dir_files[dirname].append((stem, ext))
 
         for files in dir_files.values():

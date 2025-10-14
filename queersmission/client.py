@@ -51,9 +51,9 @@ class Client:
         *,
         port: int = 9091,
         path: str = "/transmission/rpc",
-        username: Optional[str] = None,
-        password: Optional[str] = None,
-        seed_dir: Optional[str] = None,
+        username: str = "",
+        password: str = "",
+        seed_dir: str = "",
     ) -> None:
 
         self._url = f"http://127.0.0.1:{port}{path}"
@@ -64,23 +64,23 @@ class Client:
             self._session.auth = (username, password)
 
     def _call(self, method: str, arguments: Optional[dict] = None, *, ids=None) -> dict:
-        """Make a call to the Transmission RPC."""
-
-        # If `ids` is omitted, all torrents are used.
+        """
+        Make a call to the Transmission RPC. If `ids` is an empty list, an empty
+        result is returned. If `ids` is None, all torrents are returned.
+        """
+        query = {"method": method}
         if ids is not None:
             check_ids(ids)
             if arguments is None:
                 arguments = {"ids": ids}
             else:
                 arguments["ids"] = ids
-
-        query = {"method": method}
         if arguments is not None:
             query["arguments"] = arguments
 
         res = None
         for retry in range(1, self._RETRIES + 1):
-            logger.debug("Requesting: %s, Attempt: %s", query, retry)
+            logger.debug("Query (attempt %d): %s", retry, query)
             try:
                 res = self._session.post(self._url, json=query)
                 if res.status_code not in self._BAD_CODES:
@@ -124,6 +124,7 @@ class Client:
             {"delete-local-data": delete_local_data},
             ids=ids,
         )
+        self._cache_clear()
 
     def torrent_set(self, ids=None, **kwargs):
         self._call("torrent-set", kwargs, ids=ids)
@@ -134,31 +135,15 @@ class Client:
             {"location": location, "move": move},
             ids=ids,
         )
+        self._cache_clear()
 
-    def get_freespace(self, path: Optional[str] = None) -> Tuple[int, int]:
-        """
-        Tests how much space is available in a client-specified folder. If
-        `path` is None, test seed_dir.
-        """
-        if path is None:
-            path = self.seed_dir
-        try:
-            res = shutil.disk_usage(path)
-            return res.total, res.free
-        except OSError as e:
-            logger.warning(e)
-        res = self._call("free-space", {"path": path})
-        return res["total_size"], res["size-bytes"]
-
-    @cached_property
-    def session_settings(self) -> dict:
-        """The complete settings returned by the "session-get" API."""
-        return self._call("session-get")
+    def session_get(self, fields: Optional[List[str]] = None) -> dict:
+        return self._call("session-get", {"fields": fields} if fields else None)
 
     @cached_property
     def seed_dir(self) -> str:
         """The canonical path of the seed directory."""
-        p = self._seed_dir or self.session_settings["download-dir"]
+        p = self._seed_dir or self.session_get(["download-dir"])["download-dir"]
         if not p:
             raise ValueError("Cannot get seed_dir.")
         return op.realpath(p)
@@ -166,8 +151,8 @@ class Client:
     @cached_property
     def _snapshot(self):
         """
-        A snapshot of all and seed_dir torrents. `downloadDir` is canonicalized
-        to real paths.
+        A snapshot of the basic information for "all" and "seed_dir" torrents.
+        `t.downloadDir` is canonicalized to real paths.
         """
         data = self.torrent_get(
             ("downloadDir", "id", "isPrivate", "name", "sizeWhenDone")
@@ -196,6 +181,26 @@ class Client:
         """Torrents whose downloadDir is within seed_dir: {id: Torrent}."""
         return self._snapshot[1]
 
+    def _cache_clear(self):
+        """Clear snapshot cache."""
+        self.__dict__.pop("_snapshot", None)
+
+    def get_freespace(self, path: Optional[str] = None) -> Tuple[int, int]:
+        """
+        Tests how much space is available in a client-specified folder. If
+        `path` is None, test seed_dir.
+        """
+        if path is None:
+            path = self.seed_dir
+        try:
+            res = shutil.disk_usage(path)
+            return res.total, res.free
+        except OSError as e:
+            logger.warning("shutil.disk_usage error: %s", e)
+        # Fallback to Transmission API
+        res = self._call("free-space", {"path": path})
+        return res["total_size"], res["size-bytes"]
+
 
 def check_ids(ids):
     """Validate the IDs passed to the Transmission RPC.
@@ -207,7 +212,7 @@ def check_ids(ids):
     """
     for i in ids if isinstance(ids, (list, tuple)) else (ids,):
         if isinstance(i, int):
-            if i >= 0:  # Can it be 0?
+            if i >= 0:
                 continue
         elif isinstance(i, str):
             if len(i) in (40, 64):  # SHA-1 or SHA-256
@@ -216,6 +221,6 @@ def check_ids(ids):
                     continue
                 except ValueError:
                     pass
-            elif ids == "recently-active":  # Not an element of `ids`!
+            elif ids == "recently-active":  # Not an element inside `ids`!
                 return
         raise ValueError(f'Invalid torrent ID "{i}" in IDs: {ids}')

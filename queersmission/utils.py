@@ -43,18 +43,19 @@ if sys.platform.startswith("linux"):
                 text=True,
             )
         except subprocess.CalledProcessError as e:
-            # fallback to shutil if cp reports nothing or invalid option,
-            # otherwise re-raise
+            # If cp reports nothing or invalid option, retry with shutil,
+            # otherwise re-raise.
             stderr = e.stderr.strip()
             if stderr and not re.search(
-                r"\b(unrecognized|invalid|unknown|illegal)\s+option", stderr, re.I
+                r"\b(unrecognized|invalid|unknown|illegal)\s+(option|argument)",
+                stderr,
+                re.I,
             ):
-                raise OSError(stderr)
-            logger.debug(stderr or e)
+                raise RuntimeError(f"cp error: {stderr}") from e
+            logger.debug("cp error: %s", stderr or e)
             _shutil_copy_file(src, dst)
         except FileNotFoundError as e:
-            # Fallback if cp command not found
-            logger.debug(e)
+            logger.debug("cp not found: %s", e)
             _shutil_copy_file(src, dst)
 
 else:

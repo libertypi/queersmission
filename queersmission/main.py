@@ -3,6 +3,8 @@ import os
 import os.path as op
 import tempfile
 import time
+from logging.handlers import RotatingFileHandler
+from typing import Dict
 
 from . import PKG_NAME, config, logger
 from .cat import Cat, Categorizer
@@ -12,35 +14,37 @@ from .storage import StorageManager
 from .utils import copy_file, humansize, is_subpath
 
 
-def config_logger(logfile: str, level: str = "INFO"):
+def init_logger(logfile: str, level: str = "INFO"):
     """Configure the logging system with both console and file handlers."""
     logger.handlers.clear()
     logger.propagate = False
+
     try:
-        logger.setLevel(level.upper() or logging.INFO)
+        logger.setLevel(level.upper())
     except ValueError:
         logger.setLevel(logging.INFO)
+        logger.warning('Invalid log level "%s", using INFO instead.', level)
 
     # Console handler
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
-    logger.addHandler(handler)
+    hd = logging.StreamHandler()
+    hd.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+    logger.addHandler(hd)
 
-    # File handler
-    handler = logging.FileHandler(logfile)
-    handler.setFormatter(
+    # Rotating File handler (10 MiB * 3)
+    hd = RotatingFileHandler(logfile, maxBytes=10485760, backupCount=3)
+    hd.setFormatter(
         logging.Formatter(
             "[%(asctime)s] %(levelname)s: %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
         )
     )
-    logger.addHandler(handler)
+    logger.addHandler(hd)
 
 
 def set_public_up_limit(tid: int, client: Client, limit_kbps: int):
     """Set upload limit for a public torrent."""
-    if limit_kbps <= 0:
-        return
+    if limit_kbps < 0:
+        raise ValueError("limit_kbps must be non-negative.")
     t = client.torrents[tid]
     if t.isPrivate:
         return
@@ -56,7 +60,7 @@ def process_torrent_done(
     tid: int,
     client: Client,
     storage: StorageManager,
-    dests: dict,
+    dests: Dict[Cat, str],
     remove_public: bool,
 ):
     """Process the completion of a torrent download."""
@@ -84,7 +88,7 @@ def process_torrent_done(
         t = t[0]
     except IndexError:
         raise ValueError(f"Torrent ID {tid} does not exist.")
-    _check_torrent_done(tid, t, client)
+    _ensure_torrent_done(tid, t, client)
 
     remove_torrent = remove_public and not t.isPrivate
     name = t.name
@@ -110,7 +114,7 @@ def process_torrent_done(
         dest_dir = client.seed_dir
         # Ensure free space in seed_dir
         if not remove_torrent:
-            storage.apply_quotas(size, in_seed_dir=False)
+            storage.apply_quotas(tid, torrent_added=False)
 
     # File operations
     if src_in_seed_dir or not remove_torrent:
@@ -136,14 +140,13 @@ def process_torrent_done(
         client.torrent_set_location(tid, dest_dir, move=False)
 
 
-def _check_torrent_done(tid: int, t: Torrent, client: Client, retry: int = 10):
-    """Checks if a torrent has finished downloading. Retries every 5 seconds.
-    Raises TimeoutError after `retry` retries."""
+def _ensure_torrent_done(tid: int, t: Torrent, client: Client, retry: int = 20):
+    """Ensure the torrent is fully downloaded, retrying if necessary."""
     while t.percentDone < 1:
         if retry <= 0:
-            raise TimeoutError("Timeout while waiting for torrent to finish.")
+            raise TimeoutError(f"Timeout waiting for torrent ID {tid} to complete.")
         retry -= 1
-        time.sleep(5)
+        time.sleep(3)
         t = client.torrent_get(("percentDone",), tid)[0]
 
 
@@ -157,9 +160,8 @@ def main(torrent_added: bool, config_dir: str):
        False, it operates as 'script-torrent-done' to manage completed torrents.
      - config_dir (str): The configuration directory.
     """
-    config_dir = op.abspath(config_dir)
     conf = config.parse(op.join(config_dir, "config.json"))
-    config_logger(op.join(config_dir, "logfile.log"), conf["log-level"])
+    init_logger(op.join(config_dir, "logfile.log"), conf["log-level"])
 
     flock = FileLocker(op.join(tempfile.gettempdir(), PKG_NAME + ".lock"))
     try:
@@ -175,9 +177,9 @@ def main(torrent_added: bool, config_dir: str):
         )
         storage = StorageManager(
             client=client,
-            seed_dir_purge=conf["seed-dir-purge"],
             quota_gib=conf["seed-dir-quota-gib"],
             reserve_space_gib=conf["seed-dir-reserve-space-gib"],
+            seed_dir_purge=conf["seed-dir-purge"],
             watch_dir=conf["watch-dir"],
         )
 
@@ -185,9 +187,7 @@ def main(torrent_added: bool, config_dir: str):
         if tid is None:
             # Script is invoked by user
             logger.debug(
-                "Script-torrent-%s invoked without a torrent ID, "
-                "performing maintenance tasks.",
-                "added" if torrent_added else "done",
+                "Script invoked without a torrent ID, performing maintenance tasks."
             )
             storage.cleanup()
             storage.apply_quotas()
@@ -203,15 +203,15 @@ def main(torrent_added: bool, config_dir: str):
 
             if torrent_added:
                 # Set upload limit for public torrents
-                set_public_up_limit(tid, client, conf["public-upload-limit-kbps"])
+                if conf["public-upload-limited"]:
+                    set_public_up_limit(tid, client, conf["public-upload-limit-kbps"])
 
                 # Clear junk in seed_dir and watch_dir
                 storage.cleanup()
 
                 # If new torrent is in seed_dir, ensure free space
-                t = client.seed_dir_torrents.get(tid)
-                if t is not None:
-                    storage.apply_quotas(t.sizeWhenDone, in_seed_dir=True)
+                if tid in client.seed_dir_torrents:
+                    storage.apply_quotas(tid, torrent_added=True)
 
             else:
                 # Process completed torrent
@@ -224,8 +224,10 @@ def main(torrent_added: bool, config_dir: str):
                 )
 
     except Exception as e:
-        logger.critical(e)
-        logger.debug("Exception details: ", exc_info=True)
+        logger.critical(
+            'Error (torrent="%s"): %s', os.environ.get("TR_TORRENT_NAME", "N/A"), e
+        )
+        logger.debug("Traceback:", exc_info=True)
 
     else:
         logger.debug("Execution completed in %.2f seconds", time.perf_counter() - start)

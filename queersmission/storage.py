@@ -19,19 +19,21 @@ class StorageManager:
 
     def __init__(
         self,
+        *,
         client: Client,
-        seed_dir_purge: bool = False,
         quota_gib: int = 0,
         reserve_space_gib: int = 0,
-        watch_dir: Optional[str] = None,
+        seed_dir_purge: bool = False,
+        watch_dir: str = "",
     ) -> None:
+
         if quota_gib < 0 or reserve_space_gib < 0:
-            raise ValueError("Quota and reserve space must be non-negative.")
+            raise ValueError("quota_gib and reserve_space_gib must be non-negative.")
 
         self.client = client
-        self.seed_dir_purge = seed_dir_purge
         self.quota = gib_to_bytes(quota_gib)
         self.reserve_space = gib_to_bytes(reserve_space_gib)
+        self.seed_dir_purge = seed_dir_purge
         self.watch_dir = watch_dir
 
     def cleanup(self) -> None:
@@ -44,22 +46,26 @@ class StorageManager:
     def _clean_watch_dir(self) -> None:
         """Remove old or zero-length '.torrent' files from the watch-dir."""
         assert self.watch_dir
+
         try:
             with os.scandir(self.watch_dir) as it:
                 entries = [
-                    e for e in it if op.splitext(e.name)[1].lower() == ".torrent"
+                    e
+                    for e in it
+                    if e.is_file() and op.splitext(e.name)[1].lower() == ".torrent"
                 ]
         except OSError as err:
-            logger.error(err)
+            logger.error("Error scanning watch-dir: %s", err)
             return
+
         for e in entries:
             try:
                 s = e.stat()
-                if e.is_file() and (not s.st_size or s.st_mtime < time.time() - 3600):
+                if not s.st_size or s.st_mtime < time.time() - 3600:
                     logger.debug("Cleanup watch-dir: %s", e.path)
                     os.unlink(e.path)
             except OSError as err:
-                logger.error(err)
+                logger.error('Error removing "%s": %s', e.path, err)
 
     def _clean_seed_dir(self) -> None:
         """Remove files from seed_dir if they do not exist in Transmission."""
@@ -81,53 +87,81 @@ class StorageManager:
             with os.scandir(self.client.seed_dir) as it:
                 entries = [e for e in it if e.name not in allowed]
         except OSError as err:
-            logger.error(err)
+            logger.error("Error scanning seed-dir: %s", err)
             return
+
         for e in entries:
             try:
                 if e.is_file() and removesuffix(e.name, ".part") in allowed:
                     continue
                 logger.info("Cleanup seed-dir: %s", e.path)
-                if e.is_dir():
+                if e.is_dir(follow_symlinks=False):
                     shutil.rmtree(e.path, ignore_errors=True)
                 else:
                     os.unlink(e.path)
             except OSError as err:
-                logger.error(err)
+                logger.error('Error removing "%s": %s', e.path, err)
 
-    def apply_quotas(self, add_size: Optional[int] = None, in_seed_dir: bool = True):
-        """Enforce size limits and free space requirements in seed_dir. If
-        `add_size` is set, ensure additional free space."""
-        # +---+---------------+-------------+------------------------------------------+
-        # |   | Mode          | In Seed Dir | Action                                   |
-        # +---+---------------+-------------+------------------------------------------+
-        # | 1 | torrent-added | True        | free -= add_size                         |
-        # | 2 | torrent-added | False       | No-op                                    |
-        # | 3 | torrent-done  | True        | No-op                                    |
-        # | 4 | torrent-done  | False       | free -= add_size; total_size += add_size |
-        # +---+---------------+-------------+------------------------------------------+
-        # NOTE: This function does not fully test these conditions. It is
-        # assumed to be called only under cases 1 and 4, before files are added
-        # to seed_dir.
-        total, free = self.client.get_freespace()
-        total_size = sum(t.sizeWhenDone for t in self.client.seed_dir_torrents.values())
+    def apply_quotas(
+        self,
+        tid: Optional[int] = None,
+        torrent_added: Optional[bool] = None,
+    ):
+        """
+        Enforce size limits and free space requirements in seed_dir.
 
-        if add_size is not None:  # cases 1, 4
-            free -= add_size
-            if not in_seed_dir:  # case 4
-                total_size += add_size
+        If `tid` is set, ensure additional free space for this torrent. If
+        `torrent_added` is True, the torrent is starting to download to
+        seed_dir; if False, it has finished downloading elsewhere, waiting to be
+        copied to seed_dir.
 
-        cap = total - self.reserve_space  # disk capacity
+        If `tid` is None, perform a general quota check.
+        """
+        # +---+---------------+-------------+-----------------------+
+        # |   | Mode          | In Seed Dir | Action                |
+        # +---+---------------+-------------+-----------------------+
+        # | 1 | torrent-added | True        | disk_free -= t_size   |
+        # | 2 | torrent-added | False       | error                 |
+        # | 3 | torrent-done  | True        | error                 |
+        # | 4 | torrent-done  | False       | disk_free -= t_size;  |
+        # |   |               |             | used_size += t_size   |
+        # +---+---------------+-------------+-----------------------+
+
+        client = self.client
+        disk_total, disk_free = client.get_freespace()
+        used_size = sum(t.sizeWhenDone for t in client.seed_dir_torrents.values())
+
+        if tid is not None:
+            if torrent_added is None:
+                raise ValueError(
+                    'Calling with "tid" but "torrent_added" is not specified.'
+                )
+            in_seed_dir = tid in client.seed_dir_torrents
+            if torrent_added and not in_seed_dir:  # case 2
+                raise ValueError(
+                    'Calling as "torrent_added" but torrent not in seed_dir.'
+                )
+            if not torrent_added and in_seed_dir:  # case 3
+                raise ValueError(
+                    'Calling as "torrent_done" but torrent already in seed_dir.'
+                )
+
+            t_size = client.torrents[tid].sizeWhenDone
+            disk_free -= t_size  # case 1 and 4
+            if not torrent_added:  # case 4
+                used_size += t_size
+
+        cap = disk_total - self.reserve_space  # disk capacity
         if 0 < self.quota < cap:
-            cap = self.quota  # user limit
+            cap = self.quota  # user-defined quota
 
         size_to_free = max(
-            total_size - cap,  # size limit
-            self.reserve_space - free,  # free space
+            used_size - cap,  # size limit
+            self.reserve_space - disk_free,  # free space
         )
 
         if size_to_free <= 0:
-            logger.debug("No need to free up space.")
+            logger.debug("Storage OK. Headroom: %s.", humansize(-size_to_free))
             return
 
         logger.info("Storage limits exceeded by %s.", humansize(size_to_free))
@@ -141,10 +175,7 @@ class StorageManager:
                 humansize(sum(t.sizeWhenDone for t in removal)),
                 ", ".join(t.name for t in removal),
             )
-            self.client.torrent_remove(
-                ids=[t.id for t in removal],
-                delete_local_data=True,
-            )
+            client.torrent_remove([t.id for t in removal], delete_local_data=True)
         else:
             logger.warning("No suitable torrents found for removal.")
 
@@ -220,38 +251,39 @@ class StorageManager:
         torrents = self._filter_removal_cands(torrents)
 
         # Reannounce if:
-        # - All trackers report 0 leechers, AND
-        # - No tracker has a successful announce/scrape in the last 5 minutes.
-        pending = {}
+        # - The torrent has at least one tracker, AND
+        # - all trackers report 0 leechers, AND
+        # - no tracker has a successful announce/scrape in the last 5 minutes.
+        pending = set()
         cutoff = time.time() - 300  # 5 minutes ago
         for t in torrents:
             if not t.trackerStats or any(
                 ts["leecherCount"] > 0
-                or (ts[las] and ts[lat] >= cutoff)
-                or (ts[lss] and ts[lst] >= cutoff)
+                or (ts[las] and ts[lat] > cutoff)
+                or (ts[lss] and ts[lst] > cutoff)
                 for ts in t.trackerStats
             ):
                 continue
-            # Mark this torrent for reannounce: {tracker_id: last_event_time, ...}
-            pending[t.id] = {ts["id"]: max(ts[lat], ts[lst]) for ts in t.trackerStats}
+            # Mark this torrent for reannounce.
+            pending.add(t.id)
 
         if not pending:
             return torrents
 
+        cutoff = time.time()
         self.client.torrent_reannounce(tuple(pending))
 
-        # Wait up to 15 seconds for reannounces to complete.
-        cutoff = time.monotonic() + 15
-        while pending and time.monotonic() < cutoff:
+        # Wait up to 20 seconds for reannounce to complete.
+        deadline = time.monotonic() + 20
+        while pending and time.monotonic() < deadline:
             time.sleep(3)
             for t in self.client.torrent_get(("id", "trackerStats"), tuple(pending)):
-                base = pending[t.id]
-                for ts in t.trackerStats:
-                    prev = base.get(ts["id"], 0)
-                    if (ts[las] and ts[lat] > prev) or (ts[lss] and ts[lst] > prev):
-                        # This torrent has a successful announce/scrape now.
-                        del pending[t.id]
-                        break
+                if any(
+                    (ts[las] and ts[lat] > cutoff) or (ts[lss] and ts[lst] > cutoff)
+                    for ts in t.trackerStats
+                ):
+                    # This torrent has a new successful announce/scrape.
+                    pending.remove(t.id)
 
         # Fetch full details again.
         return self.client.torrent_get(fields, [t.id for t in torrents])

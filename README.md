@@ -51,7 +51,8 @@ After enabling RPC and scripts, run `torrent-done.py` **once** manually to gener
 ```json
 {
   "log-level": "INFO",
-  "public-upload-limit-kbps": 0,
+  "public-upload-limited": false,
+  "public-upload-limit-kbps": 20,
   "remove-public-on-complete": false,
   "rpc-path": "/transmission/rpc",
   "rpc-port": 9091,
@@ -73,18 +74,20 @@ After enabling RPC and scripts, run `torrent-done.py` **once** manually to gener
 ### Keys
 
 * **log-level** (string, default `INFO`): `DEBUG` | `INFO` | `WARNING` | `ERROR` | `CRITICAL`.
-* **public-upload-limit-kbps** (int, default `0`): Max upload for **public** torrents in KB/s. `0` disables limiting.
+* **public-upload-limited** (bool, default `false`): If `true`, limit upload speed for **public** torrents.
+* **public-upload-limit-kbps** (int, default `20`): Max upload speed for per **public** torrents (kB/s).
 * **remove-public-on-complete** (bool, default `false`): If `true`, remove public torrents when they finish; only private torrents continue seeding.
 * **rpc-path** (string, default `/transmission/rpc`)
 * **rpc-port** (number, default `9091`)
-* **rpc-username**, **rpc-password** (strings): Password is obfuscated after first read.
-* **seed-dir-purge** (bool, default `false`): If `true`, delete **any file** in `seed-dir` not known to Transmission.
+* **rpc-username** (string)
+* **rpc-password** (string): Password is obfuscated after first read.
+* **seed-dir-purge** (bool, default `false`): If `true`, delete **any file** in `seed-dir` not associated with Transmission.
   **Warning:** Do not store personal files in `seed-dir` when this is on.
-* **seed-dir-quota-gib** (int, default `0`): Upper size limit for `seed-dir` in GiB. `0` disables.
-* **seed-dir-reserve-space-gib** (int, default `0`): Minimum free space to keep in GiB. `0` disables.
-* **seed-dir** (string): Canonical seeding location. Should equal Transmission’s `download-dir`. If empty, Queersmission can read it from Transmission.
-* **watch-dir** (string): Transmission’s `watch-dir`. If set, old/empty `.torrent` files are cleaned up.
-* **dest-dir-* ** (strings): Post-copy destinations.
+* **seed-dir-quota-gib** (int, default `0`): Maximum size limit for all the torrents in `seed-dir` (GiB). Setting to `0` to disable.
+* **seed-dir-reserve-space-gib** (int, default `0`): Minimum free space to keep in `seed-dir` (GiB). Setting to `0` to disable.
+* **seed-dir** (string): Transmission’s `download-dir`. If not set, Queersmission can read it from Transmission.
+* **watch-dir** (string): Transmission’s `watch-dir`. Transmission sometimes failed to delete old/empty `.torrent` files in watch-dir when `trash-original-torrent-files` is enabled. Queersmission will clean them up if this is set.
+* **dest-dir-* ** (string): Post-download-copy destinations.
 
   * **Required:** `dest-dir-default`
   * Optional (fallback to default if empty): `dest-dir-movies`, `dest-dir-tv-shows`, `dest-dir-music`, `dest-dir-av`
