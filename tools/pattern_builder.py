@@ -54,10 +54,10 @@ AUDIO_EXTS = {
     "opus", "pls", "ra", "tak", "tta", "wav", "wax", "wma", "wv", "xspf"
 }
 CONTAINER_EXTS = {"7z", "bin", "img", "iso", "mds", "nrg", "rar", "zip"}
-VIDEO_REGEX = r'\b((108|144|216|36|432|48|72)0p|(10|12|8)bit|1080i|4k|576p|8k|[hx]26[45]|atmos|av[1c]|b([dr]rip|lu[\s.-]?ray)|dovi|dts|dvd(5|9|rip|scr)?|hd(r|r10|tv)|hevc|remux|truehd|uhd|web[\s.-]?(dl|rip)|xvid)\b'
-TV_REGEX = r"\b(s(0[1-9]|[1-3][0-9])|e(0[1-9]|[1-9][0-9])|ep(0[1-9]|[1-9][0-9]|1[0-9]{2})|s(0?[1-9]|[1-3][0-9])[\s.-]?e(0?[1-9]|[1-9][0-9]|1[0-9]{2}))\b"
+MOVIE_REGEX = r"\b((108|144|216|36|432|48|72)0p|(10|12|8)bit|1080i|4k|576p|8k|[hx]26[45]|atmos|av[1c]|b([dr]rip|lu[\s.-]?ray)|dovi|dts|dvd(5|9|rip|scr)?|hd(r|r10|tv)|hevc|remux|truehd|uhd|web[\s.-]?(dl|rip)|xvid)\b"
+TV_REGEX = r"\b(s(0[1-9]|[1-3]\d)|ep(0[1-9]|[1-9]\d|1\d\d)|s(0?[1-9]|[1-3]\d)[\s.-]?e(0?[1-9]|[1-9]\d|1\d\d))\b"
 AV_TEMPLATE = r"\b({keywords}|[0-9]{{,5}}({prefixes})-?[0-9]{{2,8}}([a-z]|f?hd)?)\b"
-# SOFTWARE_REGEX = r"\b(apk|deb|dmg|exe|msi|pkg|rpm|adobe|microsoft|windows|x(64|86)|(32|64)bit|v[0-9]+(\.[0-9]+)+)\b"
+# SOFTWARE_REGEX = r"\b(apk|deb|dmg|exe|msi|pkg|rpm|adobe|microsoft|windows|x(64|86)|(32|64)bit|v\d+(\.\d+)+)\b"
 # fmt: on
 
 
@@ -186,22 +186,22 @@ def build_regex(
 
 def validation(av_regex: str):
 
-    for regex in (VIDEO_REGEX, TV_REGEX, av_regex):
-        if not regex:
-            raise ValueError("Empty regex.")
-        if "_" in regex:
-            raise ValueError(f'"_" character found in regex: {regex}')
-        if regex.lower() != regex:
-            raise ValueError(f"Upper case character found in regex: {regex}")
-        re.compile(regex)
+    for r in (MOVIE_REGEX, TV_REGEX, av_regex):
+        if not r:
+            raise ValueError("One of the regex is empty.")
+        if r.lower() != r or "_" in r:
+            raise ValueError("Regex must be lowercased and contain no '_' character.")
+        try:
+            re.compile(r, flags=re.ASCII)
+        except re.error as e:
+            raise ValueError(f"Invalid regex: {r}\n{e}")
 
-    for ext_set in (VIDEO_EXTS, AUDIO_EXTS, CONTAINER_EXTS):
-        if not ext_set:
-            raise ValueError("Empty extension set.")
-        if not all(s.lower() == s and s.isalnum() for s in ext_set):
-            raise ValueError("Invalid entry in extension set.")
-
-    if VIDEO_EXTS & AUDIO_EXTS & CONTAINER_EXTS:
+    all_exts = (VIDEO_EXTS, AUDIO_EXTS, CONTAINER_EXTS)
+    if not all(all_exts):
+        raise ValueError("One of the extension sets is empty.")
+    if not all(s.lower() == s and s.isalnum() for s in chain.from_iterable(all_exts)):
+        raise ValueError("Invalid entry found in extension sets.")
+    if len(set.union(*all_exts)) != sum(map(len, all_exts)):
         raise ValueError("Intersection found between extension sets.")
 
 
@@ -247,7 +247,7 @@ def main():
         "video_exts": sorted(VIDEO_EXTS),
         "audio_exts": sorted(AUDIO_EXTS),
         "container_exts": sorted(CONTAINER_EXTS),
-        "video_regex": VIDEO_REGEX,
+        "movie_regex": MOVIE_REGEX,
         "tv_regex": TV_REGEX,
         "av_regex": av_regex,
     }
