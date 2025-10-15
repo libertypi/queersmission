@@ -3,16 +3,13 @@ import os.path as op
 import re
 from collections import defaultdict
 from enum import Enum
-from functools import cached_property
+from functools import cached_property, lru_cache
 from posixpath import sep, splitext
-from typing import List, Optional, Tuple
-
-_VIDEO, _AUDIO, _DEFAULT = range(3)
-_RE_AI = re.ASCII | re.IGNORECASE
+from typing import Dict, List, Optional, Tuple
 
 
 class Cat(Enum):
-    """Enumeration for categorizing torrents."""
+    """Enumeration for torrent categories."""
 
     DEFAULT = "dest-dir-default"
     MOVIES = "dest-dir-movies"
@@ -21,14 +18,28 @@ class Cat(Enum):
     AV = "dest-dir-av"
 
 
-class Categorizer:
+def cached_re_test(key: str, *, flags: int = re.ASCII, maxsize: int = 512):
+    """
+    Decorator to create a cached regex test method for the given pattern key.
+    The pattern is looked up from self._patterns.
+    """
 
-    def __init__(
-        self,
-        patternfile: Optional[str] = None,
-        video_threshold: int = 52428800,  # 50 MiB
-    ) -> None:
-        """Initialize the Categorizer with data from the pattern file."""
+    def _factory(self):
+        search = re.compile(self._patterns[key], flags).search
+
+        @lru_cache(maxsize=maxsize)
+        def cached_test(s: str) -> bool:
+            return search(s) is not None
+
+        return cached_test
+
+    return cached_property(_factory)
+
+
+class Categorizer:
+    """Categorize a torrent based on its file list."""
+
+    def __init__(self, patternfile: Optional[str] = None) -> None:
 
         if patternfile is None:
             patternfile = op.join(op.dirname(__file__), "patterns.json")
@@ -37,21 +48,13 @@ class Categorizer:
 
         self.video_exts = frozenset(self._patterns.pop("video_exts"))
         self.audio_exts = frozenset(self._patterns.pop("audio_exts"))
-        self.video_threshold = video_threshold
+        self.container_exts = frozenset(self._patterns.pop("container_exts"))
 
-    @cached_property
-    def sw_re(self):
-        return re.compile(self._patterns["software_regex"], _RE_AI)
+    av_test = cached_re_test("av_regex", maxsize=1024)
+    tv_test = cached_re_test("tv_regex")
+    vd_test = cached_re_test("video_regex")
 
-    @cached_property
-    def tv_re(self):
-        return re.compile(self._patterns["tv_regex"], _RE_AI)
-
-    @cached_property
-    def av_re(self):
-        return re.compile(self._patterns["av_regex"], _RE_AI)
-
-    def categorize(self, files: List[dict]):
+    def categorize(self, files: List[dict]) -> Cat:
         """
         Categorize the torrent based on the `files` list returned by the
         Transmission "torrent-get" API.
@@ -59,115 +62,158 @@ class Categorizer:
         if not files:
             raise ValueError("Empty file list.")
 
-        # Does the torrent name pass the AV test? Torrent name is the file name
-        # of a single file torrent, or the top-level directory name otherwise.
-        # File paths in torrents are always POSIX paths.
-        name = files[0]["name"].lstrip(sep).partition(sep)
-        name = name[0] if name[1] else splitext(name[0])[0]  # store the stem
-        if re_test(self.av_re, name):
-            return Cat.AV
+        # Process files and categorize by types
+        type_bytes, videos, containers = self._process_files(files)
 
-        # The most common file type, and a list of videos (root, ext)
-        main_type, videos = self._analyze_file_types(files)
+        # Classify and score by types
+        scores = {c: 0 for c in Cat}
 
-        # Does any of the videos pass the AV test?
-        segments = {name}
-        for path in videos:
-            for s in path[0].split(sep):
-                if s not in segments:
-                    if re_test(self.av_re, s):
-                        return Cat.AV
-                    segments.add(s)
+        scores[self._classify_videos(videos)] += type_bytes["video"]
+        scores[self._classify_containers(containers)] += type_bytes["container"]
+        scores[Cat.MUSIC] += type_bytes["audio"]
+        scores[Cat.DEFAULT] += type_bytes["other"]
 
-        # Categorize by the main file type
-        if main_type == _VIDEO:
-            # Are they TV_SHOWS or MOVIES?
-            if any(re_test(self.tv_re, s) for s in segments):
-                return Cat.TV_SHOWS
-            if self._find_file_groups(videos):
-                return Cat.TV_SHOWS
-            return Cat.MOVIES
+        # torrent name bonus
+        c = self._classify_torrent_name(files)
+        if c is not None:
+            if scores[c]:
+                scores[c] *= 1.3  # boost by 30%
+            else:
+                scores[c] = sum(type_bytes.values()) * 0.3
 
-        if main_type == _AUDIO:
-            return Cat.MUSIC
+        # Return the category with the highest score
+        return max(scores, key=scores.get)
 
-        if main_type == _DEFAULT:
-            return Cat.DEFAULT
+    def _process_files(self, files: List[dict]):
 
-        raise ValueError(f'Unexpected "main_type": {main_type}')
-
-    def _analyze_file_types(self, files: List[dict]) -> Tuple[int, list]:
-        """Analyze and categorize files by type, finding the most common
-        type."""
-        type_size = defaultdict(int)
-        video_size = defaultdict(int)
+        type_bytes = {"video": 0, "container": 0, "audio": 0, "other": 0}
+        video_bytes = defaultdict(int)  # {(root, ext): size}
+        containers = []  # [(root, ext)]
 
         for file in files:
-            root, ext = splitext(file["name"])
-            ext = ext[1:].lower()  # strip leading dot
+            # All paths are normalized from this point on. Same as normstr().
+            # File paths in torrents are always POSIX paths.
+            root, ext = splitext(file["name"].replace("_", "-").lower())
+            ext = ext[1:]  # strip leading dot
+            size = file["length"]
 
             if ext in self.video_exts:
+                # collapse BDMV/DVD trees into their parent directory
                 if ext == "m2ts":
-                    root = re.sub(r"/bdmv/stream/[^/]+$", "", root, 1, _RE_AI)
+                    root = re.sub(r"/bdmv/stream/[^/]+$", "", root, 1, re.A)
                 elif ext == "vob":
-                    root = re.sub(r"/([^/]*vts[0-9_]+|video_ts)$", "", root, 1, _RE_AI)
-                file_type = _VIDEO
+                    root = re.sub(r"/([^/]*vts[\d-]+|video_ts)$", "", root, 1, re.A)
+
+                type_bytes["video"] += size
+                video_bytes[root, ext] += size
+
+            elif ext in self.container_exts:
+                type_bytes["container"] += size
+                containers.append((root, ext))
+
             elif ext in self.audio_exts:
-                file_type = _AUDIO
-            elif ext == "iso" and not re_test(self.sw_re, root):
-                # ISO could be software or video image
-                file_type = _VIDEO
+                type_bytes["audio"] += size
+
             else:
-                file_type = _DEFAULT
+                type_bytes["other"] += size
 
-            size = file["length"]
-            type_size[file_type] += size
-            if file_type == _VIDEO:
-                video_size[root, ext] += size
-
-        # Apply a conditional threshold for videos
-        size = self.video_threshold
-        if any(f["length"] >= size for f in files):
-            videos = (k for k, v in video_size.items() if v >= size)
-        else:
-            videos = video_size
-
-        return (
-            max(type_size, key=type_size.get),
-            sorted(videos, key=video_size.get, reverse=True),
-        )
+        return (type_bytes, self._drop_video_noise(video_bytes), containers)
 
     @staticmethod
-    def _find_file_groups(file_list: List[Tuple[str, str]], group_size: int = 3):
-        """Identify groups of files in the same directory that appear to be part
-        of a sequence. `group_size` defines the minimum size of a group.
+    def _drop_video_noise(video_bytes: Dict[Tuple[str, str], int]):
         """
-        if len(file_list) < group_size:
+        Drop small video files that are likely to be noise, e.g. samples,
+        trailers, ads, etc.
+        """
+        if len(video_bytes) < 2:
+            return list(video_bytes)
+
+        # 5% of the largest video file, but no more than 50 MiB
+        threshold = min(max(video_bytes.values()) * 0.05, 52428800)
+        return [k for k, v in video_bytes.items() if v >= threshold]
+
+    def _classify_torrent_name(self, files: List[dict]):
+        """
+        Classify the torrent based on its name.
+        """
+        # Torrent name is the file name of a single file torrent, or the
+        # top-level directory name otherwise.
+        name = files[0]["name"].lstrip(sep).partition(sep)
+        name = name[0] if name[1] else splitext(name[0])[0]  # test the stem
+        name = normstr(name)
+        if self.av_test(name):
+            return Cat.AV
+        if self.tv_test(name):
+            return Cat.TV_SHOWS
+        if self.vd_test(name):
+            return Cat.MOVIES
+
+    def _classify_videos(self, videos: List[Tuple[str, str]]):
+        """
+        Classify video files into AV, TV_SHOWS, or MOVIES. Winner takes all.
+        """
+        tv_found = self._has_sequence(videos)
+        for root, _ in videos:
+            for s in root.split(sep):
+                if self.av_test(s):
+                    return Cat.AV
+                if not tv_found and self.tv_test(s):
+                    tv_found = True
+        return Cat.TV_SHOWS if tv_found else Cat.MOVIES
+
+    def _classify_containers(self, containers: List[Tuple[str, str]]):
+        """
+        Classify container files into AV, MOVIES, or DEFAULT.
+        """
+        vd_found = False
+        for root, _ in containers:
+            for s in root.split(sep):
+                if self.av_test(s):
+                    return Cat.AV
+                if not vd_found and self.vd_test(s):
+                    vd_found = True
+        return Cat.MOVIES if vd_found else Cat.DEFAULT
+
+    @staticmethod
+    def _has_sequence(paths: List[Tuple[str, str]]):
+        """
+        Given a list of (root, ext) file paths, check if there are files under
+        the same directory with sequential numbering in their names.
+        """
+        if len(paths) < 2:
             return False
 
-        seq_finder = re.compile(r"(?<![0-9])(?:0?[1-9]|[1-9][0-9])(?![0-9])").finditer
-        dir_files = defaultdict(list)
-        groups = defaultdict(set)
+        # 1 - 999
+        seq_finder = re.compile(
+            r"(?<![0-9])(?:[1-9][0-9]{0,2}|0[1-9][0-9]?|00[1-9])(?![0-9])"
+        ).finditer
 
         # Organize files by their directories
-        for root, ext in file_list:
+        dir_files = defaultdict(list)
+        for root, ext in paths:
             dirname, _, stem = root.rpartition(sep)
             dir_files[dirname].append((stem, ext))
 
+        # Iterate each directory
+        groups = defaultdict(set)
         for files in dir_files.values():
-            if len(files) < group_size:
+            if len(files) < 2:
                 continue
             groups.clear()
             for stem, ext in files:
-                for m in seq_finder(stem):
-                    # Key: the part before, and after the digit, and the ext
+                for m in seq_finder(stem):  # Check the stem
+                    # Key: the parts before and after the digit, and the ext
                     g = groups[stem[: m.start()], stem[m.end() :], ext]
                     g.add(int(m[0]))
-                    if len(g) >= group_size:
+                    # Check if sequence numbers are consecutive
+                    if 1 < len(g) == max(g) - min(g) + 1:
                         return True
         return False
 
 
-def re_test(pattern: re.Pattern, string: str) -> bool:
-    """Replace all '_' with '-', then perform a regex test."""
-    return pattern.search(string.replace("_", "-")) is not None
+def normstr(s: str) -> str:
+    """
+    Normalize a string for regex testing by replacing "_" with "-" and
+    converting to lowercase.
+    """
+    return s.replace("_", "-").lower()

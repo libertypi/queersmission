@@ -40,7 +40,7 @@ class Torrent:
 
 
 class Client:
-    """A client for interacting with the local Transmission RPC interface."""
+    """A client for interacting with local Transmission RPC interface."""
 
     _SSID = "X-Transmission-Session-Id"
     _RETRIES = 3

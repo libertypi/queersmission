@@ -53,9 +53,11 @@ AUDIO_EXTS = {
     "m4a", "m4b", "mka", "mod", "mp2", "mp3", "mpa", "mpc", "oga", "ogg",
     "opus", "pls", "ra", "tak", "tta", "wav", "wax", "wma", "wv", "xspf"
 }
-SOFTWARE_REGEX = r"\b(adobe|microsoft|windows|x(64|86)|(32|64)bit|v[0-9]+(\.[0-9]+)+)\b"
-TV_REGEX = r"\b(s(0[1-9]|[1-3][0-9])|e(0[1-9]|[1-9][0-9])|ep(0[1-9]|[1-9][0-9]|1[0-9]{2})|s(0?[1-9]|[1-3][0-9])[ .-]?e(0?[1-9]|[1-9][0-9]|1[0-9]{2}))\b"
+CONTAINER_EXTS = {"7z", "bin", "img", "iso", "mds", "nrg", "rar", "zip"}
+VIDEO_REGEX = r'\b((108|144|216|36|432|48|72)0p|(10|12|8)bit|1080i|4k|576p|8k|[hx]26[45]|atmos|av[1c]|b([dr]rip|lu[\s.-]?ray)|dovi|dts|dvd(5|9|rip|scr)?|hd(r|r10|tv)|hevc|remux|truehd|uhd|web[\s.-]?(dl|rip)|xvid)\b'
+TV_REGEX = r"\b(s(0[1-9]|[1-3][0-9])|e(0[1-9]|[1-9][0-9])|ep(0[1-9]|[1-9][0-9]|1[0-9]{2})|s(0?[1-9]|[1-3][0-9])[\s.-]?e(0?[1-9]|[1-9][0-9]|1[0-9]{2}))\b"
 AV_TEMPLATE = r"\b({keywords}|[0-9]{{,5}}({prefixes})-?[0-9]{{2,8}}([a-z]|f?hd)?)\b"
+# SOFTWARE_REGEX = r"\b(apk|deb|dmg|exe|msi|pkg|rpm|adobe|microsoft|windows|x(64|86)|(32|64)bit|v[0-9]+(\.[0-9]+)+)\b"
 # fmt: on
 
 
@@ -184,7 +186,7 @@ def build_regex(
 
 def validation(av_regex: str):
 
-    for regex in (SOFTWARE_REGEX, TV_REGEX, av_regex):
+    for regex in (VIDEO_REGEX, TV_REGEX, av_regex):
         if not regex:
             raise ValueError("Empty regex.")
         if "_" in regex:
@@ -193,17 +195,14 @@ def validation(av_regex: str):
             raise ValueError(f"Upper case character found in regex: {regex}")
         re.compile(regex)
 
-    for ext_set in (VIDEO_EXTS, AUDIO_EXTS):
+    for ext_set in (VIDEO_EXTS, AUDIO_EXTS, CONTAINER_EXTS):
         if not ext_set:
             raise ValueError("Empty extension set.")
         if not all(s.lower() == s and s.isalnum() for s in ext_set):
-            raise ValueError("Invalid entry found in extension set.")
+            raise ValueError("Invalid entry in extension set.")
 
-    intersect = VIDEO_EXTS.intersection(AUDIO_EXTS)
-    if intersect:
-        raise ValueError(
-            f"Intersection found between extension sets: {', '.join(intersect)}"
-        )
+    if VIDEO_EXTS & AUDIO_EXTS & CONTAINER_EXTS:
+        raise ValueError("Intersection found between extension sets.")
 
 
 def main():
@@ -247,7 +246,8 @@ def main():
     result = {
         "video_exts": sorted(VIDEO_EXTS),
         "audio_exts": sorted(AUDIO_EXTS),
-        "software_regex": SOFTWARE_REGEX,
+        "container_exts": sorted(CONTAINER_EXTS),
+        "video_regex": VIDEO_REGEX,
         "tv_regex": TV_REGEX,
         "av_regex": av_regex,
     }

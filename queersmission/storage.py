@@ -169,11 +169,11 @@ class StorageManager:
         removal = self._find_optimal_removals(size_to_free)
         if removal:
             logger.info(
-                "Remove %d torrent%s (%s): %s",
+                'Remove %d torrent%s (%s): "%s"',
                 len(removal),
                 "" if len(removal) == 1 else "s",
                 humansize(sum(t.sizeWhenDone for t in removal)),
-                ", ".join(t.name for t in removal),
+                '", "'.join(t.name for t in removal),
             )
             client.torrent_remove([t.id for t in removal], delete_local_data=True)
         else:

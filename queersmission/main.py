@@ -225,7 +225,9 @@ def main(torrent_added: bool, config_dir: str):
 
     except Exception as e:
         logger.critical(
-            'Error (torrent="%s"): %s', os.environ.get("TR_TORRENT_NAME", "N/A"), e
+            'Error processing torrent "%s": %s',
+            os.environ.get("TR_TORRENT_NAME", "N/A"),
+            e,
         )
         logger.debug("Traceback:", exc_info=True)
 
