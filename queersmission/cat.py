@@ -37,7 +37,7 @@ def cached_re_test(key: str, *, flags: int = re.ASCII, maxsize: int = 512):
 
 
 class Categorizer:
-    """Categorize a torrent based on its file list."""
+    """Categorize torrents based on their file lists."""
 
     def __init__(self, patternfile: Optional[str] = None) -> None:
 
@@ -54,7 +54,7 @@ class Categorizer:
     tv_test = cached_re_test("tv_regex")
     vd_test = cached_re_test("video_regex")
 
-    def categorize(self, files: List[dict]) -> Cat:
+    def infer(self, files: List[dict]) -> Cat:
         """
         Categorize the torrent based on the `files` list returned by the
         Transmission "torrent-get" API.

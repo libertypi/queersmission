@@ -104,7 +104,7 @@ def process_torrent_done(
 
     # Determine the destination
     if src_in_seed_dir:
-        c = Categorizer().categorize(t.files)
+        c = Categorizer().infer(t.files)
         logger.info('Categorize "%s" as: %s', name, c.name)
         dest_dir = dests[c] or dests[Cat.DEFAULT]
         # Create a directory for a single file torrent
