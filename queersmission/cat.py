@@ -201,7 +201,7 @@ def _has_sequence(paths: Collection[Tuple[str, str]]) -> bool:
         dir_files[dirname].append((stem, ext))
 
     # Check each directory for sequences
-    groups = defaultdict(int)
+    groups = {}
     for files in dir_files.values():
         if len(files) < 3:
             continue
@@ -210,7 +210,7 @@ def _has_sequence(paths: Collection[Tuple[str, str]]) -> bool:
             for m in seq_finder(stem):
                 # Key: the parts before and after the digit, and the ext
                 k = (stem[: m.start()], stem[m.end() :], ext)
-                bits = groups[k] | (1 << int(m[0]))
+                bits = groups.get(k, 0) | (1 << int(m[0]))
                 if bits & (bits >> 1) & (bits >> 2):
                     return True
                 groups[k] = bits
