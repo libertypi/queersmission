@@ -53,8 +53,8 @@ AUDIO_EXTS = {
     "m4a", "m4b", "mka", "mod", "mp2", "mp3", "mpa", "mpc", "oga", "ogg",
     "opus", "pls", "ra", "tak", "tta", "wav", "wax", "wma", "wv", "xspf"
 }
-CONTAINER_EXTS = {"7z", "bin", "img", "iso", "mds", "nrg", "rar", "zip"}
-MOVIE_REGEX = r"\b((108|144|216|36|432|48|72)0p|(10|12|8)bit|1080i|4k|576p|8k|[hx]26[45]|atmos|av[1c]|b([dr]rip|lu[\s.-]?ray)|dovi|dts|dvd(5|9|rip|scr)?|hd(r|r10|tv)|hevc|remux|truehd|uhd|web[\s.-]?(dl|rip)|xvid)\b"
+CONTAINER_EXTS = {"7z", "bin", "img", "iso", "mdf", "mds", "nrg", "rar", "zip"}
+MOVIE_REGEX = r"\b((108|144|216|36|432|48|72)0p|(10|12|8)bit|1080i|4k|576p|8k|[hx]26[45]|atmos|av[1c]|b([dr]rip|lu[\s-]?ray)|dovi|dts|dvd(5|9|rip|scr)?|hd(r|r10|tv)|hevc|remux|truehd|uhd|web[\s-]?(dl|rip)|xvid)\b"
 TV_REGEX = r"\b(s(0[1-9]|[1-3]\d)|ep(0[1-9]|[1-9]\d|1\d\d)|s(0?[1-9]|[1-3]\d)[\s.-]?e(0?[1-9]|[1-9]\d|1\d\d))\b"
 AV_TEMPLATE = r"\b({keywords}|[0-9]{{,5}}({prefixes})-?[0-9]{{2,8}}([a-z]|f?hd)?)\b"
 # SOFTWARE_REGEX = r"\b(apk|deb|dmg|exe|msi|pkg|rpm|adobe|microsoft|windows|x(64|86)|(32|64)bit|v\d+(\.\d+)+)\b"

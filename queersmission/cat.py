@@ -108,35 +108,19 @@ class Categorizer:
         # Step 6: Return the category with the highest score
         return max(scores, key=scores.get)
 
-    def _classify_torrent_name(self, files: List[dict]):
-        """
-        Classify the torrent by its name. Return None if no match.
-        """
-        # Torrent name is the file name of a single file torrent, or the
-        # top-level directory name otherwise.
-        name = files[0]["name"].lstrip(sep).partition(sep)
-        name = name[0] if name[1] else splitext(name[0])[0]  # test the stem
-        name = normstr(name)
-        if self.av_test(name):
-            return Cat.AV
-        if self.tv_test(name):
-            return Cat.TV_SHOWS
-        if self.mv_test(name):
-            return Cat.MOVIES
-
     def _process_files(self, files: List[dict]):
         """
         Process the file list and return type byte counts, video files, and
         container files. File paths are normalized.
         """
         type_bytes = {"video": 0, "container": 0, "audio": 0, "other": 0}
-        # Uses aggregation because name normalization may cause duplicates
+        # Uses aggregation because path normalization may cause duplicates
         videos = defaultdict(int)  # {(root, ext): size}
         containers = defaultdict(int)
 
         for file in files:
             # All paths are normalized from this point on (same as normstr()).
-            # File paths in torrents are always POSIX paths.
+            # Paths in torrents are always POSIX paths.
             root, ext = splitext(file["name"].replace("_", "-").lower())
             ext = ext[1:]  # strip leading dot
             size = file["length"]
@@ -176,6 +160,22 @@ class Categorizer:
         threshold = min(max(path_bytes.values()) * 0.05, 52428800)
         return {k: v for k, v in path_bytes.items() if v >= threshold}
 
+    def _classify_torrent_name(self, files: List[dict]):
+        """
+        Classify the torrent by its name. Return None if no match.
+        """
+        # Torrent name is the file name of a single file torrent, or the
+        # top-level directory name otherwise.
+        name = files[0]["name"].lstrip(sep).partition(sep)
+        name = name[0] if name[1] else splitext(name[0])[0]  # test the stem
+        name = normstr(name)
+        if self.av_test(name):
+            return Cat.AV
+        if self.tv_test(name):
+            return Cat.TV_SHOWS
+        if self.mv_test(name):
+            return Cat.MOVIES
+
     @staticmethod
     def _test_paths(method, paths: Iterable[Tuple[str, str]]):
         """
@@ -193,10 +193,8 @@ class Categorizer:
         if len(paths) < 2:
             return False
 
-        # 1 - 999
-        seq_finder = re.compile(
-            r"(?<![0-9])(?:[1-9][0-9]{0,2}|0[1-9][0-9]?|00[1-9])(?![0-9])"
-        ).finditer
+        # 1 - 99
+        seq_finder = re.compile(r"(?<![0-9])(?:0?[1-9]|[1-9][0-9])(?![0-9])").finditer
 
         # Organize files by their directories
         dir_files = defaultdict(list)
