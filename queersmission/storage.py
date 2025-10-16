@@ -241,11 +241,6 @@ class StorageManager:
             "status",
             "trackerStats",
         )
-        las = "lastAnnounceSucceeded"
-        lat = "lastAnnounceTime"
-        lss = "lastScrapeSucceeded"
-        lst = "lastScrapeTime"
-
         # Fetch and filter
         torrents = self.client.torrent_get(fields, tuple(self.client.seed_dir_torrents))
         torrents = self._filter_removal_cands(torrents)
@@ -258,9 +253,7 @@ class StorageManager:
         cutoff = time.time() - 300  # 5 minutes ago
         for t in torrents:
             if t.trackerStats and all(
-                ts["leecherCount"] <= 0
-                and not (ts[las] and ts[lat] > cutoff)
-                and not (ts[lss] and ts[lst] > cutoff)
+                ts["leecherCount"] <= 0 and not _announced_since(ts, cutoff)
                 for ts in t.trackerStats
             ):
                 pending.add(t.id)
@@ -276,17 +269,14 @@ class StorageManager:
         while pending and time.monotonic() < deadline:
             time.sleep(3)
             for t in self.client.torrent_get(("id", "trackerStats"), tuple(pending)):
-                if any(
-                    (ts[las] and ts[lat] > cutoff) or (ts[lss] and ts[lst] > cutoff)
-                    for ts in t.trackerStats
-                ):
-                    # This torrent has a new successful announce/scrape.
+                if any(_announced_since(ts, cutoff) for ts in t.trackerStats):
                     pending.remove(t.id)
 
         # Fetch full details again.
         return self.client.torrent_get(fields, [t.id for t in torrents])
 
-    def _filter_removal_cands(self, torrents: List[Torrent]):
+    @staticmethod
+    def _filter_removal_cands(torrents: List[Torrent]):
         """Filter out torrents that should not be considered for removal."""
         cutoff = time.time() - 43200  # 12 hours ago
         statuses = {TRStatus.STOPPED, TRStatus.SEED_WAIT, TRStatus.SEED}
@@ -300,6 +290,13 @@ class StorageManager:
 def gib_to_bytes(size) -> int:
     """Converts GiB to bytes."""
     return int(size * 1073741824)
+
+
+def _announced_since(ts: dict, cutoff: float) -> bool:
+    """Check if a tracker status has announced successfully since cutoff."""
+    return (ts["lastAnnounceSucceeded"] and ts["lastAnnounceTime"] > cutoff) or (
+        ts["lastScrapeSucceeded"] and ts["lastScrapeTime"] > cutoff
+    )
 
 
 def knapsack(
@@ -322,7 +319,8 @@ def knapsack(
         Set[int]: Indices of the items forming a maximum-value solution.
     """
     if not isinstance(capacity, int):
-        raise TypeError(f'Expect "capacity" to be an integer, not {type(capacity)}.')
+        raise TypeError('"capacity" must be an integer.')
+
     if capacity <= 0:
         return set()
     n = len(weights)

@@ -94,8 +94,8 @@ class Client:
                 if retry == self._RETRIES:
                     raise
 
-        assert res is not None, 'Response "res" should never be None at this point.'
-        raise Exception(f"API Error ({res.status_code}): {res.text}")
+        assert res is not None, '"res" should never be None at this point.'
+        raise Exception(f"API Error (code {res.status_code}): {res.text}")
 
     def torrent_start(self, ids=None):
         self._call("torrent-start", ids=ids)

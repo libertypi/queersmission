@@ -71,9 +71,7 @@ class Categorizer:
         type_bytes, videos, containers = self._process_files(files)
 
         # Step 3: Check if any video or container file matches AV
-        if self._test_paths(self.av_test, videos):
-            return Cat.AV
-        if self._test_paths(self.av_test, containers):
+        if _test_paths(self.av_test, videos) or _test_paths(self.av_test, containers):
             return Cat.AV
 
         # Step 4: Now we rule out AV, score remaining categories
@@ -86,7 +84,7 @@ class Categorizer:
 
         # Classify videos into TV_SHOWS or MOVIES. Winner takes all: If any
         # video file is classified as TV_SHOWS, all videos are TV_SHOWS.
-        if self._test_paths(self.tv_test, videos) or self._has_sequence(videos):
+        if _test_paths(self.tv_test, videos) or _has_sequence(videos):
             scores[Cat.TV_SHOWS] += type_bytes["video"]
         else:
             scores[Cat.MOVIES] += type_bytes["video"]
@@ -176,47 +174,47 @@ class Categorizer:
         if self.mv_test(name):
             return Cat.MOVIES
 
-    @staticmethod
-    def _test_paths(method, paths: Iterable[Tuple[str, str]]):
-        """
-        Test if any of the given (root, ext) file paths matches the given
-        regex test method.
-        """
-        return any(method(s) for p in paths for s in p[0].split(sep))
 
-    @staticmethod
-    def _has_sequence(paths: Collection[Tuple[str, str]]):
-        """
-        Given a list of (root, ext) file paths, check if there are files under
-        the same directory with sequential numbering in their names.
-        """
-        if len(paths) < 2:
-            return False
+def _test_paths(method, paths: Iterable[Tuple[str, str]]) -> bool:
+    """
+    Test if any of the given (root, ext) paths matches the given regex test
+    method.
+    """
+    return any(method(s) for p in paths for s in p[0].split(sep))
 
-        # 1 - 99
-        seq_finder = re.compile(r"(?<![0-9])(?:0?[1-9]|[1-9][0-9])(?![0-9])").finditer
 
-        # Organize files by their directories
-        dir_files = defaultdict(list)
-        for root, ext in paths:
-            dirname, _, stem = root.rpartition(sep)
-            dir_files[dirname].append((stem, ext))
-
-        # Iterate each directory
-        groups = defaultdict(set)
-        for files in dir_files.values():
-            if len(files) < 2:
-                continue
-            groups.clear()
-            for stem, ext in files:
-                for m in seq_finder(stem):
-                    # Key: the parts before and after the digit, and the ext
-                    g = groups[stem[: m.start()], stem[m.end() :], ext]
-                    g.add(int(m[0]))
-                    # Check if sequence numbers are consecutive
-                    if 1 < len(g) == max(g) - min(g) + 1:
-                        return True
+def _has_sequence(paths: Collection[Tuple[str, str]]) -> bool:
+    """
+    Given a list of (root, ext) paths, check if there are three or more files
+    under the same directory with consecutive numbers (1-99) in their names.
+    """
+    if len(paths) < 3:
         return False
+
+    # 1 - 99
+    seq_finder = re.compile(r"(?<![0-9])(?:0?[1-9]|[1-9][0-9])(?![0-9])").finditer
+
+    # Organize files by their directories
+    dir_files = defaultdict(list)
+    for root, ext in paths:
+        dirname, _, stem = root.rpartition(sep)
+        dir_files[dirname].append((stem, ext))
+
+    # Check each directory for sequences
+    groups = defaultdict(int)
+    for files in dir_files.values():
+        if len(files) < 3:
+            continue
+        groups.clear()
+        for stem, ext in files:
+            for m in seq_finder(stem):
+                # Key: the parts before and after the digit, and the ext
+                k = (stem[: m.start()], stem[m.end() :], ext)
+                bits = groups[k] | (1 << int(m[0]))
+                if bits & (bits >> 1) & (bits >> 2):
+                    return True
+                groups[k] = bits
+    return False
 
 
 def normstr(s: str) -> str:

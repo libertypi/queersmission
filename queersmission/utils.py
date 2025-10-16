@@ -74,11 +74,11 @@ def is_subpath(child: str, parent: str, sep: str = op.sep) -> bool:
     return child.startswith(parent)
 
 
-def humansize(size: int) -> str:
+def humansize(size) -> str:
     """Convert a byte count to a human-readable IEC size up to YiB."""
+    size = int(size)
     if size == 0:
         return "0.00 B"
-    size = int(size)
     units = ("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB")
     idx = (abs(size).bit_length() - 1) // 10
     if idx >= len(units):

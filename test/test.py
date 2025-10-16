@@ -15,8 +15,9 @@ except ImportError:
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from queersmission.cat import _has_sequence
 from queersmission.storage import knapsack
-from queersmission.utils import copy_file
+from queersmission.utils import copy_file, humansize
 
 
 class TestFileOperations(unittest.TestCase):
@@ -58,7 +59,7 @@ class TestFileOperations(unittest.TestCase):
         # dir -> file
         self._touch(f"{src}/dir/file.txt")
         self._touch(f"{dst}/dir")
-        with self.assertRaises(OSError):
+        with self.assertRaises(RuntimeError):
             self._run_copy(f"{src}/dir", dst)
 
     def test_raise2(self):
@@ -67,11 +68,11 @@ class TestFileOperations(unittest.TestCase):
         self._touch(f"{src}/file.txt")
         # empty dst dir
         os.makedirs(f"{dst}/file/file.txt")
-        with self.assertRaises(OSError):
+        with self.assertRaises(RuntimeError):
             self._run_copy(f"{src}/file.txt", dst)
         # non-empty
         self._touch(f"{dst}/file/file.txt/file.txt")
-        with self.assertRaises(OSError):
+        with self.assertRaises(RuntimeError):
             self._run_copy(f"{src}/file.txt", dst)
 
     def test_copy_dir1(self):
@@ -122,6 +123,39 @@ class TestFileOperations(unittest.TestCase):
         self._run_copy(f"{src}/file.txt", dst)
         self.assertTrue(op.isfile(f"{src}/file.txt"))
         self.assertFileContent(f"{dst}/file/file.txt", "src")
+
+
+class TestHumanSize(unittest.TestCase):
+    def test_zero_int_and_float(self):
+        self.assertEqual(humansize(0), "0.00 B")
+        self.assertEqual(humansize(0.0), "0.00 B")
+
+    def test_negative_values(self):
+        self.assertEqual(humansize(-1), "-1.00 B")
+        self.assertEqual(humansize(-1024), "-1.00 KiB")
+        self.assertEqual(humansize(-1536), "-1.50 KiB")
+
+    def test_float_input(self):
+        # floats are truncated via int()
+        self.assertEqual(humansize(1.9), "1.00 B")
+        self.assertEqual(humansize(1536.9), "1.50 KiB")
+
+    def test_invalid_inputs_raise(self):
+        with self.assertRaises((TypeError, ValueError)):
+            humansize(None)
+        with self.assertRaises((TypeError, ValueError)):
+            humansize("one thousand")
+
+    def test_boundaries(self):
+        self.assertEqual(humansize(1023), "1023.00 B")
+        self.assertEqual(humansize(1024), "1.00 KiB")
+        # Just below MiB — note rounding to two decimals
+        self.assertEqual(humansize(1024 * 1024 - 1), "1024.00 KiB")
+        self.assertEqual(humansize(1024 * 1024), "1.00 MiB")
+
+    def test_very_large_caps_to_YiB(self):
+        s = humansize(1 << 100)  # much larger than YiB
+        self.assertTrue(s.endswith("YiB"))
 
 
 class TestKnapsack(unittest.TestCase):
@@ -202,6 +236,82 @@ class TestKnapsack(unittest.TestCase):
 
             self.assertLessEqual(sum(weights[i] for i in result), capacity)
             self.assertEqual(sum(values[i] for i in result), answer)
+
+
+class TestHasSequence(unittest.TestCase):
+    """Tests for queersmission.cat._has_sequence."""
+
+    @staticmethod
+    def P(dir_: str, stem: str, ext: str):
+        # root is a POSIX-style path without extension; ext is the extension
+        return (f"{dir_.rstrip('/')}/{stem}", ext)
+
+    def test_dirs_do_not_mix(self):
+        # Same numbers split across dirs => should not combine
+        paths = [
+            self.P("/show/s1", "E04", "mkv"),
+            self.P("/show/s2", "E05", "mkv"),
+            self.P("/show/s1", "E06", "mkv"),
+        ]
+        self.assertFalse(_has_sequence(paths))
+
+    def test_ignores_zero_in_0_1_2(self):
+        # 0 is not counted (pattern is 1–99), so 0,1,2 => False
+        paths = [
+            self.P("/show", "E00", "mkv"),
+            self.P("/show", "E01", "mkv"),
+            self.P("/show", "E02", "mkv"),
+        ]
+        self.assertFalse(_has_sequence(paths))
+
+    def test_only_two_consecutive_is_false(self):
+        # Only 2 consecutive numbers present (plus a non-number file) => False
+        paths = [
+            self.P("/show", "E01", "mp4"),
+            self.P("/show", "E04", "mp4"),
+            self.P("/show", "E05", "mp4"),
+            self.P("/show", "teaser", "mp4"),
+        ]
+        self.assertFalse(_has_sequence(paths))
+
+    def test_three_consecutive_any_order_true(self):
+        # 3-in-a-row in any order => True
+        paths = [
+            self.P("/show", "Ep05", "mkv"),
+            self.P("/show", "Ep04", "mkv"),
+            self.P("/show", "Ep06", "mkv"),
+        ]
+        self.assertTrue(_has_sequence(paths))
+
+    def test_mixed_noise_still_true(self):
+        # Run of three mixed with other non-sequential items => True
+        paths = [
+            self.P("/show", "intro", "mkv"),
+            self.P("/show", "E03", "mkv"),
+            self.P("/show", "E01", "mkv"),
+            self.P("/show", "E02", "mkv"),
+            self.P("/show", "E05", "mkv"),
+            self.P("/show", "extra-clip", "mkv"),
+        ]
+        self.assertTrue(_has_sequence(paths))
+
+    def test_mixed_extensions_break_group(self):
+        # Current impl groups by (prefix, suffix, ext), so mixed ext => False
+        paths = [
+            self.P("/show", "E04", "mkv"),
+            self.P("/show", "E05", "mp4"),
+            self.P("/show", "E06", "mkv"),
+        ]
+        self.assertFalse(_has_sequence(paths))
+
+    def test_mixed_prefixes_break_group(self):
+        # Different prefixes => False
+        paths = [
+            self.P("/show", "S01", "mkv"),
+            self.P("/show", "S02", "mkv"),
+            self.P("/show", "03S", "mkv"),
+        ]
+        self.assertFalse(_has_sequence(paths))
 
 
 if __name__ == "__main__":
