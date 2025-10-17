@@ -18,6 +18,11 @@ class Cat(Enum):
     AV = "dest-dir-av"
 
 
+def normstr(s: str) -> str:
+    """Normalize a string for regex testing."""
+    return s.replace("_", "-").lower()
+
+
 def cached_re_test(key: str, *, flags: int = re.ASCII, maxsize: int = 512):
     """
     Decorator to create a cached regex test method for the given pattern key.
@@ -28,16 +33,19 @@ def cached_re_test(key: str, *, flags: int = re.ASCII, maxsize: int = 512):
         search = re.compile(self._patterns[key], flags).search
 
         @lru_cache(maxsize=maxsize)
-        def cached_test(s: str) -> bool:
+        def re_test(s: str) -> bool:
             return search(s) is not None
 
-        return cached_test
+        return re_test
 
     return cached_property(_factory)
 
 
 class Categorizer:
     """Categorize torrents based on their file lists."""
+
+    NAME_BONUS = 0.3
+    _DISK_EXTS = {"m2ts", "vob", "evo"}
 
     def __init__(self, patternfile: Optional[str] = None) -> None:
 
@@ -53,6 +61,14 @@ class Categorizer:
     av_test = cached_re_test("av_regex", maxsize=1024)
     tv_test = cached_re_test("tv_regex")
     mv_test = cached_re_test("movie_regex")
+
+    @cached_property
+    def disk_match(self):
+        """Regex match to extract the top-level directory of a BD/DVD tree."""
+        return re.compile(
+            r"(.+?/)(?:bdmv/stream/[^/]+\.m2ts|(?:video-ts/)?(?:[^/]*vts[\d-]+|video-ts)\.vob|hvdvd-ts/[^/]+\.evo)",
+            re.ASCII,
+        ).fullmatch
 
     def infer(self, files: List[dict]) -> Cat:
         """
@@ -101,35 +117,33 @@ class Categorizer:
 
         # Step 5: Torrent name bonus
         if name_cat is not None:
-            scores[name_cat] += sum(type_bytes.values()) * 0.3
+            scores[name_cat] += sum(type_bytes.values()) * self.NAME_BONUS
 
         # Step 6: Return the category with the highest score
         return max(scores, key=scores.get)
 
-    def _process_files(self, files: List[dict]):
+    def _process_files(self, files):
         """
         Process the file list and return type byte counts, video files, and
-        container files. File paths are normalized.
+        container files.
         """
         type_bytes = {"video": 0, "container": 0, "audio": 0, "other": 0}
-        # Uses aggregation because path normalization may cause duplicates
         videos = defaultdict(int)  # {(root, ext): size}
         containers = defaultdict(int)
 
-        for file in files:
-            # All paths are normalized from this point on (same as normstr()).
-            # Paths in torrents are always POSIX paths.
-            root, ext = splitext(file["name"].replace("_", "-").lower())
-            ext = ext[1:]  # strip leading dot
-            size = file["length"]
+        files, disks = self._prepare_filelist(files)
+
+        for root, ext, size in files:
+
+            if disks:
+                # Collapse the whole BD/DVD tree into a single video entry.
+                disk_root = next(filter(root.startswith, disks), None)
+                if disk_root is not None:
+                    type_bytes["video"] += size
+                    videos[disk_root[:-1], ""] += size  # remove trailing slash
+                    continue
 
             if ext in self.video_exts:
-                # collapse BDMV/DVD trees into their parent directory
-                if ext == "m2ts":
-                    root = re.sub(r"/bdmv/stream/[^/]+$", "", root, 1, re.A)
-                elif ext == "vob":
-                    root = re.sub(r"/([^/]*vts[\d-]+|video_ts)$", "", root, 1, re.A)
-
                 type_bytes["video"] += size
                 videos[root, ext] += size
 
@@ -144,6 +158,31 @@ class Categorizer:
                 type_bytes["other"] += size
 
         return (type_bytes, self._drop_noise(videos), containers)
+
+    def _prepare_filelist(self, files) -> Tuple[List[Tuple[str, str, int]], List[str]]:
+        """
+        Prepare the file list by normalizing paths and detecting video disk
+        trees. Return a list of (root, ext, size) and a list of disk image
+        directories (with trailing slash).
+        """
+        filelist = []
+        disks = set()
+        disk_exts = self._DISK_EXTS
+
+        for file in files:
+            # All paths are normalized from this point on (same as normstr()).
+            # Paths in torrents are always POSIX paths.
+            path = file["name"].replace("_", "-").lower()
+            root, ext = splitext(path)
+            ext = ext[1:]  # strip leading dot
+            filelist.append((root, ext, file["length"]))
+
+            if ext in disk_exts:
+                m = self.disk_match(path)
+                if m:
+                    disks.add(m[1])  # directory with trailing slash
+
+        return filelist, sorted(disks, key=len, reverse=True)
 
     @staticmethod
     def _drop_noise(path_bytes: Dict[Tuple[str, str], int]):
@@ -162,8 +201,8 @@ class Categorizer:
         """
         Classify the torrent by its name. Return None if no match.
         """
-        # Torrent name is the file name of a single file torrent, or the
-        # top-level directory name otherwise.
+        # Torrent name is the first path segment of any file: the top-level
+        # directory of a multi-file torrent, or the single file name otherwise.
         name = files[0]["name"].lstrip(sep).partition(sep)
         name = name[0] if name[1] else splitext(name[0])[0]  # test the stem
         name = normstr(name)
@@ -210,13 +249,12 @@ def _has_sequence(paths: Collection[Tuple[str, str]]) -> bool:
             for m in seq_finder(stem):
                 # Key: the parts before and after the digit, and the ext
                 k = (stem[: m.start()], stem[m.end() :], ext)
+                # bits      = ...00111000
+                # bits >> 1 = ...00011100
+                # bits >> 2 = ...00001110
+                # AND       = ...00001000
                 bits = groups.get(k, 0) | (1 << int(m[0]))
                 if bits & (bits >> 1) & (bits >> 2):
                     return True
                 groups[k] = bits
     return False
-
-
-def normstr(s: str) -> str:
-    """Normalize a string for regex testing."""
-    return s.replace("_", "-").lower()
