@@ -44,15 +44,13 @@ class StorageManager:
             self._clean_seed_dir()
 
     def _clean_watch_dir(self) -> None:
-        """Remove old or zero-length '.torrent' files from the watch-dir."""
+        """Remove old or zero-length '.torrent' files from watch-dir."""
         assert self.watch_dir
 
         try:
             with os.scandir(self.watch_dir) as it:
                 entries = [
-                    e
-                    for e in it
-                    if e.is_file() and op.splitext(e.name)[1].lower() == ".torrent"
+                    e for e in it if op.splitext(e.name)[1].lower() == ".torrent"
                 ]
         except OSError as err:
             logger.error("Error scanning watch-dir: %s", err)
@@ -60,6 +58,8 @@ class StorageManager:
 
         for e in entries:
             try:
+                if not e.is_file():
+                    continue
                 s = e.stat()
                 if not s.st_size or s.st_mtime < time.time() - 3600:
                     logger.debug("Cleanup watch-dir: %s", e.path)
@@ -85,16 +85,26 @@ class StorageManager:
 
         try:
             with os.scandir(self.client.seed_dir) as it:
-                entries = [e for e in it if e.name not in allowed]
+                entries = list(it)
+            extras = [
+                e
+                for e in entries
+                if e.name not in allowed
+                and not (removesuffix(e.name, ".part") in allowed and e.is_file())
+            ]
         except OSError as err:
             logger.error("Error scanning seed-dir: %s", err)
             return
 
-        for e in entries:
+        # Safety check.
+        if extras and len(extras) == len(entries):
+            logger.warning("No allowed entry found in seed-dir; skipping cleanup.")
+            return
+
+        # Remove unallowed entries.
+        for e in extras:
+            logger.info("Cleanup seed-dir: %s", e.path)
             try:
-                if e.is_file() and removesuffix(e.name, ".part") in allowed:
-                    continue
-                logger.info("Cleanup seed-dir: %s", e.path)
                 if e.is_dir(follow_symlinks=False):
                     shutil.rmtree(e.path, ignore_errors=True)
                 else:

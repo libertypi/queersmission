@@ -234,10 +234,10 @@ def _has_sequence(paths: Collection[Tuple[str, str]]) -> bool:
     # 1 - 99
     seq_finder = re.compile(r"(?<![0-9])(?:0?[1-9]|[1-9][0-9])(?![0-9])").finditer
 
-    # Organize files by their directories, skipping disc files
+    # Organize files by their directories
     dir_files = defaultdict(list)
     for root, ext in paths:
-        if ext not in DISC_EXTS:
+        if ext not in DISC_EXTS:  # skip stray disc files
             dirname, _, stem = root.rpartition(sep)
             dir_files[dirname].append((stem, ext))
 
