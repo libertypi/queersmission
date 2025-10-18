@@ -1,7 +1,7 @@
 .vscode/
 *.log
 config*.json
-test/pattern_tester.*
+test/catbench.*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

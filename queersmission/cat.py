@@ -7,6 +7,8 @@ from functools import cached_property, lru_cache
 from posixpath import sep, splitext
 from typing import Collection, Dict, Iterable, List, Optional, Tuple
 
+DISC_EXTS = frozenset(("bdmv", "m2ts", "ifo", "vob", "evo"))
+
 
 class Cat(Enum):
     """Enumeration for torrent categories."""
@@ -45,7 +47,6 @@ class Categorizer:
     """Categorize torrents based on their file lists."""
 
     NAME_BONUS = 0.3
-    _DISK_EXTS = {"m2ts", "vob", "evo"}
 
     def __init__(self, patternfile: Optional[str] = None) -> None:
 
@@ -63,10 +64,10 @@ class Categorizer:
     mv_test = cached_re_test("movie_regex")
 
     @cached_property
-    def disk_match(self):
+    def disc_match(self):
         """Regex match to extract the top-level directory of a BD/DVD tree."""
         return re.compile(
-            r"(.+?/)(?:bdmv/stream/[^/]+\.m2ts|(?:video-ts/)?(?:[^/]*vts[\d-]+|video-ts)\.vob|hvdvd-ts/[^/]+\.evo)",
+            r"(.+?/)(?:bdmv/(?:index\.bdmv|stream/[^/]+\.m2ts)|(?:video-ts/)?(?:vts(?:-\d+)+|video-ts)\.(?:ifo|vob)|hvdvd-ts/[^/]+\.evo)",
             re.ASCII,
         ).fullmatch
 
@@ -115,7 +116,7 @@ class Categorizer:
             else:
                 scores[Cat.DEFAULT] += size
 
-        # Step 5: Torrent name bonus
+        # Step 5: Torrent name bonus (experimental)
         if name_cat is not None:
             scores[name_cat] += sum(type_bytes.values()) * self.NAME_BONUS
 
@@ -131,16 +132,16 @@ class Categorizer:
         videos = defaultdict(int)  # {(root, ext): size}
         containers = defaultdict(int)
 
-        files, disks = self._prepare_filelist(files)
+        files, discs = self._prepare_filelist(files)
 
         for root, ext, size in files:
 
-            if disks:
+            if discs:
                 # Collapse the whole BD/DVD tree into a single video entry.
-                disk_root = next(filter(root.startswith, disks), None)
-                if disk_root is not None:
+                disc_root = next(filter(root.startswith, discs), None)
+                if disc_root is not None:
                     type_bytes["video"] += size
-                    videos[disk_root[:-1], ""] += size  # remove trailing slash
+                    videos[disc_root[:-1], ""] += size  # remove trailing slash
                     continue
 
             if ext in self.video_exts:
@@ -161,13 +162,13 @@ class Categorizer:
 
     def _prepare_filelist(self, files) -> Tuple[List[Tuple[str, str, int]], List[str]]:
         """
-        Prepare the file list by normalizing paths and detecting video disk
-        trees. Return a list of (root, ext, size) and a list of disk image
+        Prepare the file list by normalizing paths and detecting video disc
+        trees. Return a list of (root, ext, size) and a list of disc image
         directories (with trailing slash).
         """
         filelist = []
-        disks = set()
-        disk_exts = self._DISK_EXTS
+        discs = set()
+        d_exts = DISC_EXTS
 
         for file in files:
             # All paths are normalized from this point on (same as normstr()).
@@ -177,12 +178,12 @@ class Categorizer:
             ext = ext[1:]  # strip leading dot
             filelist.append((root, ext, file["length"]))
 
-            if ext in disk_exts:
-                m = self.disk_match(path)
+            if ext in d_exts:
+                m = self.disc_match(path)
                 if m:
-                    disks.add(m[1])  # directory with trailing slash
+                    discs.add(m[1])  # directory with trailing slash
 
-        return filelist, sorted(disks, key=len, reverse=True)
+        return filelist, sorted(discs, key=len, reverse=True)
 
     @staticmethod
     def _drop_noise(path_bytes: Dict[Tuple[str, str], int]):
@@ -233,11 +234,12 @@ def _has_sequence(paths: Collection[Tuple[str, str]]) -> bool:
     # 1 - 99
     seq_finder = re.compile(r"(?<![0-9])(?:0?[1-9]|[1-9][0-9])(?![0-9])").finditer
 
-    # Organize files by their directories
+    # Organize files by their directories, skipping disc files
     dir_files = defaultdict(list)
     for root, ext in paths:
-        dirname, _, stem = root.rpartition(sep)
-        dir_files[dirname].append((stem, ext))
+        if ext not in DISC_EXTS:
+            dirname, _, stem = root.rpartition(sep)
+            dir_files[dirname].append((stem, ext))
 
     # Check each directory for sequences
     groups = {}
