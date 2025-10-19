@@ -29,11 +29,8 @@ if sys.platform.startswith("linux"):
     def copy_file(src: str, dst: str) -> None:
         """
         Copy `src` to `dst` using cp. If `dst` exists, it will be overwritten.
-        If `src` is a file and `dst` is a directory or vice versa, an error will
-        occur.
-
-        Example:
-            `copy_file("/src_dir/name", "/dst_dir/name")` -> "/dst_dir/name"
+        If `src` is a file and `dst` is a directory or vice versa, an OSError
+        will be raised.
         """
         try:
             subprocess.run(
@@ -43,19 +40,19 @@ if sys.platform.startswith("linux"):
                 text=True,
             )
         except subprocess.CalledProcessError as e:
-            # If cp reports nothing or invalid option, retry with shutil,
+            # If cp reports nothing or unrecognized option, retry with shutil,
             # otherwise re-raise.
             stderr = e.stderr.strip()
             if stderr and not re.search(
-                r"\b(unrecognized|invalid|unknown|illegal)\s+(option|argument)",
+                r"\b(unrecogni[sz]ed|invalid|unknown|illegal)\s+options?\b",
                 stderr,
-                re.I,
+                re.IGNORECASE,
             ):
-                raise RuntimeError(f"cp error: {stderr}") from e
-            logger.debug("cp error: %s", stderr or e)
+                raise OSError(stderr) from e
+            logger.debug(stderr or e)
             _shutil_copy_file(src, dst)
         except FileNotFoundError as e:
-            logger.debug("cp not found: %s", e)
+            logger.debug(e)
             _shutil_copy_file(src, dst)
 
 else:

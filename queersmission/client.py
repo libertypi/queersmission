@@ -203,7 +203,8 @@ class Client:
 
 
 def check_ids(ids):
-    """Validate the IDs passed to the Transmission RPC.
+    """
+    Validate the IDs passed to the Transmission RPC.
 
     ids should be one of the following:
     - an integer referring to a torrent id
@@ -221,6 +222,8 @@ def check_ids(ids):
                     continue
                 except ValueError:
                     pass
-            elif ids == "recently-active":  # Not an element inside `ids`!
+            elif ids == "recently-active":
+                # "recently-active" must be `ids` itself, not an element of a
+                # list. Therefore we should check `ids` instead of `i` here.
                 return
         raise ValueError(f'Invalid torrent ID "{i}" in IDs: {ids}')

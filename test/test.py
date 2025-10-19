@@ -59,7 +59,7 @@ class TestFileOperations(unittest.TestCase):
         # dir -> file
         self._touch(f"{src}/dir/file.txt")
         self._touch(f"{dst}/dir")
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(OSError):
             self._run_copy(f"{src}/dir", dst)
 
     def test_raise2(self):
@@ -68,11 +68,11 @@ class TestFileOperations(unittest.TestCase):
         self._touch(f"{src}/file.txt")
         # empty dst dir
         os.makedirs(f"{dst}/file/file.txt")
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(OSError):
             self._run_copy(f"{src}/file.txt", dst)
         # non-empty
         self._touch(f"{dst}/file/file.txt/file.txt")
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(OSError):
             self._run_copy(f"{src}/file.txt", dst)
 
     def test_copy_dir1(self):

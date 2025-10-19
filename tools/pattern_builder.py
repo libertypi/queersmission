@@ -79,7 +79,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def get_common_words():
+def get_common_words() -> set[str]:
     # https://github.com/first20hours/google-10000-english
     # https://www.cs.cmu.edu/Groups/AI/areas/nlp/corpora/names/
     files = (
@@ -94,7 +94,7 @@ def get_common_words():
     return result
 
 
-def read_pattern_file(filename: str):
+def read_pattern_file(filename: str) -> list[str]:
     path = script_dir.joinpath(filename)
     try:
         with open(path, "r+", encoding="utf-8") as f:
@@ -115,20 +115,30 @@ def read_pattern_file(filename: str):
 
 def build_regex(
     name: str,
-    source: dict,
+    source: dict[str, dict[str, int]],
     max_items: int,
-    ex_set: set = None,
-    ex_lst: tuple = (),
+    ex_words: set[str] | None = None,
+    ex_regex: str | None = None,
 ) -> str:
-    # ex_set: a set of strings to be excluded (literal match)
-    # ex_lst: a list of regex to filter the source (regex match)
+    """
+    Build regex for 'keywords' or 'prefixes' from source data.
 
-    assert name in ("keywords", "prefixes")
+    Parameters:
+    -----------
+        name: 'keywords' or 'prefixes'
+        source: statistical data from footprints
+        max_items: maximum number of items to include
+        ex_words: set of words to exclude
+        ex_regex: regex pattern to filter out data
+    """
+    try:
+        source = source[name]
+    except KeyError:
+        raise ValueError(f"Source data missing '{name}' key.")
 
     # Data from footprints, sorted by frequency
-    source: dict = source[name]
-    data: list = sorted(
-        (source.keys() - ex_set) if ex_set else source,
+    data = sorted(
+        (source.keys() - ex_words) if ex_words else source,
         key=source.get,
         reverse=True,
     )
@@ -137,9 +147,9 @@ def build_regex(
     include = read_pattern_file(f"{name}-include.txt")
     exclude = read_pattern_file(f"{name}-exclude.txt")
 
-    # Remove anything that overlaps the pattern files or 'ex_lst', then slice
+    # Remove anything that matches by pattern files or 'ex_regex', then slice
     # the list to `max_items`
-    regex = "|".join(chain(include, exclude, ex_lst))
+    regex = "|".join(chain(include, exclude, (ex_regex,) if ex_regex else ()))
     if regex:
         data = filterfalse(re.compile(regex).fullmatch, data)
         data = list(islice(data, max_items))
@@ -157,10 +167,10 @@ def build_regex(
         )
     )
 
-    # Add include list back and sort
+    # Add 'include' patterns back and sort
     data.extend(include)
     data.sort()
-    print(f"{len(data):,} {name} are included to build the regex.")
+    print(f"{len(data):,} {name} are included in the final regex.")
 
     # Generate and verify the regex
     regen = Regen(data)
@@ -170,8 +180,7 @@ def build_regex(
     diff = len(regex) - len(concat)
     if diff > 0:
         print(
-            f"Optimized regex is {diff} characters longer "
-            "than simple concatenation; using the latter."
+            f"Computed regex is {diff} characters longer than concatenation; using concatenation."
         )
         regex = concat
     else:
@@ -184,7 +193,6 @@ def build_regex(
 
 
 def validation(av_regex: str):
-
     for r in (MOVIE_REGEX, TV_REGEX, av_regex):
         if not r:
             raise ValueError("One of the regex is empty.")
@@ -226,14 +234,14 @@ def main():
         name="keywords",
         source=data,
         max_items=args.max_keywords,
-        ex_set=get_common_words(),
+        ex_words=get_common_words(),
     )
     # Build regex for prefixes, excluded keywords
     prefixes = build_regex(
         name="prefixes",
         source=data,
         max_items=args.max_prefixes,
-        ex_lst=(keywords,),
+        ex_regex=keywords,
     )
     # Construct
     av_regex = AV_TEMPLATE.format(keywords=keywords, prefixes=prefixes)
