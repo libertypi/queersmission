@@ -12,8 +12,7 @@ Regex Requirements:
 
 Data Files:
 -----------
-- footprints-statistics.json: Statistical data from the footprints project for
-  building regex patterns.
+- footprints-statistics.json: Statistical data from the footprints project.
 - google-10000-english-usa-no-swears.txt, common-female-names.txt,
   common-male-names.txt: Common English words to be excluded from the keywords.
 - prefixes-include.txt: Prefixes to include in the regex.

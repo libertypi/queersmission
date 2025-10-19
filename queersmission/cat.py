@@ -4,7 +4,7 @@ import re
 from collections import defaultdict
 from enum import Enum
 from functools import cached_property, lru_cache
-from posixpath import sep, splitext
+from posixpath import sep, splitext  # paths in torrents are always POSIX
 from typing import Collection, Dict, Iterable, List, Optional, Set, Tuple
 
 DISC_EXTS = frozenset(("bdmv", "m2ts", "ifo", "vob", "evo"))
@@ -174,7 +174,6 @@ class Categorizer:
 
         for file in files:
             # All paths are normalized from this point on (same as normstr()).
-            # Paths in torrents are always POSIX paths.
             path = file["name"].replace("_", "-").lower()
             root, ext = splitext(path)
             ext = ext[1:]  # strip leading dot
@@ -219,8 +218,7 @@ class Categorizer:
 
 def _test_paths(method, paths: Iterable[Tuple[str, str]]) -> bool:
     """
-    Test if any of the given (root, ext) paths matches the given regex test
-    method.
+    Test if any of the given (root, ext) paths passes the given regex test.
     """
     return any(method(s) for p in paths for s in p[0].split(sep))
 
@@ -236,33 +234,24 @@ def _find_sequence(paths: Collection[Tuple[str, str]]) -> Set[Tuple[str, str]]:
     # 1 - 99
     seq_finder = re.compile(r"(?<![0-9])(?:0?[1-9]|[1-9][0-9])(?![0-9])").finditer
 
-    # Organize files by their directories
-    dir_files = defaultdict(list)
-    for root, ext in paths:
-        if ext not in DISC_EXTS:  # skip stray disc fragments
-            dirname, _, stem = root.rpartition(sep)
-            dir_files[dirname].append((root, stem, ext))
-
-    # Check each directory for sequences
-    result = set()
     group_bits = defaultdict(int)
     group_paths = defaultdict(list)
-    for files in dir_files.values():
-        if len(files) < 3:
+    for root, ext in paths:
+        if ext in DISC_EXTS:  # skip stray disc fragments
             continue
-        group_bits.clear()
-        group_paths.clear()
-        for root, stem, ext in files:
-            for m in seq_finder(stem):
-                # Key: the parts before and after the digit, and the ext
-                k = (stem[: m.start()], stem[m.end() :], ext)
-                group_bits[k] |= 1 << int(m[0])
-                group_paths[k].append((root, ext))
-        for k, bits in group_bits.items():
-            # bits      = ...00111000
-            # bits >> 1 = ...00011100
-            # bits >> 2 = ...00001110
-            # AND       = ...00001000
-            if bits & (bits >> 1) & (bits >> 2):
-                result.update(group_paths[k])
+        dirname, _, stem = root.rpartition(sep)
+        for m in seq_finder(stem):
+            # Key: dirname, pre-digit part, post-digit part, and ext
+            k = (dirname, stem[: m.start()], stem[m.end() :], ext)
+            group_bits[k] |= 1 << int(m[0])
+            group_paths[k].append((root, ext))
+
+    result = set()
+    for k, bits in group_bits.items():
+        # bits      = ...00111000
+        # bits >> 1 = ...00011100
+        # bits >> 2 = ...00001110
+        # AND       = ...00001000
+        if bits & (bits >> 1) & (bits >> 2):
+            result.update(group_paths[k])
     return result
