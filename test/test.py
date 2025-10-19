@@ -15,7 +15,7 @@ except ImportError:
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from queersmission.cat import _has_sequence
+from queersmission.cat import _find_sequence
 from queersmission.storage import knapsack
 from queersmission.utils import copy_file, humansize
 
@@ -238,13 +238,13 @@ class TestKnapsack(unittest.TestCase):
             self.assertEqual(sum(values[i] for i in result), answer)
 
 
-class TestHasSequence(unittest.TestCase):
-    """Tests for queersmission.cat._has_sequence."""
+class TestFindSequence(unittest.TestCase):
+    """Tests for cat._find_sequence."""
 
     @staticmethod
     def P(dir_: str, stem: str, ext: str):
         # root is a POSIX-style path without extension; ext is the extension
-        return (f"{dir_.rstrip('/')}/{stem}", ext)
+        return (f"{dir_}/{stem}", ext)
 
     def test_dirs_do_not_mix(self):
         # Same numbers split across dirs => should not combine
@@ -253,38 +253,39 @@ class TestHasSequence(unittest.TestCase):
             self.P("/show/s2", "E05", "mkv"),
             self.P("/show/s1", "E06", "mkv"),
         ]
-        self.assertFalse(_has_sequence(paths))
+        self.assertFalse(_find_sequence(paths))
 
     def test_ignores_zero_in_0_1_2(self):
-        # 0 is not counted (pattern is 1–99), so 0,1,2 => False
+        # 0 is not counted (pattern is 1–99), so 0,1,2 => no sequence
         paths = [
             self.P("/show", "E00", "mkv"),
             self.P("/show", "E01", "mkv"),
             self.P("/show", "E02", "mkv"),
         ]
-        self.assertFalse(_has_sequence(paths))
+        self.assertFalse(_find_sequence(paths))
 
     def test_only_two_consecutive_is_false(self):
-        # Only 2 consecutive numbers present (plus a non-number file) => False
+        # Only 2 consecutive numbers present (plus a non-number file) => no sequence
         paths = [
             self.P("/show", "E01", "mp4"),
             self.P("/show", "E04", "mp4"),
             self.P("/show", "E05", "mp4"),
             self.P("/show", "teaser", "mp4"),
         ]
-        self.assertFalse(_has_sequence(paths))
+        self.assertFalse(_find_sequence(paths))
 
     def test_three_consecutive_any_order_true(self):
-        # 3-in-a-row in any order => True
+        # 3-in-a-row in any order => entire matching group returns
         paths = [
             self.P("/show", "Ep05", "mkv"),
             self.P("/show", "Ep04", "mkv"),
             self.P("/show", "Ep06", "mkv"),
         ]
-        self.assertTrue(_has_sequence(paths))
+        expected = set(paths)
+        self.assertSetEqual(_find_sequence(paths), expected)
 
     def test_mixed_noise_still_true(self):
-        # Run of three mixed with other non-sequential items => True
+        # Run of three mixed with other items => return all numbered files in the group
         paths = [
             self.P("/show", "intro", "mkv"),
             self.P("/show", "E03", "mkv"),
@@ -293,25 +294,31 @@ class TestHasSequence(unittest.TestCase):
             self.P("/show", "E05", "mkv"),
             self.P("/show", "extra-clip", "mkv"),
         ]
-        self.assertTrue(_has_sequence(paths))
+        expected = {
+            self.P("/show", "E03", "mkv"),
+            self.P("/show", "E01", "mkv"),
+            self.P("/show", "E02", "mkv"),
+            self.P("/show", "E05", "mkv"),
+        }
+        self.assertSetEqual(_find_sequence(paths), expected)
 
     def test_mixed_extensions_break_group(self):
-        # Current impl groups by (prefix, suffix, ext), so mixed ext => False
+        # Group key includes ext; mixed ext prevents forming a 3-run
         paths = [
             self.P("/show", "E04", "mkv"),
             self.P("/show", "E05", "mp4"),
             self.P("/show", "E06", "mkv"),
         ]
-        self.assertFalse(_has_sequence(paths))
+        self.assertFalse(_find_sequence(paths))
 
     def test_mixed_prefixes_break_group(self):
-        # Different prefixes => False
+        # Different (prefix, suffix) around the number => separate groups, no 3-run
         paths = [
             self.P("/show", "S01", "mkv"),
             self.P("/show", "S02", "mkv"),
             self.P("/show", "03S", "mkv"),
         ]
-        self.assertFalse(_has_sequence(paths))
+        self.assertFalse(_find_sequence(paths))
 
 
 if __name__ == "__main__":

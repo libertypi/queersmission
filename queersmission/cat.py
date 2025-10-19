@@ -5,7 +5,7 @@ from collections import defaultdict
 from enum import Enum
 from functools import cached_property, lru_cache
 from posixpath import sep, splitext
-from typing import Collection, Dict, Iterable, List, Optional, Tuple
+from typing import Collection, Dict, Iterable, List, Optional, Set, Tuple
 
 DISC_EXTS = frozenset(("bdmv", "m2ts", "ifo", "vob", "evo"))
 
@@ -57,7 +57,7 @@ class Categorizer:
 
         self.video_exts = frozenset(self._patterns.pop("video_exts"))
         self.audio_exts = frozenset(self._patterns.pop("audio_exts"))
-        self.container_exts = frozenset(self._patterns.pop("container_exts"))
+        self.archive_exts = frozenset(self._patterns.pop("archive_exts"))
 
     av_test = cached_re_test("av_regex", maxsize=1024)
     tv_test = cached_re_test("tv_regex")
@@ -65,7 +65,7 @@ class Categorizer:
 
     @cached_property
     def disc_match(self):
-        """Regex match to extract the top-level directory of a BD/DVD tree."""
+        """Regex to extract the top-level directory of a BD/DVD tree."""
         return re.compile(
             r"(.+?/)(?:bdmv/(?:index\.bdmv|stream/[^/]+\.m2ts)|(?:video-ts/)?(?:vts(?:-\d+)+|video-ts)\.(?:ifo|vob)|hvdvd-ts/[^/]+\.evo)",
             re.ASCII,
@@ -85,10 +85,10 @@ class Categorizer:
             return Cat.AV
 
         # Step 2: Process files and categorize by types
-        type_bytes, videos, containers = self._process_files(files)
+        type_bytes, videos, archives = self._process_files(files)
 
-        # Step 3: Check if any video or container file matches AV
-        if _test_paths(self.av_test, videos) or _test_paths(self.av_test, containers):
+        # Step 3: Check if any video or archive file matches AV
+        if _test_paths(self.av_test, videos) or _test_paths(self.av_test, archives):
             return Cat.AV
 
         # Step 4: Now we rule out AV, score remaining categories
@@ -99,15 +99,17 @@ class Categorizer:
             Cat.DEFAULT: type_bytes["other"],
         }
 
-        # Classify videos into TV_SHOWS or MOVIES. Winner takes all: If any
-        # video file is classified as TV_SHOWS, all videos are TV_SHOWS.
-        if _test_paths(self.tv_test, videos) or _has_sequence(videos):
+        # Classify videos into TV_SHOWS or MOVIES. If any video file matches TV
+        # regex, classify all as TV_SHOWS. Otherwise, sub-classify by sequences.
+        if _test_paths(self.tv_test, videos):
             scores[Cat.TV_SHOWS] += type_bytes["video"]
         else:
-            scores[Cat.MOVIES] += type_bytes["video"]
+            size = sum(videos[p] for p in _find_sequence(videos))  # sequence size
+            scores[Cat.TV_SHOWS] += size
+            scores[Cat.MOVIES] += type_bytes["video"] - size
 
-        # Sub-classify containers into TV_SHOWS, MOVIES, or DEFAULT
-        for path, size in containers.items():
+        # Sub-classify archives into TV_SHOWS, MOVIES, or DEFAULT
+        for path, size in archives.items():
             path = path[0].split(sep)
             if any(map(self.tv_test, path)):
                 scores[Cat.TV_SHOWS] += size
@@ -116,7 +118,7 @@ class Categorizer:
             else:
                 scores[Cat.DEFAULT] += size
 
-        # Step 5: Torrent name bonus (experimental)
+        # Step 5: Torrent name bonus
         if name_cat is not None:
             scores[name_cat] += sum(type_bytes.values()) * self.NAME_BONUS
 
@@ -126,11 +128,11 @@ class Categorizer:
     def _process_files(self, files):
         """
         Process the file list and return type byte counts, video files, and
-        container files.
+        archive files.
         """
-        type_bytes = {"video": 0, "container": 0, "audio": 0, "other": 0}
+        type_bytes = {"video": 0, "archive": 0, "audio": 0, "other": 0}
         videos = defaultdict(int)  # {(root, ext): size}
-        containers = defaultdict(int)
+        archives = defaultdict(int)
 
         files, discs = self._prepare_filelist(files)
 
@@ -148,9 +150,9 @@ class Categorizer:
                 type_bytes["video"] += size
                 videos[root, ext] += size
 
-            elif ext in self.container_exts:
-                type_bytes["container"] += size
-                containers[root, ext] += size
+            elif ext in self.archive_exts:
+                type_bytes["archive"] += size
+                archives[root, ext] += size
 
             elif ext in self.audio_exts:
                 type_bytes["audio"] += size
@@ -158,7 +160,7 @@ class Categorizer:
             else:
                 type_bytes["other"] += size
 
-        return (type_bytes, self._drop_noise(videos), containers)
+        return (type_bytes, self._drop_noise(videos), archives)
 
     def _prepare_filelist(self, files) -> Tuple[List[Tuple[str, str, int]], List[str]]:
         """
@@ -223,13 +225,13 @@ def _test_paths(method, paths: Iterable[Tuple[str, str]]) -> bool:
     return any(method(s) for p in paths for s in p[0].split(sep))
 
 
-def _has_sequence(paths: Collection[Tuple[str, str]]) -> bool:
+def _find_sequence(paths: Collection[Tuple[str, str]]) -> Set[Tuple[str, str]]:
     """
-    Given a list of (root, ext) paths, check if there are three or more files
-    under the same directory with consecutive numbers (1-99) in their names.
+    Given (root, ext) pairs, return all files in the same directory that belong
+    to a group that contains at least three consecutive numbers (1–99).
     """
     if len(paths) < 3:
-        return False
+        return set()
 
     # 1 - 99
     seq_finder = re.compile(r"(?<![0-9])(?:0?[1-9]|[1-9][0-9])(?![0-9])").finditer
@@ -237,26 +239,30 @@ def _has_sequence(paths: Collection[Tuple[str, str]]) -> bool:
     # Organize files by their directories
     dir_files = defaultdict(list)
     for root, ext in paths:
-        if ext not in DISC_EXTS:  # skip stray disc files
+        if ext not in DISC_EXTS:  # skip stray disc fragments
             dirname, _, stem = root.rpartition(sep)
-            dir_files[dirname].append((stem, ext))
+            dir_files[dirname].append((root, stem, ext))
 
     # Check each directory for sequences
-    groups = {}
+    result = set()
+    group_bits = defaultdict(int)
+    group_paths = defaultdict(list)
     for files in dir_files.values():
         if len(files) < 3:
             continue
-        groups.clear()
-        for stem, ext in files:
+        group_bits.clear()
+        group_paths.clear()
+        for root, stem, ext in files:
             for m in seq_finder(stem):
                 # Key: the parts before and after the digit, and the ext
                 k = (stem[: m.start()], stem[m.end() :], ext)
-                # bits      = ...00111000
-                # bits >> 1 = ...00011100
-                # bits >> 2 = ...00001110
-                # AND       = ...00001000
-                bits = groups.get(k, 0) | (1 << int(m[0]))
-                if bits & (bits >> 1) & (bits >> 2):
-                    return True
-                groups[k] = bits
-    return False
+                group_bits[k] |= 1 << int(m[0])
+                group_paths[k].append((root, ext))
+        for k, bits in group_bits.items():
+            # bits      = ...00111000
+            # bits >> 1 = ...00011100
+            # bits >> 2 = ...00001110
+            # AND       = ...00001000
+            if bits & (bits >> 1) & (bits >> 2):
+                result.update(group_paths[k])
+    return result

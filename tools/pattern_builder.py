@@ -53,10 +53,10 @@ AUDIO_EXTS = {
     "m4a", "m4b", "mka", "mod", "mp2", "mp3", "mpa", "mpc", "oga", "ogg",
     "opus", "pls", "ra", "tak", "tta", "wav", "wax", "wma", "wv", "xspf"
 }
-CONTAINER_EXTS = {"7z", "bin", "img", "iso", "mdf", "mds", "nrg", "rar", "zip"}
+ARCHIVE_EXTENSIONS = {"7z", "bin", "img", "iso", "mdf", "mds", "nrg", "rar", "zip"}
 MOVIE_REGEX = r"\b((10|12|8)bit|(10|4)80[ip]|(21|3)60p|(43|7)20p|1440p|4k|576p|8k|[hx]26[45]|atmos|av[1c]|b([dr]rip|lu[\s-]?ray)|dovi|dts|dvd(5|9|rip|scr)?|hd(r|r10|tv)|hevc|mpeg2?|ntsc|remux|truehd|uhd|web[\s-]?(dl|rip)|xvid)\b"
 TV_REGEX = r"\b(s(0[1-9]|[1-3]\d)|ep(0[1-9]|[1-9]\d|1\d\d)|s(0?[1-9]|[1-3]\d)[\s.-]?e(0?[1-9]|[1-9]\d|1\d\d))\b"
-AV_TEMPLATE = r"\b({keywords}|[0-9]{{,5}}({prefixes})-?[0-9]{{2,8}}([a-z]|f?hd)?)\b"
+AV_TEMPLATE = r"\b({keywords}|[0-9]{{,5}}({prefixes})-?[0-9]{{2,8}}(ch|[a-z])?)\b"
 # SOFTWARE_REGEX = r"\b(apk|deb|dmg|exe|msi|pkg|rpm|adobe|microsoft|windows|x(64|86)|(32|64)bit|v\d+(\.\d+)+)\b"
 # fmt: on
 
@@ -74,7 +74,7 @@ def parse_args():
         "-m",
         dest="max_prefixes",
         type=int,
-        default=4000,
+        default=5000,
         help="Maximum number of prefixes to draw from data (default: %(default)s).",
     )
     return parser.parse_args()
@@ -196,7 +196,7 @@ def validation(av_regex: str):
         except re.error as e:
             raise ValueError(f"Invalid regex: {r}\n{e}")
 
-    all_exts = (VIDEO_EXTS, AUDIO_EXTS, CONTAINER_EXTS)
+    all_exts = (VIDEO_EXTS, AUDIO_EXTS, ARCHIVE_EXTENSIONS)
     if not all(all_exts):
         raise ValueError("One of the extension sets is empty.")
     if not all(s.lower() == s and s.isalnum() for s in chain.from_iterable(all_exts)):
@@ -246,7 +246,7 @@ def main():
     result = {
         "video_exts": sorted(VIDEO_EXTS),
         "audio_exts": sorted(AUDIO_EXTS),
-        "container_exts": sorted(CONTAINER_EXTS),
+        "archive_exts": sorted(ARCHIVE_EXTENSIONS),
         "movie_regex": MOVIE_REGEX,
         "tv_regex": TV_REGEX,
         "av_regex": av_regex,
