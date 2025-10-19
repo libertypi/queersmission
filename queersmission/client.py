@@ -3,7 +3,7 @@ import shutil
 from dataclasses import dataclass
 from enum import IntEnum
 from functools import cached_property
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import requests
 
@@ -35,7 +35,7 @@ class Torrent:
     peers: Optional[List[dict]] = None
     percentDone: Optional[float] = None
     sizeWhenDone: Optional[int] = None
-    status: Optional[TRStatus] = None
+    status: Optional[int] = None
     trackerStats: Optional[List[dict]] = None
 
 
@@ -44,7 +44,6 @@ class Client:
 
     _SSID = "X-Transmission-Session-Id"
     _RETRIES = 3
-    _BAD_CODES = {401, 403, 409}
 
     def __init__(
         self,
@@ -55,6 +54,8 @@ class Client:
         password: str = "",
         seed_dir: str = "",
     ) -> None:
+        if not path.startswith("/"):
+            path = "/" + path
 
         self._url = f"http://127.0.0.1:{port}{path}"
         self._seed_dir = seed_dir
@@ -78,24 +79,30 @@ class Client:
         if arguments is not None:
             query["arguments"] = arguments
 
-        res = None
-        for retry in range(1, self._RETRIES + 1):
-            logger.debug("Query (attempt %d): %s", retry, query)
+        last_err = None
+        for attempt in range(1, self._RETRIES + 1):
+            logger.debug("Query (attempt %d): %s", attempt, query)
             try:
                 res = self._session.post(self._url, json=query)
-                if res.status_code not in self._BAD_CODES:
-                    data = res.json()
-                    logger.debug("Response: %s", data)
-                    if data["result"] == "success":
-                        return data["arguments"]
-                elif res.status_code == 409:
-                    self._session.headers[self._SSID] = res.headers[self._SSID]
-            except Exception:
-                if retry == self._RETRIES:
-                    raise
+                res.raise_for_status()
 
-        assert res is not None, '"res" should never be None at this point.'
-        raise Exception(f"API Error (code {res.status_code}): {res.text}")
+                data = res.json()
+                logger.debug("Response: %s", data)
+
+                if data["result"] == "success":
+                    return data["arguments"]
+
+                last_err = RuntimeError(f"Transmission RPC error: {data}")
+
+            except requests.HTTPError as e:
+                last_err = e
+                if e.response.status_code == 409:
+                    self._session.headers[self._SSID] = e.response.headers[self._SSID]
+
+            except Exception as e:
+                last_err = e
+
+        raise last_err or RuntimeError("Unexpected execution flow in _call.")
 
     def torrent_start(self, ids=None):
         self._call("torrent-start", ids=ids)
@@ -112,7 +119,7 @@ class Client:
     def torrent_reannounce(self, ids=None):
         self._call("torrent-reannounce", ids=ids)
 
-    def torrent_get(self, fields: List[str], ids=None) -> List[Torrent]:
+    def torrent_get(self, fields: Sequence[str], ids=None) -> List[Torrent]:
         return [
             Torrent(**t)
             for t in self._call("torrent-get", {"fields": fields}, ids=ids)["torrents"]
@@ -137,7 +144,7 @@ class Client:
         )
         self._cache_clear()
 
-    def session_get(self, fields: Optional[List[str]] = None) -> dict:
+    def session_get(self, fields: Optional[Sequence[str]] = None) -> dict:
         return self._call("session-get", {"fields": fields} if fields else None)
 
     @cached_property
@@ -157,7 +164,6 @@ class Client:
         data = self.torrent_get(
             ("downloadDir", "id", "isPrivate", "name", "sizeWhenDone")
         )
-        torrents = {t.id: t for t in data}
         seed_dir_torrents = {}
         seed_dir = self.seed_dir
 
@@ -169,7 +175,7 @@ class Client:
                     continue
             seed_dir_torrents[t.id] = t
 
-        return torrents, seed_dir_torrents
+        return {t.id: t for t in data}, seed_dir_torrents
 
     @property
     def torrents(self) -> Dict[int, Torrent]:

@@ -7,7 +7,7 @@ from functools import cached_property, lru_cache
 from posixpath import sep, splitext  # paths in torrents are always POSIX
 from typing import Collection, Dict, Iterable, List, Optional, Set, Tuple
 
-DISC_EXTS = frozenset(("bdmv", "m2ts", "ifo", "vob", "evo"))
+DISC_EXTS = {"bdmv", "m2ts", "ifo", "vob", "evo"}
 
 
 class Cat(Enum):
