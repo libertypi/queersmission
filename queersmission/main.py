@@ -8,7 +8,7 @@ from typing import Dict
 
 from . import PKG_NAME, config, logger
 from .cat import Cat, Categorizer
-from .client import Client, Torrent
+from .client import Client
 from .filelock import FileLocker
 from .storage import StorageManager
 from .utils import copy_file, humansize, is_subpath

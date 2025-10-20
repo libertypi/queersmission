@@ -13,6 +13,7 @@ dvd
 dx
 ep
 girl
+gold
 hit
 img
 love
