@@ -22,20 +22,21 @@ if os.name == "nt":
 
         def acquire(self):
             """Acquire an exclusive lock on the file using msvcrt."""
-            if self.fd is None:
-                fd = os.open(self.file, _FLAG, _MODE)
-                while True:
-                    try:
-                        msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
-                        break
-                    except OSError as e:
-                        # LK_LOCK raises EDEADLK after 10 retries
-                        if e.errno != EDEADLK:
-                            os.close(fd)
-                            raise
-                    time.sleep(1)
-                self.fd = fd
-                logger.debug("Lock acquired: %s", self.file)
+            if self.fd is not None:
+                return
+            fd = os.open(self.file, _FLAG, _MODE)
+            while True:
+                try:
+                    msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+                    break
+                except OSError as e:
+                    # LK_LOCK raises EDEADLK after 10 retries
+                    if e.errno != EDEADLK:
+                        os.close(fd)
+                        raise
+                time.sleep(1)
+            self.fd = fd
+            logger.debug("Lock acquired: %s", self.file)
 
         def release(self):
             """Release the acquired lock and close the file."""
@@ -63,19 +64,20 @@ else:
 
             def acquire(self):
                 """Acquire an exclusive lock on the file using fcntl."""
-                if self.fd is None:
-                    try:
-                        fd = os.open(self.file, os.O_RDWR, _MODE)
-                    except FileNotFoundError:
-                        fd = os.open(self.file, os.O_RDWR | os.O_CREAT, _MODE)
-                        os.fchmod(fd, _MODE)
-                    try:
-                        fcntl.flock(fd, fcntl.LOCK_EX)
-                    except OSError:
-                        os.close(fd)
-                        raise
-                    self.fd = fd
-                    logger.debug("Lock acquired: %s", self.file)
+                if self.fd is not None:
+                    return
+                try:
+                    fd = os.open(self.file, os.O_RDWR, _MODE)
+                except FileNotFoundError:
+                    fd = os.open(self.file, os.O_RDWR | os.O_CREAT, _MODE)
+                    os.fchmod(fd, _MODE)
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX)
+                except OSError:
+                    os.close(fd)
+                    raise
+                self.fd = fd
+                logger.debug("Lock acquired: %s", self.file)
 
             def release(self):
                 """Release the acquired lock and close the file."""

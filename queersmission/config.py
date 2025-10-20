@@ -1,6 +1,7 @@
 import itertools
 import json
 import operator
+import os
 import os.path as op
 import sys
 from typing import Union
@@ -92,6 +93,7 @@ def parse(file: str) -> dict:
         with open(file, "r", encoding="utf-8") as f:
             userconf = json.load(f)
     except FileNotFoundError:
+        os.makedirs(op.dirname(file), exist_ok=True)
         json_dump(makeconfig(), file)
         sys.stderr.write(
             f'A blank configuration file has been created at "{file}". '

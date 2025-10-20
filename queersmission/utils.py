@@ -52,6 +52,7 @@ if sys.platform.startswith("linux"):
             logger.debug(stderr or e)
             _shutil_copy_file(src, dst)
         except FileNotFoundError as e:
+            # cp not found, fallback to shutil
             logger.debug(e)
             _shutil_copy_file(src, dst)
 

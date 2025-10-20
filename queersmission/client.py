@@ -96,8 +96,15 @@ class Client:
 
             except requests.HTTPError as e:
                 last_err = e
-                if e.response.status_code == 409:
-                    self._session.headers[self._SSID] = e.response.headers[self._SSID]
+                res = e.response
+
+                if res.status_code == 409:
+                    self._session.headers[self._SSID] = res.headers[self._SSID]
+
+                elif res.status_code in (401, 403):
+                    raise PermissionError(
+                        "Authentication failed for Transmission RPC."
+                    ) from e
 
             except Exception as e:
                 last_err = e
@@ -131,7 +138,7 @@ class Client:
             {"delete-local-data": delete_local_data},
             ids=ids,
         )
-        self._cache_clear()
+        self.cache_clear()
 
     def torrent_set(self, ids=None, **kwargs):
         self._call("torrent-set", kwargs, ids=ids)
@@ -142,7 +149,7 @@ class Client:
             {"location": location, "move": move},
             ids=ids,
         )
-        self._cache_clear()
+        self.cache_clear()
 
     def session_get(self, fields: Optional[Sequence[str]] = None) -> dict:
         return self._call("session-get", {"fields": fields} if fields else None)
@@ -187,14 +194,17 @@ class Client:
         """Torrents whose downloadDir is within seed_dir: {id: Torrent}."""
         return self._snapshot[1]
 
-    def _cache_clear(self):
-        """Clear snapshot cache."""
+    def cache_clear(self):
+        """
+        Clear the '_snapshot' cache behind 'torrents' and 'seed_dir_torrents'
+        properties.
+        """
         self.__dict__.pop("_snapshot", None)
 
     def get_freespace(self, path: Optional[str] = None) -> Tuple[int, int]:
         """
-        Tests how much space is available in a client-specified folder. If
-        `path` is None, test seed_dir.
+        Tests how much space is available in `path`. If `path` is None, test
+        seed_dir.
         """
         if path is None:
             path = self.seed_dir
@@ -232,4 +242,4 @@ def check_ids(ids):
                 # "recently-active" must be `ids` itself, not an element of a
                 # list. Therefore we should check `ids` instead of `i` here.
                 return
-        raise ValueError(f'Invalid torrent ID "{i}" in IDs: {ids}')
+        raise ValueError(f'Invalid entry "{i}" in IDs: "{ids}"')

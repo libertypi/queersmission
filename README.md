@@ -43,7 +43,7 @@ Set **all** of the following:
 
 ## First run & config
 
-After enabling RPC and scripts, run `torrent-done.py` once manually to generate `config.json` (created blank in the Queersmission directory). Edit it.
+After enabling RPC and scripts, run `torrent-done.py` once manually to generate `profile/config.json` (created blank in the program directory). Edit it.
 
 ### `config.json` template
 

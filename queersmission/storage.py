@@ -293,7 +293,7 @@ class StorageManager:
         return [
             t
             for t in torrents
-            if t.percentDone == 1 and t.status in statuses and 0 < t.doneDate < cutoff
+            if t.percentDone == 1.0 and t.status in statuses and 0 < t.doneDate < cutoff
         ]
 
 

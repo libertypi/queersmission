@@ -31,7 +31,9 @@ def init_logger(logfile: str, level: str = "INFO"):
     logger.addHandler(hd)
 
     # Rotating File handler (10 MiB * 3)
-    hd = RotatingFileHandler(logfile, maxBytes=10485760, backupCount=3)
+    hd = RotatingFileHandler(
+        logfile, maxBytes=10485760, backupCount=3, encoding="utf-8"
+    )
     hd.setFormatter(
         logging.Formatter(
             "[%(asctime)s] %(levelname)s: %(message)s",
@@ -88,11 +90,11 @@ def process_torrent_done(
         t = t[0]
     except IndexError:
         raise ValueError(f"Torrent ID {tid} does not exist.")
-    _ensure_torrent_done(tid, t, client)
+    if t.percentDone < 1.0:
+        raise ValueError(f'Torrent "{t.name}" (id={tid}) is not complete yet.')
 
     remove_torrent = remove_public and not t.isPrivate
     name = t.name
-    size = t.sizeWhenDone
 
     src = t.downloadDir
     if src == client.seed_dir:
@@ -118,18 +120,18 @@ def process_torrent_done(
 
     # File operations
     if src_in_seed_dir or not remove_torrent:
-        dst = op.join(dest_dir, name)
         os.makedirs(dest_dir, exist_ok=True)
+        dst = op.join(dest_dir, name)
         elapsed = time.perf_counter()
         copy_file(src, dst)
         elapsed = time.perf_counter() - elapsed
         logger.info(
-            'Copied: "%s" -> "%s" (size: %s, elapsed: %.2fs, speed: %s/s)',
+            'Copied: "%s" -> "%s" (size: %s, elapsed: %.2f s, speed: %s/s)',
             src,
             dst,
-            humansize(size),
+            humansize(t.sizeWhenDone),
             elapsed,
-            humansize(size / elapsed) if elapsed else "N/A",
+            humansize(t.sizeWhenDone / elapsed) if elapsed else "∞",
         )
 
     # Remove or redirect the torrent
@@ -138,16 +140,6 @@ def process_torrent_done(
         client.torrent_remove(tid, delete_local_data=src_in_seed_dir)
     elif not src_in_seed_dir:
         client.torrent_set_location(tid, dest_dir, move=False)
-
-
-def _ensure_torrent_done(tid: int, t: Torrent, client: Client, retry: int = 20):
-    """Ensure the torrent is fully downloaded, retrying if necessary."""
-    while t.percentDone < 1:
-        if retry <= 0:
-            raise TimeoutError(f"Timeout waiting for torrent ID {tid} to complete.")
-        retry -= 1
-        time.sleep(3)
-        t = client.torrent_get(("percentDone",), tid)[0]
 
 
 def main(torrent_added: bool, config_dir: str):
@@ -162,6 +154,7 @@ def main(torrent_added: bool, config_dir: str):
     """
     conf = config.parse(op.join(config_dir, "config.json"))
     init_logger(op.join(config_dir, "logfile.log"), conf["log-level"])
+    tid = os.environ.get("TR_TORRENT_ID")
 
     flock = FileLocker(op.join(tempfile.gettempdir(), PKG_NAME + ".lock"))
     try:
@@ -183,7 +176,6 @@ def main(torrent_added: bool, config_dir: str):
             watch_dir=conf["watch-dir"],
         )
 
-        tid = os.environ.get("TR_TORRENT_ID")
         if tid is None:
             # Script is invoked by user
             logger.debug(
@@ -225,8 +217,9 @@ def main(torrent_added: bool, config_dir: str):
 
     except Exception as e:
         logger.critical(
-            'Error processing torrent "%s": %s',
+            'Error processing torrent "%s" (id=%s): %s',
             os.environ.get("TR_TORRENT_NAME", "N/A"),
+            "N/A" if tid is None else tid,
             e,
         )
         logger.debug("Traceback:", exc_info=True)
