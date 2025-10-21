@@ -12,7 +12,7 @@ from .cat import Cat
 
 
 def _non_negative(val: Union[int, float]):
-    return val if val > 0 else 0
+    return val if val >= 0 else 0
 
 
 def _port(val: int):
@@ -37,7 +37,7 @@ def _abs_path(val: str):
 SCHEMA = [
     ("log-level", str, "INFO", None),
     ("public-upload-limited", bool, False, None),
-    ("public-upload-limit-kbps", int, 20, _non_negative),
+    ("public-upload-limit-kbps", int, 50, _non_negative),
     ("remove-public-on-complete", bool, False, None),
     ("rpc-path", str, "/transmission/rpc", None),
     ("rpc-port", int, 9091, _port),

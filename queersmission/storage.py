@@ -5,7 +5,7 @@ import time
 from typing import List, Optional, Set
 
 from . import logger
-from .client import Client, Torrent, TRStatus
+from .client import Client, Torrent
 from .utils import humansize
 
 try:
@@ -287,13 +287,23 @@ class StorageManager:
 
     @staticmethod
     def _filter_removal_cands(torrents: List[Torrent]):
-        """Filter out torrents that should not be considered for removal."""
-        cutoff = time.time() - 43200  # 12 hours ago
-        statuses = {TRStatus.STOPPED, TRStatus.SEED_WAIT, TRStatus.SEED}
+        """Return torrents eligible for removal."""
+        # Transmission status codes (libtransmission/transmission.h):
+        # 0 = TR_STATUS_STOPPED        — Torrent is stopped.
+        # 1 = TR_STATUS_CHECK_WAIT     — Queued to check files.
+        # 2 = TR_STATUS_CHECK          — Checking files.
+        # 3 = TR_STATUS_DOWNLOAD_WAIT  — Queued to download.
+        # 4 = TR_STATUS_DOWNLOAD       — Downloading.
+        # 5 = TR_STATUS_SEED_WAIT      — Queued to seed.
+        # 6 = TR_STATUS_SEED           — Seeding.
+        allowed_statuses = {0, 5, 6}
+        cutoff = time.time() - 43200  # 12 hours grace period
         return [
             t
             for t in torrents
-            if t.percentDone == 1.0 and t.status in statuses and 0 < t.doneDate < cutoff
+            if t.percentDone == 1.0
+            and t.status in allowed_statuses
+            and 0 < t.doneDate < cutoff
         ]
 
 

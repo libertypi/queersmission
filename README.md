@@ -74,7 +74,7 @@ After enabling RPC and scripts, run `torrent-done.py` once manually to generate 
 
 * **log-level** (string, default `INFO`): `DEBUG` | `INFO` | `WARNING` | `ERROR` | `CRITICAL`.
 * **public-upload-limited** (bool, default `false`): If `true`, limit upload speed for **public** torrents.
-* **public-upload-limit-kbps** (int, default `20`): Max upload speed per **public** torrents (kB/s).
+* **public-upload-limit-kbps** (int, default `50`): Max upload speed per **public** torrents (kB/s).
 * **remove-public-on-complete** (bool, default `false`): If `true`, remove public torrents when they finish; only private torrents continue seeding.
 * **rpc-path** (string, default `/transmission/rpc`)
 * **rpc-port** (number, default `9091`)

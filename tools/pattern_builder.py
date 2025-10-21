@@ -8,7 +8,7 @@ Regex Requirements:
 -------------------
 - All regular expressions must be lowercased.
 - All "_" characters should be replaced with "-".
-- Matching will be using ASCII-only mode so CJK characters construct boundaries.
+- Matching will be using ASCII-only mode so CJK characters become boundaries.
 
 Data Files:
 -----------

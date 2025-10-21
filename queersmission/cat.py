@@ -196,7 +196,7 @@ class Categorizer:
             return path_bytes
 
         # 5% of the largest video file, but no more than 50 MiB
-        threshold = min(max(path_bytes.values()) * 0.05, 52428800)
+        threshold = min(max(path_bytes.values()) // 20, 52428800)
         return {k: v for k, v in path_bytes.items() if v >= threshold}
 
     def _classify_torrent_name(self, files: List[dict]):

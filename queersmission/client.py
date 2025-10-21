@@ -1,7 +1,6 @@
 import os.path as op
 import shutil
 from dataclasses import dataclass
-from enum import IntEnum
 from functools import cached_property
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -9,16 +8,6 @@ import requests
 
 from . import logger
 from .utils import is_subpath
-
-
-class TRStatus(IntEnum):
-    STOPPED = 0
-    CHECK_WAIT = 1
-    CHECK = 2
-    DOWNLOAD_WAIT = 3
-    DOWNLOAD = 4
-    SEED_WAIT = 5
-    SEED = 6
 
 
 @dataclass
@@ -99,7 +88,7 @@ class Client:
                 res = e.response
 
                 if res.status_code == 409:
-                    self._session.headers[self._SSID] = res.headers[self._SSID]
+                    self._session.headers[self._SSID] = res.headers.get(self._SSID, "")
 
                 elif res.status_code in (401, 403):
                     raise PermissionError(
@@ -238,8 +227,6 @@ def check_ids(ids):
                     continue
                 except ValueError:
                     pass
-            elif ids == "recently-active":
-                # "recently-active" must be `ids` itself, not an element of a
-                # list. Therefore we should check `ids` instead of `i` here.
+            elif ids == "recently-active":  # not 'i'
                 return
         raise ValueError(f'Invalid entry "{i}" in IDs: "{ids}"')
