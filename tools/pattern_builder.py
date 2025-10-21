@@ -27,6 +27,7 @@ Author:
 
 import argparse
 import json
+import math
 import re
 import shutil
 from itertools import chain, filterfalse, islice
@@ -55,7 +56,7 @@ AUDIO_EXTS = {
 ARCHIVE_EXTENSIONS = {"7z", "bin", "img", "iso", "mdf", "mds", "nrg", "rar", "zip"}
 MOVIE_REGEX = r"\b(?:(10|12|8)bit|(10|4)80[ip]|(21|3)60p|(43|7)20p|1440p|4k|576p|8k|[hx]26[45]|atmos|av[1c]|b([dr]rip|lu[\s-]?ray)|dovi|dts|dvd(5|9|rip|scr)?|hd(r|r10|tv)|hevc|mpeg2?|ntsc|remux|truehd|uhd|web[\s-]?(dl|rip)|xvid)\b"
 TV_REGEX = r"\b(?:s(0[1-9]|[1-3]\d)|ep(0[1-9]|[1-9]\d|1\d\d)|s(0?[1-9]|[1-3]\d)[\s.-]?e(0?[1-9]|[1-9]\d|1\d\d))\b"
-AV_TEMPLATE = r"\b(?:{keywords}|\d{{,5}}(?:{prefixes})-?\d{{2,8}}(?:ch|[a-z])?)\b"
+AV_TEMPLATE = r"\b(?:{keywords}|\d{{0,5}}(?:{prefixes})-?\d{{2,8}}(?:f?hd|ch|ai|[a-z])?)\b"
 # SOFTWARE_REGEX = r"\b(apk|deb|dmg|exe|msi|pkg|rpm|adobe|microsoft|windows|x(64|86)|(32|64)bit|v\d+(\.\d+)+)\b"
 # fmt: on
 
@@ -113,59 +114,85 @@ def read_pattern_file(filename: str) -> list[str]:
         return new_data
 
 
+def _trim_two_chars(data: list, statistics: dict, max_items: int, pct: float):
+    """
+    For a two-letter prefix to be included, its frequency must be within the top
+    `pct` percentage of the most frequent prefixes, up to `max_items`. `data` is
+    assumed to be sorted by frequency in descending order.
+    """
+    assert 0 <= pct <= 1
+    if not data or pct == 1.0:
+        return data
+    k = min(max_items, len(data))
+    i = min(math.ceil(k * pct), k - 1)
+    cutoff = statistics[data[i]]
+    return (d for d in data if len(d) > 2 or statistics[d] > cutoff)
+
+
 def build_regex(
     name: str,
-    source: dict[str, dict[str, int]],
+    statistics: dict[str, dict[str, int]],
     max_items: int,
     ex_words: set[str] | None = None,
     ex_regex: str | None = None,
 ) -> str:
     """
-    Build regex for 'keywords' or 'prefixes' from source data.
+    Build regex for 'keywords' or 'prefixes' from statistical data.
 
     Parameters:
     -----------
         name: 'keywords' or 'prefixes'
-        source: statistical data from footprints
+        statistics: statistical data from footprints
         max_items: maximum number of items to include
         ex_words: set of words to exclude
         ex_regex: regex pattern to filter out data
     """
+    if max_items <= 0:
+        raise ValueError("max_items must be greater than 0.")
     try:
-        source = source[name]
+        statistics = statistics[name]
     except KeyError:
-        raise ValueError(f"Source data missing '{name}' key.")
+        raise ValueError(f"Statistics data missing '{name}' key.")
 
     # Data from footprints, sorted by frequency
     data = sorted(
-        (source.keys() - ex_words) if ex_words else source,
-        key=source.get,
+        (statistics.keys() - ex_words) if ex_words else statistics,
+        key=statistics.get,
         reverse=True,
     )
+
+    # Set a higher bar for two-character prefixes
+    if name == "prefixes":
+        data = _trim_two_chars(data, statistics, max_items, pct=0.3)
 
     # Inclusion and exclusion pattern files
     include = read_pattern_file(f"{name}-include.txt")
     exclude = read_pattern_file(f"{name}-exclude.txt")
 
-    # Remove anything that matches by pattern files or 'ex_regex', then slice
-    # the list to `max_items`
+    # Remove anything that matches by pattern files or 'ex_regex'
     regex = "|".join(chain(include, exclude, (ex_regex,) if ex_regex else ()))
     if regex:
         data = filterfalse(re.compile(regex).fullmatch, data)
+
+    # Slice to max_items
+    if not isinstance(data, list):
         data = list(islice(data, max_items))
-    else:
+    elif len(data) > max_items:
         data = data[:max_items]
 
-    print(
-        "Selected {:,} of {:,} {} from source. Frequency: [{}, {}], coverage: {:.1%} ".format(
-            len(data),
-            len(source),
-            name,
-            source[data[-1]],
-            source[data[0]],
-            sum(map(source.get, data)) / sum(source.values()),
+    if data:
+        print(
+            "Selected {:,} of {:,} {} from source. Frequency: [{}, {}], coverage: {:.1%} ".format(
+                len(data),
+                len(statistics),
+                name,
+                statistics[data[-1]],
+                statistics[data[0]],
+                (sum(map(statistics.get, data)) / sum(statistics.values())),
+            )
         )
-    )
+    else:
+        print(f"No {name} selected from source data.")
 
     # Add 'include' patterns back and sort
     data.extend(include)
@@ -232,14 +259,14 @@ def main():
     # Build regex for keywords
     keywords = build_regex(
         name="keywords",
-        source=data,
+        statistics=data,
         max_items=args.max_keywords,
         ex_words=get_common_words(),
     )
     # Build regex for prefixes, excluded keywords
     prefixes = build_regex(
         name="prefixes",
-        source=data,
+        statistics=data,
         max_items=args.max_prefixes,
         ex_regex=keywords,
     )

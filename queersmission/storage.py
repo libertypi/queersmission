@@ -11,7 +11,7 @@ from .utils import humansize
 try:
     removesuffix = str.removesuffix  # Python 3.9+
 except AttributeError:
-    removesuffix = lambda s, f: s[: -len(f)] if f and s.endswith(f) else s
+    removesuffix = lambda s, sf: s[: -len(sf)] if sf and s.endswith(sf) else s
 
 
 class StorageManager:

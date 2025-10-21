@@ -79,6 +79,6 @@ def humansize(size) -> str:
         return "0.00 B"
     units = ("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB")
     idx = (abs(size).bit_length() - 1) // 10
-    if idx >= len(units):
-        idx = len(units) - 1
+    if idx > 8:  # len(units) - 1
+        idx = 8
     return f"{size / (1 << (idx * 10)):.2f} {units[idx]}"

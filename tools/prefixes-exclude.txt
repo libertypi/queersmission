@@ -1,5 +1,6 @@
 abc
 add
+akb
 amd
 and
 asd
@@ -10,14 +11,12 @@ crc
 day
 diy
 dvd
-dx
 ep
 girl
 gold
 hit
 img
 love
-ma
 new
 part
 plus
