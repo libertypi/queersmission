@@ -7,7 +7,7 @@ from functools import cached_property, lru_cache
 from posixpath import sep, splitext  # paths in torrents are always POSIX
 from typing import Collection, Dict, Iterable, List, Optional, Set, Tuple
 
-DISC_EXTS = {"bdmv", "m2ts", "ifo", "vob", "evo"}
+DISC_EXTS = frozenset(("bdmv", "m2ts", "ifo", "vob", "evo"))
 
 
 class Cat(Enum):
@@ -67,11 +67,13 @@ class Categorizer:
     def disc_match(self):
         """Regex to extract the top-level directory of a BD/DVD tree."""
         return re.compile(
-            r"(.+?/)(?:bdmv/(?:index\.bdmv|stream/[^/]+\.m2ts)|(?:video-ts/)?(?:vts(?:-\d+)+|video-ts)\.(?:ifo|vob)|hvdvd-ts/[^/]+\.evo)",
+            r"(.+?/)(?:bdmv/(?:index\.bdmv|stream/[^/]+\.m2ts)|"
+            r"(?:video-ts/)?(?:vts(?:-\d+)+|video-ts)\.(?:ifo|vob)|"
+            r"hvdvd-ts/[^/]+\.evo)",
             re.ASCII,
         ).fullmatch
 
-    def infer(self, files: List[dict]) -> Cat:
+    def infer(self, files: List[dict]):
         """
         Categorize the torrent based on the `files` list returned by the
         Transmission "torrent-get" API.
@@ -80,7 +82,7 @@ class Categorizer:
             raise ValueError("Empty file list.")
 
         # Step 1: Check torrent name for AV
-        if self._test_torrent_name(files) == Cat.AV:
+        if self._test_torrent_name(files):
             return Cat.AV
 
         # Step 2: Process files and categorize by types
@@ -91,47 +93,48 @@ class Categorizer:
             return Cat.AV
 
         # Step 4: Now we rule out AV, score remaining categories
-        scores = {
-            Cat.TV_SHOWS: 0,
-            Cat.MOVIES: 0,
-            Cat.MUSIC: type_bytes["audio"],
-            Cat.DEFAULT: type_bytes["other"],
-        }
+        score_tv = score_mv = 0
+        score_ms = type_bytes["audio"]
+        score_df = type_bytes["other"]
 
         # Classify videos into TV_SHOWS or MOVIES. If any video file matches TV
         # regex, classify all as TV_SHOWS. Otherwise, sub-classify by sequences.
         if _test_paths(self.tv_test, videos):
-            scores[Cat.TV_SHOWS] += type_bytes["video"]
+            score_tv += type_bytes["video"]
         else:
             size = sum(videos[p] for p in _find_sequence(videos))  # sequence size
-            scores[Cat.TV_SHOWS] += size
-            scores[Cat.MOVIES] += type_bytes["video"] - size
+            score_tv += size
+            score_mv += type_bytes["video"] - size
 
         # Sub-classify archives into TV_SHOWS, MOVIES, or DEFAULT
         for path, size in archives.items():
             segments = path[0].split(sep)
             if any(map(self.tv_test, segments)):
-                scores[Cat.TV_SHOWS] += size
-            elif any(map(self.mv_test, segments)):
-                scores[Cat.MOVIES] += size
+                score_tv += size
             elif path[1] == "iso" and size >= self.BD_ISO_MIN:
-                scores[Cat.MOVIES] += size
+                score_mv += size
+            elif any(map(self.mv_test, segments)):
+                score_mv += size
             else:
-                scores[Cat.DEFAULT] += size
+                score_df += size
 
-        # Step 5: Return the category with the highest score
-        return max(scores, key=scores.get)
+        # Step 5: Final decision based on scores
+        # If video is dominant, decide between TV_SHOWS and MOVIES. Otherwise,
+        # the winner must be MUSIC or DEFAULT.
+        video_total = score_tv + score_mv
+        if video_total >= score_ms and video_total >= score_df:
+            return Cat.TV_SHOWS if score_tv >= score_mv else Cat.MOVIES
+        return Cat.MUSIC if score_ms >= score_df else Cat.DEFAULT
 
     def _test_torrent_name(self, files: List[dict]):
         """
-        Classify the torrent by its name. Return None if no match.
+        Test the torrent name against the AV regex.
         """
         # Torrent name is the first path segment of any file: the top-level
         # directory of a multi-file torrent, or the single file name otherwise.
-        name = files[0]["name"].lstrip(sep).partition(sep)
-        name = name[0] if name[1] else splitext(name[0])[0]  # test the stem
-        if self.av_test(normstr(name)):
-            return Cat.AV
+        parts = files[0]["name"].lstrip(sep).partition(sep)
+        name = parts[0] if parts[1] else splitext(parts[0])[0]  # test the stem
+        return self.av_test(normstr(name))
 
     def _prepare_filelist(self, files) -> Tuple[List[Tuple[str, str, int]], List[str]]:
         """
@@ -153,7 +156,7 @@ class Categorizer:
             if ext in d_exts:
                 m = self.disc_match(path)
                 if m:
-                    discs.add(m[1])  # directory with trailing slash
+                    discs.add(m[1])  # disc_root with trailing slash
 
         return filelist, sorted(discs, key=len, reverse=True)
 
