@@ -51,7 +51,7 @@ After enabling RPC and scripts, run `torrent-done.py` once manually to generate 
 {
   "log-level": "INFO",
   "public-upload-limited": false,
-  "public-upload-limit-kbps": 20,
+  "public-upload-limit-kbps": 50,
   "remove-public-on-complete": false,
   "rpc-path": "/transmission/rpc",
   "rpc-port": 9091,

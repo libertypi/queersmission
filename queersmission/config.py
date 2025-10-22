@@ -24,7 +24,7 @@ def _port(val: int):
 def _abs_path(val: str):
     """Normalize and validate an absolute path. Empty string is allowed."""
     if not val:
-        return ""
+        return val
     if not op.isabs(val):
         raise ValueError(f'Path is not absolute: "{val}".')
     return op.normpath(val)

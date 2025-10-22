@@ -46,6 +46,7 @@ def cached_re_test(key: str, *, flags: int = re.ASCII, maxsize: int = 512):
 class Categorizer:
     """Categorize torrents based on their file lists."""
 
+    BD_ISO_MIN = 22548578304  # 21 GiB
     NAME_BONUS = 0.3
 
     def __init__(self, patternfile: Optional[str] = None) -> None:
@@ -110,10 +111,12 @@ class Categorizer:
 
         # Sub-classify archives into TV_SHOWS, MOVIES, or DEFAULT
         for path, size in archives.items():
-            path = path[0].split(sep)
-            if any(map(self.tv_test, path)):
+            segments = path[0].split(sep)
+            if any(map(self.tv_test, segments)):
                 scores[Cat.TV_SHOWS] += size
-            elif any(map(self.mv_test, path)):
+            elif any(map(self.mv_test, segments)):
+                scores[Cat.MOVIES] += size
+            elif path[1] == "iso" and size >= self.BD_ISO_MIN:
                 scores[Cat.MOVIES] += size
             else:
                 scores[Cat.DEFAULT] += size
