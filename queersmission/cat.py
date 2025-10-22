@@ -47,7 +47,6 @@ class Categorizer:
     """Categorize torrents based on their file lists."""
 
     BD_ISO_MIN = 22548578304  # 21 GiB
-    NAME_BONUS = 0.3
 
     def __init__(self, patternfile: Optional[str] = None) -> None:
 
@@ -80,9 +79,8 @@ class Categorizer:
         if not files:
             raise ValueError("Empty file list.")
 
-        # Step 1: Classify by torrent name
-        name_cat = self._classify_torrent_name(files)
-        if name_cat == Cat.AV:
+        # Step 1: Check torrent name for AV
+        if self._test_torrent_name(files) == Cat.AV:
             return Cat.AV
 
         # Step 2: Process files and categorize by types
@@ -121,11 +119,7 @@ class Categorizer:
             else:
                 scores[Cat.DEFAULT] += size
 
-        # Step 5: Torrent name bonus
-        if name_cat is not None:
-            scores[name_cat] += sum(type_bytes.values()) * self.NAME_BONUS
-
-        # Step 6: Return the category with the highest score
+        # Step 5: Return the category with the highest score
         return max(scores, key=scores.get)
 
     def _process_files(self, files):
@@ -145,16 +139,13 @@ class Categorizer:
                 # Collapse the whole BD/DVD tree into a single video entry.
                 disc_root = next(filter(root.startswith, discs), None)
                 if disc_root is not None:
-                    type_bytes["video"] += size
                     videos[disc_root[:-1], ""] += size  # remove trailing slash
                     continue
 
             if ext in self.video_exts:
-                type_bytes["video"] += size
                 videos[root, ext] += size
 
             elif ext in self.archive_exts:
-                type_bytes["archive"] += size
                 archives[root, ext] += size
 
             elif ext in self.audio_exts:
@@ -163,7 +154,10 @@ class Categorizer:
             else:
                 type_bytes["other"] += size
 
-        return (type_bytes, self._drop_noise(videos), archives)
+        type_bytes["video"] = sum(videos.values())
+        type_bytes["archive"] = sum(archives.values())
+
+        return type_bytes, self._drop_noise(videos), archives
 
     def _prepare_filelist(self, files) -> Tuple[List[Tuple[str, str, int]], List[str]]:
         """
@@ -202,7 +196,7 @@ class Categorizer:
         threshold = min(max(path_bytes.values()) // 20, 52428800)
         return {k: v for k, v in path_bytes.items() if v >= threshold}
 
-    def _classify_torrent_name(self, files: List[dict]):
+    def _test_torrent_name(self, files: List[dict]):
         """
         Classify the torrent by its name. Return None if no match.
         """
@@ -210,13 +204,8 @@ class Categorizer:
         # directory of a multi-file torrent, or the single file name otherwise.
         name = files[0]["name"].lstrip(sep).partition(sep)
         name = name[0] if name[1] else splitext(name[0])[0]  # test the stem
-        name = normstr(name)
-        if self.av_test(name):
+        if self.av_test(normstr(name)):
             return Cat.AV
-        if self.tv_test(name):
-            return Cat.TV_SHOWS
-        if self.mv_test(name):
-            return Cat.MOVIES
 
 
 def _test_paths(method, paths: Iterable[Tuple[str, str]]) -> bool:
