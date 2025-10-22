@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 """
 Pattern Builder - Generate patterns.json for Queersmission
 ==========================================================
@@ -40,20 +39,19 @@ entry_dir = script_dir.parent
 
 # fmt: off
 VIDEO_EXTS = {
-    "3g2", "3gp", "3gp2", "3gpp", "amv", "asf", "avi", "divx", "dpg", "drc",
-    "evo", "f4a", "f4b", "f4p", "f4v", "flv", "ifo", "k3g", "m1v", "m2t",
-    "m2ts", "m2v", "m4p", "m4v", "mkv", "mov", "mp2v", "mp4", "mpe", "mpeg",
-    "mpeg2", "mpg", "mpv", "mpv2", "mts", "mxf", "nsr", "nsv", "ogm", "ogv",
-    "ogx", "qt", "ram", "rm", "rmvb", "rpm", "skm", "svi", "swf", "tp", "tpr",
-    "ts", "vid", "viv", "vob", "webm", "wm", "wmp", "wmv", "wtv"
+    "3g2", "3gp", "3gp2", "3gpp", "amv", "asf", "avi", "divx", "drc", "evo",
+    "f4p", "f4v", "flv", "ifo", "k3g", "m1v", "m2t", "m2ts", "m2v", "m4v",
+    "mkv", "mov", "mp2v", "mp4", "mpe", "mpeg", "mpeg2", "mpg", "mpv", "mpv2",
+    "mts", "mxf", "nsv", "ogm", "ogv", "qt", "ram", "rm", "rmvb", "svi", "swf",
+    "tp", "tpr", "ts", "viv", "vob", "webm", "wm", "wmp", "wmv", "wtv"
 }
 AUDIO_EXTS = {
-    "aac", "ac3", "aif", "aifc", "aiff", "alac", "amr", "ape", "caf", "cda",
-    "cue", "dsf", "dts", "dtshd", "eac3", "flac", "m1a", "m2a", "m3u", "m3u8",
-    "m4a", "m4b", "mka", "mod", "mp2", "mp3", "mpa", "mpc", "oga", "ogg",
-    "opus", "pls", "ra", "tak", "tta", "wav", "wax", "wma", "wv", "xspf"
+    "aac", "ac3", "aif", "aifc", "aiff", "alac", "ape", "cda", "cue", "dff",
+    "dsf", "dts", "dtshd", "eac3", "flac", "m1a", "m2a", "m3u", "m3u8", "m4a",
+    "m4b", "mka", "mod", "mp2", "mp3", "mpa", "mpc", "oga", "ogg", "opus",
+    "pls", "ra", "tak", "tta", "wav", "wax", "wma", "wv", "xspf"
 }
-ARCHIVE_EXTENSIONS = {"7z", "bin", "img", "iso", "mdf", "mds", "nrg", "rar", "zip"}
+ARCHIVE_EXTS = {"7z", "bin", "img", "iso", "mdf", "mds", "nrg", "rar", "zip"}
 MOVIE_REGEX = r"\b(?:(10|12|8)bit|(10|4)80[ip]|(21|3)60p|(43|7)20p|1440p|4k|576p|8k|[hx]26[45]|atmos|av[1c]|b([dr]rip|lu[\s-]?ray)|dovi|dts|dvd(5|9|rip|scr)|hd(r|r10|tv)|hevc|mpeg2?|ntsc|remux|truehd|uhd|web[\s-]?(dl|rip)|xvid)\b"
 TV_REGEX = r"\b(?:s(0[1-9]|[1-3]\d)|ep(0[1-9]|[1-9]\d|1\d\d)|s(0?[1-9]|[1-3]\d)[\s.-]?e(0?[1-9]|[1-9]\d|1\d\d))\b"
 AV_TEMPLATE = r"\b(?:{keywords}|\d{{0,5}}(?:{prefixes})-?\d{{2,8}}(?:f?hd|ch|ai|[a-z])?)\b"
@@ -76,6 +74,13 @@ def parse_args():
         type=int,
         default=5000,
         help="Maximum number of prefixes to draw from data (default: %(default)s).",
+    )
+    parser.add_argument(
+        "-p",
+        dest="two_char_pct",
+        type=float,
+        default=0.5,
+        help="Percentage threshold for two-character prefixes (default: %(default)s).",
     )
     return parser.parse_args()
 
@@ -120,7 +125,8 @@ def _trim_two_chars(data: list, statistics: dict, max_items: int, pct: float):
     `pct` percentage of the most frequent prefixes, up to `max_items`. `data` is
     assumed to be sorted by frequency in descending order.
     """
-    assert 0 <= pct <= 1
+    if not 0 <= pct <= 1:
+        raise ValueError("pct must be between 0 and 1.")
     if not data or pct == 1.0:
         return data
     k = min(max_items, len(data))
@@ -135,6 +141,7 @@ def build_regex(
     max_items: int,
     ex_words: set[str] | None = None,
     ex_regex: str | None = None,
+    two_char_pct: float | None = None,
 ) -> str:
     """
     Build regex for 'keywords' or 'prefixes' from statistical data.
@@ -146,6 +153,7 @@ def build_regex(
         max_items: maximum number of items to include
         ex_words: set of words to exclude
         ex_regex: regex pattern to filter out data
+        two_char_pct: percentage threshold for two-character prefixes
     """
     if max_items <= 0:
         raise ValueError("max_items must be greater than 0.")
@@ -162,8 +170,8 @@ def build_regex(
     )
 
     # Set a higher bar for two-character prefixes
-    if name == "prefixes":
-        data = _trim_two_chars(data, statistics, max_items, pct=0.3)
+    if name == "prefixes" and two_char_pct is not None:
+        data = _trim_two_chars(data, statistics, max_items, two_char_pct)
 
     # Inclusion and exclusion pattern files
     include = read_pattern_file(f"{name}-include.txt")
@@ -230,7 +238,7 @@ def validation(av_regex: str):
         except re.error as e:
             raise ValueError(f"Invalid regex: {r}\n{e}")
 
-    all_exts = (VIDEO_EXTS, AUDIO_EXTS, ARCHIVE_EXTENSIONS)
+    all_exts = (VIDEO_EXTS, AUDIO_EXTS, ARCHIVE_EXTS)
     if not all(all_exts):
         raise ValueError("One of the extension sets is empty.")
     if not all(s.lower() == s and s.isalnum() for s in chain.from_iterable(all_exts)):
@@ -269,6 +277,7 @@ def main():
         statistics=data,
         max_items=args.max_prefixes,
         ex_regex=keywords,
+        two_char_pct=args.two_char_pct,
     )
     # Construct
     av_regex = AV_TEMPLATE.format(keywords=keywords, prefixes=prefixes)
@@ -280,7 +289,7 @@ def main():
     result = {
         "video_exts": sorted(VIDEO_EXTS),
         "audio_exts": sorted(AUDIO_EXTS),
-        "archive_exts": sorted(ARCHIVE_EXTENSIONS),
+        "archive_exts": sorted(ARCHIVE_EXTS),
         "movie_regex": MOVIE_REGEX,
         "tv_regex": TV_REGEX,
         "av_regex": av_regex,

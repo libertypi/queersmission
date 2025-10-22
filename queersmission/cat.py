@@ -79,18 +79,14 @@ class Categorizer:
         if not files:
             raise ValueError("Empty file list.")
 
-        # Step 1: Check torrent name for AV
-        if self._test_torrent_name(files) == Cat.AV:
-            return Cat.AV
-
-        # Step 2: Process files and categorize by types
+        # Step 1: Process files and categorize by types
         type_bytes, videos, archives = self._process_files(files)
 
-        # Step 3: Check if any video or archive file matches AV
+        # Step 2: Check if any video or archive file matches AV
         if _test_paths(self.av_test, videos) or _test_paths(self.av_test, archives):
             return Cat.AV
 
-        # Step 4: Now we rule out AV, score remaining categories
+        # Step 3: Now we rule out AV, score remaining categories
         scores = {
             Cat.TV_SHOWS: 0,
             Cat.MOVIES: 0,
@@ -119,8 +115,32 @@ class Categorizer:
             else:
                 scores[Cat.DEFAULT] += size
 
-        # Step 5: Return the category with the highest score
+        # Step 4: Return the category with the highest score
         return max(scores, key=scores.get)
+
+    def _prepare_filelist(self, files) -> Tuple[List[Tuple[str, str, int]], List[str]]:
+        """
+        Prepare the file list by normalizing paths and detecting video disc
+        trees. Return a list of (root, ext, size) and a list of disc image
+        directories (with trailing slash).
+        """
+        filelist = []
+        discs = set()
+        d_exts = DISC_EXTS
+
+        for file in files:
+            # All paths are normalized from this point on (same as normstr()).
+            path = file["name"].replace("_", "-").lower()
+            root, ext = splitext(path)
+            ext = ext[1:]  # strip leading dot
+            filelist.append((root, ext, file["length"]))
+
+            if ext in d_exts:
+                m = self.disc_match(path)
+                if m:
+                    discs.add(m[1])  # directory with trailing slash
+
+        return filelist, sorted(discs, key=len, reverse=True)
 
     def _process_files(self, files):
         """
@@ -159,30 +179,6 @@ class Categorizer:
 
         return type_bytes, self._drop_noise(videos), archives
 
-    def _prepare_filelist(self, files) -> Tuple[List[Tuple[str, str, int]], List[str]]:
-        """
-        Prepare the file list by normalizing paths and detecting video disc
-        trees. Return a list of (root, ext, size) and a list of disc image
-        directories (with trailing slash).
-        """
-        filelist = []
-        discs = set()
-        d_exts = DISC_EXTS
-
-        for file in files:
-            # All paths are normalized from this point on (same as normstr()).
-            path = file["name"].replace("_", "-").lower()
-            root, ext = splitext(path)
-            ext = ext[1:]  # strip leading dot
-            filelist.append((root, ext, file["length"]))
-
-            if ext in d_exts:
-                m = self.disc_match(path)
-                if m:
-                    discs.add(m[1])  # directory with trailing slash
-
-        return filelist, sorted(discs, key=len, reverse=True)
-
     @staticmethod
     def _drop_noise(path_bytes: Dict[Tuple[str, str], int]):
         """
@@ -195,17 +191,6 @@ class Categorizer:
         # 5% of the largest video file, but no more than 50 MiB
         threshold = min(max(path_bytes.values()) // 20, 52428800)
         return {k: v for k, v in path_bytes.items() if v >= threshold}
-
-    def _test_torrent_name(self, files: List[dict]):
-        """
-        Classify the torrent by its name. Return None if no match.
-        """
-        # Torrent name is the first path segment of any file: the top-level
-        # directory of a multi-file torrent, or the single file name otherwise.
-        name = files[0]["name"].lstrip(sep).partition(sep)
-        name = name[0] if name[1] else splitext(name[0])[0]  # test the stem
-        if self.av_test(normstr(name)):
-            return Cat.AV
 
 
 def _test_paths(method, paths: Iterable[Tuple[str, str]]) -> bool:
