@@ -79,14 +79,18 @@ class Categorizer:
         if not files:
             raise ValueError("Empty file list.")
 
-        # Step 1: Process files and categorize by types
+        # Step 1: Check torrent name for AV
+        if self._test_torrent_name(files) == Cat.AV:
+            return Cat.AV
+
+        # Step 2: Process files and categorize by types
         type_bytes, videos, archives = self._process_files(files)
 
-        # Step 2: Check if any video or archive file matches AV
+        # Step 3: Check if any video or archive file matches AV
         if _test_paths(self.av_test, videos) or _test_paths(self.av_test, archives):
             return Cat.AV
 
-        # Step 3: Now we rule out AV, score remaining categories
+        # Step 4: Now we rule out AV, score remaining categories
         scores = {
             Cat.TV_SHOWS: 0,
             Cat.MOVIES: 0,
@@ -115,8 +119,19 @@ class Categorizer:
             else:
                 scores[Cat.DEFAULT] += size
 
-        # Step 4: Return the category with the highest score
+        # Step 5: Return the category with the highest score
         return max(scores, key=scores.get)
+
+    def _test_torrent_name(self, files: List[dict]):
+        """
+        Classify the torrent by its name. Return None if no match.
+        """
+        # Torrent name is the first path segment of any file: the top-level
+        # directory of a multi-file torrent, or the single file name otherwise.
+        name = files[0]["name"].lstrip(sep).partition(sep)
+        name = name[0] if name[1] else splitext(name[0])[0]  # test the stem
+        if self.av_test(normstr(name)):
+            return Cat.AV
 
     def _prepare_filelist(self, files) -> Tuple[List[Tuple[str, str, int]], List[str]]:
         """

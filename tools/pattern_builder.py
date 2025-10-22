@@ -34,16 +34,17 @@ from pathlib import Path
 
 from regen import Regen
 
-script_dir = Path(__file__).resolve().parent
+script_dir = Path(__file__).parent.resolve()
 entry_dir = script_dir.parent
 
 # fmt: off
 VIDEO_EXTS = {
     "3g2", "3gp", "3gp2", "3gpp", "amv", "asf", "avi", "divx", "drc", "evo",
-    "f4p", "f4v", "flv", "ifo", "k3g", "m1v", "m2t", "m2ts", "m2v", "m4v",
-    "mkv", "mov", "mp2v", "mp4", "mpe", "mpeg", "mpeg2", "mpg", "mpv", "mpv2",
-    "mts", "mxf", "nsv", "ogm", "ogv", "qt", "ram", "rm", "rmvb", "svi", "swf",
-    "tp", "tpr", "ts", "viv", "vob", "webm", "wm", "wmp", "wmv", "wtv"
+    "f4p", "f4v", "flv", "hevc", "ifo", "k3g", "m1v", "m2t", "m2ts", "m2v",
+    "m4v", "mkv", "mov", "mp2v", "mp4", "mpe", "mpeg", "mpeg2", "mpg", "mpv",
+    "mpv2", "mts", "mxf", "nsv", "ogm", "ogv", "qt", "ram", "rm", "rmvb",
+    "svi", "swf", "tp", "tpr", "ts", "viv", "vob", "webm", "wm", "wmp", "wmv",
+    "wtv"
 }
 AUDIO_EXTS = {
     "aac", "ac3", "aif", "aifc", "aiff", "alac", "ape", "cda", "cue", "dff",
