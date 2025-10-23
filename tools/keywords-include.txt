@@ -1,6 +1,6 @@
 ((1[0-2]|0[1-9])(3[01]|[12][0-9]|0[1-9])[0-3][0-9]|[0-3][0-9](1[0-2]|0[1-9])(3[01]|[12][0-9]|0[1-9]))-[0-9]{2,4}
 (1[0-5]|09)(1[0-2]|0[1-9])(3[01]|[12][0-9]|0[1-9])-[a-z]{3,7}
-(5k|amateur|wow|girlsdo|teensdo|virtualreal|western)porn
+(5k|amateur|bit|wow|girlsdo|teensdo|virtualreal|western)porn
 (atk|tonights|cruel)[ -]?girlfriends?
 (bigbutt|milf|pornstar|teen)slikeitbig
 (erotica|hard)x
@@ -24,6 +24,7 @@ anal(ized|beauty|teenangels|brats)?
 atk(premium|exotics|galleria|gfs)
 av9898
 avs-museum
+badoink(vr)?
 bang(bros[a-z]*|bus|pov)
 black(ed(raw)?|sonblondes)
 blow(bang|[ -]?jobs?|pass)
@@ -36,6 +37,7 @@ czech(av|casting|massage|solarium|toilets|vr)
 defloration
 devils[ -]?film
 digital[ -]?playground
+dmm
 dorcel[ -]?club
 evil[ -]?angel
 exxxtra[ -]?small

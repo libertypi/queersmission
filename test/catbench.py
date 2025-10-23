@@ -10,6 +10,7 @@ David P.
 """
 
 import argparse
+import json
 import re
 import sqlite3
 import sys
@@ -81,13 +82,14 @@ MTEAM_TO_CAT = {
 
 class CatBench:
 
-    def __init__(self, db_path: Path):
+    def __init__(self, db_path: Path, store_json: bool = False):
 
         self.db_path = db_path
-        self.conn = sqlite3.connect(db_path.as_uri() + "?mode=ro", uri=True)
+        self.store_json = store_json
 
-        self.logpath = Path(__file__).with_suffix(".txt")
-        self.logfd = self.logpath.open("w", encoding="utf-8")
+        p = Path(__file__)
+        self.logpath = p.with_name(p.stem + "_log.txt")
+        self.jsonpath = p.with_name(p.stem + "_log.json")
 
         self.categorizer = Categorizer()
 
@@ -96,7 +98,10 @@ class CatBench:
             self.categorizer._patterns["av_regex"], re.ASCII
         ).search
 
+        self.conn = sqlite3.connect(db_path.as_uri() + "?mode=ro", uri=True)
         self.mt_cats = dict(self.conn.execute("SELECT id, nameCht FROM categories"))
+
+        self.logfd = self.logpath.open("w", encoding="utf-8")
 
     def av_search(self, s: str):
         return self._av_search(normstr(s))
@@ -218,8 +223,10 @@ class CatBench:
 
         total = mismatch = 0
         elapsed_sum = 0.0
+        mismatch_files = []
         av_fp = defaultdict(list)
 
+        store_json = self.store_json
         mt_to_cat = MTEAM_TO_CAT
         cat_av = Cat.AV
         infer = self.categorizer.infer
@@ -267,6 +274,15 @@ class CatBench:
                     av_fp[m[0]].append(m.string)
                 else:
                     av_fp["- N/A -"].append(tname)
+
+            if store_json:
+                mismatch_files.append([f["name"] for f in files])
+
+        # Mismatches JSON log
+        if store_json:
+            with self.jsonpath.open("w", encoding="utf-8") as f:
+                json.dump(mismatch_files, f, ensure_ascii=False, separators=(",", ":"))
+            del mismatch_files
 
         # AV False Positives Summary
         av_fp_sum = self.write_av_summary(av_fp)
@@ -388,6 +404,12 @@ def parse_args():
         help="Largest ID to test.",
     )
     parser.add_argument(
+        "-j",
+        dest="store_json",
+        action="store_true",
+        help="Store mismatched files in JSON log.",
+    )
+    parser.add_argument(
         "-t",
         dest="test_string",
         type=str,
@@ -424,7 +446,7 @@ def test_string(s: str, bench: CatBench):
 
 def main():
     args = parse_args()
-    bench = CatBench(ensure_db_path(args.db_path))
+    bench = CatBench(ensure_db_path(args.db_path), args.store_json)
     try:
         if args.test_string is not None:
             if args.test_string:
