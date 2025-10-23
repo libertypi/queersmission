@@ -142,18 +142,18 @@ def process_torrent_done(
         client.torrent_set_location(tid, dest_dir, move=False)
 
 
-def main(torrent_added: bool, config_dir: str):
+def main(profile_path: str, torrent_added: bool):
     """
     Main entry point.
 
     Parameters:
-     - torrent_added (bool): The mode of operation. If True, the function is
-       triggered as 'script-torrent-added' to handle newly added torrents; if
-       False, it operates as 'script-torrent-done' to manage completed torrents.
-     - config_dir (str): The configuration directory.
+     - profile_path (str): The profile directory.
+     - torrent_added (bool): The mode of operation. If True, the function is run
+       as 'script-torrent-added'; if False, as 'script-torrent-done'.
     """
-    conf = config.parse(op.join(config_dir, "config.json"))
-    init_logger(op.join(config_dir, "logfile.log"), conf["log-level"])
+    profile_path = op.abspath(profile_path)
+    conf = config.parse(op.join(profile_path, "config.json"))
+    init_logger(op.join(profile_path, "logfile.log"), conf["log-level"])
     tid = os.environ.get("TR_TORRENT_ID")
 
     flock = FileLocker(op.join(tempfile.gettempdir(), PKG_NAME + ".lock"))

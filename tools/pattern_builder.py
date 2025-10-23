@@ -19,7 +19,7 @@ Data Files:
 - keywords-include.txt: Keywords to include in the regex.
 - keywords-exclude.txt: Keywords to exclude from the regex.
 
-Requirements:
+Requirement:
 --------------
 - regen (https://github.com/libertypi/regen)
 
