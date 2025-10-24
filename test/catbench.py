@@ -115,93 +115,101 @@ class CatBench:
             )
 
     @staticmethod
-    def construct_query(
+    def _construct_query(
         ids: list[int] | None,
         max_items: int | None,
-        start_id: int | None,
-        end_id: int | None,
-    ) -> tuple[tuple[str, list], tuple[str, list]]:
-
+        id_lo: int | None,
+        id_hi: int | None,
+        in_mt_cats: list[int] | None,
+        ex_mt_cats: list[int] | None,
+    ):
+        """Construct SQL queries for torrents and files based on filters."""
         if ids:
-            ph = ",".join("?" * len(ids))
-            tor_sql = f"""
+            t_sql = f"""
                 SELECT id, category, name, length
                 FROM torrents
-                WHERE id IN ({ph})
+                WHERE id IN ({_ph(ids)})
                 ORDER BY id DESC
-            """
-            fil_sql = f"""
+            """.strip()
+            f_sql = f"""
                 SELECT id, path, length
                 FROM files
-                WHERE id IN ({ph})
+                WHERE id IN ({_ph(ids)})
                 ORDER BY id DESC
-            """
-            return (tor_sql, ids), (fil_sql, ids)
+            """.strip()
+            return t_sql, ids, f_sql, ids
 
         where_parts = []
-        tor_params = []
-        fil_params = []
+        t_params = []
 
-        if start_id is not None:
-            where_parts.append("id >= ?")
-            tor_params.append(start_id)
-            fil_params.append(start_id)
-        if end_id is not None:
-            where_parts.append("id <= ?")
-            tor_params.append(end_id)
-            fil_params.append(end_id)
+        if id_lo is not None:
+            where_parts.append("t.id >= ?")
+            t_params.append(id_lo)
+        if id_hi is not None:
+            where_parts.append("t.id <= ?")
+            t_params.append(id_hi)
+        if in_mt_cats:
+            where_parts.append(f"t.category IN ({_ph(in_mt_cats)})")
+            t_params.extend(in_mt_cats)
+        if ex_mt_cats:
+            where_parts.append(f"t.category NOT IN ({_ph(ex_mt_cats)})")
+            t_params.extend(ex_mt_cats)
 
         where_sql = ("WHERE " + " AND ".join(where_parts)) if where_parts else ""
+        f_params = t_params.copy()
 
         if max_items and max_items > 0:
-            tor_limit_sql = " LIMIT ?"
-            tor_params.append(max_items)
+            limit_sql = "LIMIT ?"
+            t_params.append(max_items)
         else:
-            tor_limit_sql = ""
+            limit_sql = ""
 
-        tor_sql = f"""
+        t_sql = f"""
             SELECT id, category, name, length
-            FROM torrents
-            {where_sql}
-            ORDER BY id DESC{tor_limit_sql}
-        """
-        fil_sql = f"""
-            SELECT id, path, length
-            FROM files
+            FROM torrents AS t
             {where_sql}
             ORDER BY id DESC
-        """
-
-        return (tor_sql, tor_params), (fil_sql, fil_params)
+            {limit_sql}
+        """.strip()
+        f_sql = f"""
+            SELECT f.id, f.path, f.length
+            FROM files AS f
+            JOIN torrents AS t ON f.id = t.id
+            {where_sql}
+            ORDER BY f.id DESC
+        """.strip()
+        return t_sql, t_params, f_sql, f_params
 
     def iter_torrents(
         self,
         ids: list[int] | None,
         max_items: int | None,
-        start_id: int | None,
-        end_id: int | None,
+        id_lo: int | None,
+        id_hi: int | None,
+        in_mt_cats: list[int] | None,
+        ex_mt_cats: list[int] | None,
     ):
-        """Iterate over MTEAM torrents. Yields (torrent_id, category_id, name, files)."""
-
-        tor_sqls, fil_sqls = self.construct_query(
+        """Iterate over MTEAM torrents. Yields (tid, mt_id, name, files)."""
+        t_sql, t_params, f_sql, f_params = self._construct_query(
             ids=ids,
             max_items=max_items,
-            start_id=start_id,
-            end_id=end_id,
+            id_lo=id_lo,
+            id_hi=id_hi,
+            in_mt_cats=in_mt_cats,
+            ex_mt_cats=ex_mt_cats,
         )
-        ffetch = self.conn.execute(*fil_sqls).fetchone
+        ffetch = self.conn.execute(f_sql, f_params).fetchone
         frow = ffetch()
 
-        for tid, mt_id, tname, tlen in self.conn.execute(*tor_sqls):
-            files = []
-
+        for tid, mt_id, name, tlen in self.conn.execute(t_sql, t_params):
             # Advance file cursor to current torrent ID
             while frow and frow[0] > tid:
                 frow = ffetch()
 
             # Collect all files for this torrent
+            files = []
             while frow and frow[0] == tid:
-                files.append({"name": f"{tname}/{frow[1]}", "length": frow[2]})
+                files.append({"name": f"{name}/{frow[1]}", "length": frow[2]})
                 frow = ffetch()
 
             if files:
@@ -209,16 +217,18 @@ class CatBench:
                 files.reverse()
             else:
                 # Single-file torrent
-                files.append({"name": tname, "length": tlen})
+                files.append({"name": name, "length": tlen})
 
-            yield tid, mt_id, tname, files
+            yield tid, mt_id, name, files
 
     def run(
         self,
         ids: list[int] | None,
         max_items: int | None,
-        start_id: int | None,
-        end_id: int | None,
+        id_lo: int | None,
+        id_hi: int | None,
+        in_mt_cats: list[int] | None,
+        ex_mt_cats: list[int] | None,
     ):
 
         total = mismatch = 0
@@ -236,11 +246,13 @@ class CatBench:
         perf = time.perf_counter
         wall_start = perf()
 
-        for tid, mt_id, tname, files in self.iter_torrents(
+        for tid, mt_id, name, files in self.iter_torrents(
             ids=ids,
             max_items=max_items,
-            start_id=start_id,
-            end_id=end_id,
+            id_lo=id_lo,
+            id_hi=id_hi,
+            in_mt_cats=in_mt_cats,
+            ex_mt_cats=ex_mt_cats,
         ):
             total += 1
             t0 = perf()
@@ -259,12 +271,12 @@ class CatBench:
                 mt_id=mt_id,
                 expected=expected,
                 inferred=inferred,
-                tname=tname,
+                name=name,
                 files=files,
             )
 
             if inferred == cat_av:
-                m = self.av_search(tname)
+                m = self.av_search(name)
                 if not m:
                     for f in files:
                         m = self.av_search(f["name"])
@@ -273,7 +285,7 @@ class CatBench:
                 if m:
                     av_fp[m[0]].append(m.string)
                 else:
-                    av_fp["- N/A -"].append(tname)
+                    av_fp["- N/A -"].append(name)
 
             if store_json:
                 mismatch_files.append([f["name"] for f in files])
@@ -321,7 +333,7 @@ class CatBench:
         mt_id: int,
         expected: tuple,
         inferred: Cat,
-        tname: str,
+        name: str,
         files: list,
         limit: int = 20,
     ):
@@ -333,7 +345,7 @@ class CatBench:
         write(f1("MT-TEAM", f"{self.mt_cats.get(mt_id, 'Unknown')} [{mt_id}]"))
         write(f1("EXPECTED", "/".join(e.name for e in expected)))
         write(f1("INFERRED", inferred.name))
-        write(f1("NAME", tname))
+        write(f1("NAME", name))
 
         # List files (up to `limit`)
         it = islice((f"{f['name']} [{humansize(f['length'])}]" for f in files), limit)
@@ -352,7 +364,7 @@ class CatBench:
             return 0
 
         entries = sorted(
-            ((m, len(names), names) for m, names in av_fp.items()),
+            ((m, len(paths), paths) for m, paths in av_fp.items()),
             key=lambda x: x[1],
             reverse=True,
         )
@@ -362,10 +374,10 @@ class CatBench:
         write = self.logfd.write
         write(f"---\n\nAV False Positives ({av_fp_sum}):\n\n")
 
-        for m, count, names in entries:
+        for m, count, paths in entries:
             write(f"{m:>{w}}: ({count} torrents)\n")
-            for n in names:
-                write(f'{" ":{w}}  {n}\n')
+            for p in paths:
+                write(f'{" ":{w}}  {p}\n')
 
         return av_fp_sum
 
@@ -374,40 +386,63 @@ class CatBench:
         self.logfd.close()
 
 
+def _ph(lst: list) -> str:
+    """Generate placeholder string for SQL IN clause."""
+    return ",".join("?" * len(lst))
+
+
 def parse_args():
+
     parser = argparse.ArgumentParser(
         description="Testing the Categorizer with M-Team data."
     )
-    parser.add_argument(
+
+    filters = parser.add_argument_group("filters")
+    filters.add_argument(
         "-i",
         dest="ids",
         nargs="+",
         type=int,
-        help="Specify IDs to test.",
+        help="Specify IDs to test (overwrite other filters).",
     )
-    parser.add_argument(
+    filters.add_argument(
         "-m",
         dest="max_items",
         type=int,
-        help="Maximum number of items to test.",
+        help="Maximum number of IDs to test.",
     )
-    parser.add_argument(
-        "-s",
-        dest="start_id",
+    filters.add_argument(
+        "-L",
+        dest="id_lo",
         type=int,
         help="Smallest ID to test.",
     )
-    parser.add_argument(
-        "-e",
-        dest="end_id",
+    filters.add_argument(
+        "-H",
+        dest="id_hi",
         type=int,
         help="Largest ID to test.",
     )
+    filters.add_argument(
+        "-I",
+        dest="in_mt_cats",
+        nargs="+",
+        type=int,
+        help="Include only these M-Team category IDs.",
+    )
+    filters.add_argument(
+        "-E",
+        dest="ex_mt_cats",
+        nargs="+",
+        type=int,
+        help="Exclude these M-Team category IDs.",
+    )
+
     parser.add_argument(
         "-j",
         dest="store_json",
         action="store_true",
-        help="Store mismatched files in JSON log.",
+        help="Store mismatched files in JSON.",
     )
     parser.add_argument(
         "-t",
@@ -462,8 +497,10 @@ def main():
             bench.run(
                 ids=args.ids,
                 max_items=args.max_items,
-                start_id=args.start_id,
-                end_id=args.end_id,
+                id_lo=args.id_lo,
+                id_hi=args.id_hi,
+                in_mt_cats=args.in_mt_cats,
+                ex_mt_cats=args.ex_mt_cats,
             )
     except Exception as e:
         sys.stderr.write(f"Error: {e}\n")
