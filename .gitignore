@@ -2,7 +2,7 @@
 profile/
 config*.json
 *.log
-catbench_log*
+test/catbench*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
