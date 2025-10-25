@@ -320,6 +320,18 @@ class TestFindSequence(unittest.TestCase):
         ]
         self.assertFalse(_find_sequence(paths))
 
+    def test_skips_cd_extras(self):
+        # Files with "cd1", "extras 02", etc. are ignored
+        paths = [
+            self.P("/show", "movie-cd1", "mkv"),
+            self.P("/show", "movie-cd2", "mkv"),
+            self.P("/show", "movie-cd3", "mkv"),
+            self.P("/show", "movie extras 02", "mkv"),
+            self.P("/show", "movie extras 03", "mkv"),
+            self.P("/show", "movie extras 04", "mkv"),
+        ]
+        self.assertFalse(_find_sequence(paths))
+
 
 if __name__ == "__main__":
     unittest.main()

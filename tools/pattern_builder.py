@@ -57,8 +57,9 @@ AUDIO_EXTS = {
     "pls", "ra", "tak", "tta", "wav", "wax", "wma", "wv", "xspf"
 }
 ARCHIVE_EXTS = {"7z", "img", "iso", "mdf", "mds", "nrg", "rar", "zip"}
-MOVIE_REGEX = r"\b(?:(10|12|8)bit|(10|4)80[ip]|(21|3)60p|(43|7)20p|1440p|4k|576p|8k|[hx]26[45]|atmos|av[1c]|b([dr]rip|lu[\s-]?ray)|dovi|dts|dvd(5|9|rip|scr)|hd(r|r10|tv)|hevc|mpeg2?|ntsc|remux|truehd|uhd|web[\s-]?(dl|rip)|xvid)\b"
 TV_REGEX = r"\b(?:s(0[1-9]|[1-3][0-9])|ep(0[1-9]|[1-9][0-9]|1[0-9]{2})|s(0?[1-9]|[1-3][0-9])[\s.-]?e(0?[1-9]|[1-9][0-9]|1[0-9]{2}))\b"
+MOVIE_REGEX = r"\b(?:(10|12|8)bit|(10|4)80[ip]|(21|3)60p|(43|7)20p|1440p|4k|576p|8k|[hx]26[45]|atmos|av[1c]|b([dr]rip|lu[\s-]?ray)|dovi|dts|dvd(5|9|rip|scr)|hd(r|r10|tv)|hevc|mpeg2?|ntsc|remux|truehd|uhd|web[\s-]?(dl|rip)|xvid)\b"
+MUSIC_REGEX = r"\b(?:sacd(iso)?|dsd(64|128|256|512|1024)?)\b"
 AV_TEMPLATE = r"\b(?:{keywords}|[0-9]{{0,5}}(?:{prefixes})-?[0-9]{{2,8}}(?:f?hd|ch|ai|[a-z])?)\b"
 # SOFTWARE_REGEX = r"\b(apk|deb|dmg|exe|msi|pkg|rpm|adobe|microsoft|windows|x(64|86)|(32|64)bit|v[0-9]+(\.[0-9]+)+)\b"
 # fmt: on
@@ -233,7 +234,7 @@ def build_regex(
 
 
 def validation(av_regex: str):
-    for r in (MOVIE_REGEX, TV_REGEX, av_regex):
+    for r in (MOVIE_REGEX, MUSIC_REGEX, TV_REGEX, av_regex):
         if not r:
             raise ValueError("One of the regex is empty.")
         if r.lower() != r or "_" in r:
@@ -296,6 +297,7 @@ def main():
         "audio_exts": sorted(AUDIO_EXTS),
         "archive_exts": sorted(ARCHIVE_EXTS),
         "movie_regex": MOVIE_REGEX,
+        "music_regex": MUSIC_REGEX,
         "tv_regex": TV_REGEX,
         "av_regex": av_regex,
     }

@@ -62,6 +62,7 @@ class Categorizer:
     av_test = cached_re_test("av_regex", maxsize=1024)
     tv_test = cached_re_test("tv_regex")
     mv_test = cached_re_test("movie_regex")
+    ms_test = cached_re_test("music_regex")
 
     @cached_property
     def disc_match(self):
@@ -106,7 +107,7 @@ class Categorizer:
             score_tv += size
             score_mv += type_bytes["video"] - size
 
-        # Sub-classify archives into TV_SHOWS, MOVIES, or DEFAULT
+        # Sub-classify archives
         for path, size in archives.items():
             segments = path[0].split(sep)
             if any(map(self.tv_test, segments)):
@@ -115,6 +116,8 @@ class Categorizer:
                 score_mv += size
             elif any(map(self.mv_test, segments)):
                 score_mv += size
+            elif any(map(self.ms_test, segments)):
+                score_ms += size
             else:
                 score_df += size
 
@@ -221,13 +224,18 @@ def _test_paths(method, paths: Iterable[Tuple[str, str]]) -> bool:
 def _find_sequence(paths: Collection[Tuple[str, str]]) -> Set[Tuple[str, str]]:
     """
     Given (root, ext) pairs, return all files in the same directory that belong
-    to a group that contains at least three consecutive numbers (1–99).
+    to a group that contains at least three consecutive numbers.
     """
     if len(paths) < 3:
         return set()
 
-    # 1 - 99
-    seq_finder = re.compile(r"(?<![0-9])(?:0?[1-9]|[1-9][0-9])(?![0-9])").finditer
+    # 1 - 199
+    seq_finder = re.compile(
+        r"(?<![0-9])(?:0{0,2}[1-9]|0?[1-9][0-9]|1[0-9]{2})(?![0-9])"
+    ).finditer
+    skip_name = re.compile(
+        r"\b(?:cd|dvd|dis[ck]|extras)\W*(?:0?[1-9]|[1-9][0-9])\b"
+    ).search
 
     group_bits = defaultdict(int)
     group_paths = defaultdict(list)
@@ -235,6 +243,8 @@ def _find_sequence(paths: Collection[Tuple[str, str]]) -> Set[Tuple[str, str]]:
         if ext in DISC_EXTS:  # skip stray disc fragments
             continue
         dirname, _, stem = root.rpartition(sep)
+        if skip_name(stem):  # skip cd1, extras 01, etc.
+            continue
         for m in seq_finder(stem):
             # Key: dirname, pre-digit part, post-digit part, and ext
             k = (dirname, stem[: m.start()], stem[m.end() :], ext)
