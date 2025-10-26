@@ -221,7 +221,7 @@ def check_ids(ids):
             if i >= 0:
                 continue
         elif isinstance(i, str):
-            if len(i) in (40, 64):  # SHA-1 or SHA-256
+            if len(i) == 40:  # SHA-1
                 try:
                     bytes.fromhex(i)
                     continue

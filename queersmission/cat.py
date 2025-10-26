@@ -28,7 +28,6 @@ def normstr(s: str) -> str:
 def cached_re_test(key: str, *, flags: int = re.ASCII, maxsize: int = 512):
     """
     Decorator to create a cached regex test method for the given pattern key.
-    Strings should be normalized with normstr() before testing.
     """
 
     def _factory(self):
@@ -124,8 +123,8 @@ class Categorizer:
         # Step 5: Final decision based on scores
         # If video is dominant, decide between TV_SHOWS and MOVIES. Otherwise,
         # the winner must be MUSIC or DEFAULT.
-        video_total = score_tv + score_mv
-        if video_total >= score_ms and video_total >= score_df:
+        video_sum = score_tv + score_mv
+        if video_sum >= score_ms and video_sum >= score_df:
             return Cat.TV_SHOWS if score_tv >= score_mv else Cat.MOVIES
         return Cat.MUSIC if score_ms >= score_df else Cat.DEFAULT
 
@@ -226,8 +225,9 @@ def _find_sequence(paths: Collection[Tuple[str, str]]) -> Set[Tuple[str, str]]:
     Given (root, ext) pairs, return all files in the same directory that belong
     to a group that contains at least three consecutive numbers.
     """
+    result = set()
     if len(paths) < 3:
-        return set()
+        return result
 
     # 1 - 199
     seq_finder = re.compile(
@@ -251,7 +251,6 @@ def _find_sequence(paths: Collection[Tuple[str, str]]) -> Set[Tuple[str, str]]:
             group_bits[k] |= 1 << int(m[0])
             group_paths[k].append((root, ext))
 
-    result = set()
     for k, bits in group_bits.items():
         # bits      = ...00111000
         # bits >> 1 = ...00011100

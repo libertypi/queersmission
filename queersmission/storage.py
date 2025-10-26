@@ -8,11 +8,6 @@ from . import logger
 from .client import Client, Torrent
 from .utils import humansize
 
-try:
-    removesuffix = str.removesuffix  # Python 3.9+
-except AttributeError:
-    removesuffix = lambda s, sf: s[: -len(sf)] if sf and s.endswith(sf) else s
-
 
 class StorageManager:
     """Manages storage space in Transmission's seed directory."""
@@ -72,8 +67,8 @@ class StorageManager:
         assert self.seed_dir_purge
 
         # Build a set of allowed first-level subdirs in seed_dir.
-        seed_dir = self.client.seed_dir
         allowed = set()
+        seed_dir = self.client.seed_dir
         for t in self.client.seed_dir_torrents.values():
             if t.downloadDir != seed_dir:
                 # Subdirectory: Find the first segment after seed_dir.
@@ -83,25 +78,31 @@ class StorageManager:
                     continue
             allowed.add(t.name)
 
+        total = 0
+        extras = []
         try:
             with os.scandir(self.client.seed_dir) as it:
-                entries = list(it)
-            extras = [
-                e
-                for e in entries
-                if e.name not in allowed
-                and not (removesuffix(e.name, ".part") in allowed and e.is_file())
-            ]
+                for e in it:
+                    total += 1
+                    if e.name in allowed:
+                        continue
+                    stem, ext = op.splitext(e.name)
+                    if ext.lower() == ".part" and stem in allowed:
+                        try:
+                            if e.is_file():
+                                continue
+                        except OSError as err:
+                            logger.error('Error checking "%s": %s', e.path, err)
+                            continue
+                    extras.append(e)
         except OSError as err:
             logger.error("Error scanning seed-dir: %s", err)
             return
 
-        # Safety check.
-        if extras and len(extras) == len(entries):
-            logger.warning("No allowed entry found in seed-dir; skipping cleanup.")
+        if extras and len(extras) == total:
+            logger.warning("Skipping seed-dir cleanup: refused to delete all files.")
             return
 
-        # Remove unallowed entries.
         for e in extras:
             logger.info("Cleanup seed-dir: %s", e.path)
             try:
