@@ -208,7 +208,7 @@ class Categorizer:
         if len(path_bytes) < 2:
             return path_bytes
 
-        # 5% of the largest video file, but no more than 50 MiB
+        # 5% of the largest file, but no more than 50 MiB
         threshold = min(max(path_bytes.values()) // 20, 52428800)
         return {k: v for k, v in path_bytes.items() if v >= threshold}
 
@@ -233,9 +233,7 @@ def _find_sequence(paths: Collection[Tuple[str, str]]) -> Set[Tuple[str, str]]:
     seq_finder = re.compile(
         r"(?<![0-9])(?:0{0,2}[1-9]|0?[1-9][0-9]|1[0-9]{2})(?![0-9])"
     ).finditer
-    skip_name = re.compile(
-        r"\b(?:cd|dvd|dis[ck]|extras)\W*(?:0?[1-9]|[1-9][0-9])\b"
-    ).search
+    skip_name = re.compile(r"\b(?:cd|dis[ck]|extras)\W*(?:0?[1-9]|[1-9][0-9])\b").search
 
     group_bits = defaultdict(int)
     group_paths = defaultdict(list)
