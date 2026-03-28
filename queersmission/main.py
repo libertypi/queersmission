@@ -89,7 +89,7 @@ def process_torrent_done(
     try:
         t = t[0]
     except IndexError:
-        raise ValueError(f"Torrent ID {tid} does not exist.")
+        raise ValueError(f"Torrent {tid} does not exist.")
     if t.percentDone < 1.0:
         raise ValueError(f'Torrent "{t.name}" (id={tid}) is not complete yet.')
 
@@ -183,37 +183,40 @@ def main(profile_path: str, torrent_added: bool):
             )
             storage.cleanup()
             storage.apply_quotas()
+            return
+
+        # Script is invoked by Transmission
+        logger.debug(
+            "Script-torrent-%s triggered with torrent ID: %s",
+            "added" if torrent_added else "done",
+            tid,
+        )
+        tid = int(tid)
+
+        if torrent_added:
+            if tid not in client.torrents:
+                raise ValueError(f"Torrent {tid} does not exist.")
+
+            # Set upload limit for public torrents
+            if conf["public-upload-limited"]:
+                set_public_up_limit(tid, client, conf["public-upload-limit-kbps"])
+
+            # Clear junk in seed_dir and watch_dir
+            storage.cleanup()
+
+            # If new torrent is in seed_dir, ensure free space
+            if tid in client.seed_dir_torrents:
+                storage.apply_quotas(tid, torrent_added=True)
 
         else:
-            # Script is invoked by Transmission
-            logger.debug(
-                "Script-torrent-%s triggered with torrent ID: %s",
-                "added" if torrent_added else "done",
-                tid,
+            # Process completed torrent
+            process_torrent_done(
+                tid=tid,
+                client=client,
+                storage=storage,
+                dests={c: conf[c.value] for c in Cat},
+                remove_public=conf["remove-public-on-complete"],
             )
-            tid = int(tid)
-
-            if torrent_added:
-                # Set upload limit for public torrents
-                if conf["public-upload-limited"]:
-                    set_public_up_limit(tid, client, conf["public-upload-limit-kbps"])
-
-                # Clear junk in seed_dir and watch_dir
-                storage.cleanup()
-
-                # If new torrent is in seed_dir, ensure free space
-                if tid in client.seed_dir_torrents:
-                    storage.apply_quotas(tid, torrent_added=True)
-
-            else:
-                # Process completed torrent
-                process_torrent_done(
-                    tid=tid,
-                    client=client,
-                    storage=storage,
-                    dests={c: conf[c.value] for c in Cat},
-                    remove_public=conf["remove-public-on-complete"],
-                )
 
     except Exception as e:
         logger.critical(

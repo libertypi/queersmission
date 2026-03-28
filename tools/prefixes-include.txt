@@ -3,6 +3,8 @@ cw3d2dbd
 cw3dbd
 cwhdbd
 czbd
+kidm
+lcdv
 mcb3dbd
 mk3d2dbd
 r18
@@ -10,6 +12,10 @@ s2m
 s2mbd
 s2mcr
 s3dbd
+sbvd
 sky237
 sm3d2dbd
 t28
+t38
+tmrd
+tsdv
